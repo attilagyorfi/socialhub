@@ -32,6 +32,15 @@ Set `META_INTEGRATION_ENABLED=true`, `META_APP_ID`, `META_APP_SECRET` and an exp
 
 After connecting the staging Page or Instagram professional account through the application, set `META_STAGING_ACCOUNT_ID` to its local UUID. Publish one uniquely identifiable test post through the normal approval and worker flow, wait for its provider receipt, then run `npm run meta:verify`. The verifier prints only safe check names, account/platform identity and normalized metric field names. It fails unless OAuth identity, every required permission, recent provider content, profile insights, a receipt-backed publication from the last seven days and that post's insights are all readable. It never prints tokens or raw provider payloads.
 
+Meta enforces HTTPS redirect URIs, including for development apps. To test OAuth locally, register `https://localhost:3010/api/oauth/meta/callback` in the app's Facebook Login for Business settings, create a self-signed certificate (never install a local CA into the system trust store), set `APP_URL=https://localhost:3010` in both env files and run `npm run dev:https`:
+
+```sh
+mkdir -p .local/certs
+openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 825 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" -keyout .local/certs/localhost-key.pem -out .local/certs/localhost.pem
+```
+
+The browser shows a certificate warning once per session. In development mode only people with an app role can grant the requested permissions.
+
 The local stack intentionally leaves Meta disabled and cannot complete media publishing through `localhost`. `npm run meta:verify` therefore fails during preflight until public staging settings are supplied. Automated tests use an injected Graph transport and make no Meta calls. Before production, verify app review, data-use checkup, privacy-policy/data-deletion URLs, webhook field subscriptions and the runbook for `META_DELIVERY_UNCERTAIN` jobs.
 
 ## Launch gate

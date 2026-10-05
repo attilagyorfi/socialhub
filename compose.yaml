@@ -22,7 +22,8 @@ services:
     environment:
       MINIO_ROOT_USER: g2a_local
       MINIO_ROOT_PASSWORD: g2a_local_storage_only
-      MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:3010
+      # HTTPS is used for local Meta OAuth testing (npm run dev:https).
+      MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:3010,https://localhost:3010
     ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
     volumes: ["media:/data"]
   mail:
