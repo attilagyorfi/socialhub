@@ -35,6 +35,7 @@ afterEach(() => {
   delete process.env.META_APP_SECRET;
   delete process.env.META_GRAPH_VERSION;
   delete process.env.META_WEBHOOK_VERIFY_TOKEN;
+  delete process.env.META_LOGIN_CONFIG_ID;
 });
 
 describe("Meta OAuth configuration", () => {
@@ -64,6 +65,31 @@ describe("Meta OAuth configuration", () => {
     expect(url.searchParams.get("scope")).toContain("read_insights");
     expect(url.searchParams.get("scope")).toContain(
       "instagram_manage_insights",
+    );
+  });
+});
+
+describe("Meta Login for Business", () => {
+  it("sends the saved configuration instead of a scope list", () => {
+    const url = new URL(
+      buildMetaAuthorizationUrl(
+        { ...config, loginConfigId: "123456789" },
+        "opaque-state",
+      ),
+    );
+    expect(url.searchParams.get("config_id")).toBe("123456789");
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(url.searchParams.has("scope")).toBe(false);
+  });
+
+  it("rejects a malformed configuration ID", () => {
+    process.env.META_INTEGRATION_ENABLED = "true";
+    process.env.META_APP_ID = "app";
+    process.env.META_APP_SECRET = "secret";
+    process.env.META_GRAPH_VERSION = "v26.0";
+    process.env.META_LOGIN_CONFIG_ID = "not-a-number";
+    expect(() => metaConfig()).toThrowError(
+      expect.objectContaining({ code: "META_LOGIN_CONFIG_INVALID" }),
     );
   });
 });

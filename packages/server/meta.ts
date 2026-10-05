@@ -22,6 +22,8 @@ export type MetaConfig = {
   graphVersion: string;
   redirectUri: string;
   webhookVerifyToken?: string;
+  // Facebook Login for Business configuration; replaces the scope list.
+  loginConfigId?: string;
 };
 
 export function metaIntegrationStatus() {
@@ -58,6 +60,13 @@ export function metaConfig(): MetaConfig {
       "META_VERSION_INVALID",
       "META_GRAPH_VERSION must use the vNN.N format.",
     );
+  const loginConfigId = process.env.META_LOGIN_CONFIG_ID?.trim() || undefined;
+  if (loginConfigId && !/^\d+$/.test(loginConfigId))
+    throw new AppError(
+      503,
+      "META_LOGIN_CONFIG_INVALID",
+      "META_LOGIN_CONFIG_ID must be the numeric Facebook Login for Business configuration ID.",
+    );
   const appUrl = new URL(process.env.APP_URL ?? "http://localhost:3010");
   return {
     appId,
@@ -65,6 +74,7 @@ export function metaConfig(): MetaConfig {
     graphVersion,
     redirectUri: new URL("/api/oauth/meta/callback", appUrl).toString(),
     webhookVerifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN?.trim(),
+    loginConfigId,
   };
 }
 
@@ -77,7 +87,11 @@ export function buildMetaAuthorizationUrl(config: MetaConfig, state: string) {
     redirect_uri: config.redirectUri,
     state,
     response_type: "code",
-    scope: META_SCOPES.join(","),
+    // Business apps grant permissions through a saved login configuration;
+    // Meta recommends not sending scope alongside it.
+    ...(config.loginConfigId
+      ? { config_id: config.loginConfigId }
+      : { scope: META_SCOPES.join(",") }),
   }).toString();
   return url.toString();
 }

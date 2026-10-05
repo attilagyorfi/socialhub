@@ -14,4 +14,6 @@ Only request scopes needed for implemented capabilities. A login scope is not pe
 
 Before enabling a direct adapter: implement authorization initiation with state/PKCE where required, one-time state consumption bound to authenticated user/client, token exchange and encrypted storage, account discovery, revocation, refresh, actual capability mapping, signed webhooks, media validation, idempotency/reconciliation and contract tests using official sandboxes. Never invent app credentials or substitute scraping.
 
-The callback routes currently validate stored state and fail explicitly at the unimplemented exchange stage. They do not connect a live account. Ayrshare requires separate agency API access and a completed adapter.
+The Meta callback is implemented: it consumes the one-use state, exchanges the code, discovers Pages and linked Instagram professional accounts and stores encrypted credentials. It still requires a configured Meta app and is unverified against a live app. LinkedIn, TikTok and Google callbacks validate stored state and fail explicitly at the unimplemented exchange stage; they do not connect a live account. Ayrshare requires separate agency API access and a completed adapter.
+
+For a business-type Meta app, create a Facebook Login for Business configuration with the Page and Instagram permissions listed in `DEPLOYMENT.md` and set its ID as `META_LOGIN_CONFIG_ID`; the login dialog then sends `config_id` instead of a scope list.
