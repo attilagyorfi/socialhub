@@ -1,0 +1,6 @@
+ALTER TABLE post_targets
+ DROP CONSTRAINT post_targets_organization_id_client_id_social_account_id_fkey;
+ALTER TABLE post_targets
+ ADD CONSTRAINT post_targets_organization_id_client_id_social_account_id_fkey
+ FOREIGN KEY(organization_id,client_id,social_account_id)
+ REFERENCES social_accounts(organization_id,client_id,id) ON DELETE CASCADE;

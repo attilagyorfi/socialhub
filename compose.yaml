@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: g2a
+      POSTGRES_PASSWORD: g2a_local_only
+      POSTGRES_DB: g2a
+    ports: ["127.0.0.1:55432:5432"]
+    volumes: ["postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U g2a"]
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory-policy noeviction
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: ["redis:/data"]
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: g2a_local
+      MINIO_ROOT_PASSWORD: g2a_local_storage_only
+      MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:3010
+    ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
+    volumes: ["media:/data"]
+  mail:
+    image: axllent/mailpit:latest
+    ports: ["127.0.0.1:1025:1025", "127.0.0.1:8025:8025"]
+  worker:
+    profiles: ["worker"]
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://g2a:g2a_local_only@postgres:5432/g2a
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    restart: unless-stopped
+volumes:
+  postgres:
+  redis:
+  media:

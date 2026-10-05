@@ -1,0 +1,17 @@
+# Platform application approvals
+
+These are administrator preparation notes. They are not a claim that live integrations are complete or approved. Verify exact scopes and review requirements in each platform's current official documentation before implementation.
+
+| Provider                   | Administrator preparation                                                                                                                                                                    | Planned callback                         | Configuration                                             |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------- |
+| Meta / Facebook Pages      | Meta developer account, business-owned app, Page administrator access, relevant Page management/content permissions, app review and any required business verification                       | `${APP_URL}/api/oauth/meta/callback`     | `META_APP_ID`, `META_APP_SECRET`                          |
+| Instagram Business/Creator | Choose the official Instagram API login product; confirm eligible professional account and any Page-linking requirements for that product; request publishing/insight permissions and review | `${APP_URL}/api/oauth/meta/callback`     | Meta settings plus chosen Instagram product configuration |
+| LinkedIn Company Pages     | LinkedIn developer app, verified associated company Page and administrator; access approval for the required organization publishing/analytics products                                      | `${APP_URL}/api/oauth/linkedin/callback` | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`            |
+| TikTok                     | TikTok developer app, Login Kit and Content Posting API configuration; audit/review for public publishing and approved redirect domains                                                      | `${APP_URL}/api/oauth/tiktok/callback`   | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`               |
+| Google Business Profile    | Google Cloud project, OAuth consent screen, Business Profile API access and verified business account/location permissions; OAuth verification where required                                | `${APP_URL}/api/oauth/google/callback`   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`                |
+
+Only request scopes needed for implemented capabilities. A login scope is not permission to publish. Platform product access, business verification, account eligibility and OAuth user consent are separate checks.
+
+Before enabling a direct adapter: implement authorization initiation with state/PKCE where required, one-time state consumption bound to authenticated user/client, token exchange and encrypted storage, account discovery, revocation, refresh, actual capability mapping, signed webhooks, media validation, idempotency/reconciliation and contract tests using official sandboxes. Never invent app credentials or substitute scraping.
+
+The callback routes currently validate stored state and fail explicitly at the unimplemented exchange stage. They do not connect a live account. Ayrshare requires separate agency API access and a completed adapter.
