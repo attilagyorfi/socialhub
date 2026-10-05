@@ -8,6 +8,8 @@ import { signedObjectUrl } from "./media";
 
 const META_SCOPES = [
   "pages_show_list",
+  // Pages owned by a business portfolio are missing from me/accounts without it.
+  "business_management",
   "pages_read_engagement",
   "pages_manage_posts",
   "read_insights",
@@ -107,7 +109,35 @@ type GraphErrorPayload = {
   };
 };
 
+// Meta's numeric error identifiers are safe to log and essential for
+// diagnosing permission or configuration problems; messages are not kept.
+export type MetaProviderError = {
+  status: number;
+  code?: number;
+  subcode?: number;
+  type?: string;
+  traceId?: string;
+};
+
+export function metaProviderError(error: unknown) {
+  return error instanceof AppError
+    ? (error as AppError & { provider?: MetaProviderError }).provider
+    : undefined;
+}
+
 function graphError(response: Response, payload: GraphErrorPayload) {
+  return Object.assign(classifyGraphError(response, payload), {
+    provider: {
+      status: response.status,
+      code: payload.error?.code,
+      subcode: payload.error?.error_subcode,
+      type: payload.error?.type,
+      traceId: payload.error?.fbtrace_id,
+    } satisfies MetaProviderError,
+  });
+}
+
+function classifyGraphError(response: Response, payload: GraphErrorPayload) {
   const error = payload.error;
   const code = error?.code;
   if (response.status === 429 || [4, 17, 32, 613].includes(code ?? -1))
@@ -786,12 +816,20 @@ export async function completeMetaOAuth(
       page.tasks.includes("CREATE_CONTENT") ||
       page.tasks.includes("MANAGE"),
   );
-  if (!manageable.length)
+  if (!manageable.length) {
+    console.error(
+      JSON.stringify({
+        event: "meta_no_pages",
+        pagesReturned: pages.length,
+        tasks: [...new Set(pages.flatMap((page) => page.tasks ?? []))],
+      }),
+    );
     throw new AppError(
       422,
       "META_NO_PAGES",
       "No Facebook Page with content publishing access was found.",
     );
+  }
   return transaction(async (tx) => {
     const accounts = [];
     for (const page of manageable) {

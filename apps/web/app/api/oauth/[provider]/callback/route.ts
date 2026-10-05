@@ -4,7 +4,10 @@ import {
   AppError,
   hashToken,
 } from "../../../../../../../packages/core/security";
-import { completeMetaOAuth } from "../../../../../../../packages/server/meta";
+import {
+  completeMetaOAuth,
+  metaProviderError,
+} from "../../../../../../../packages/server/meta";
 
 export const runtime = "nodejs";
 
@@ -67,14 +70,14 @@ export async function GET(
     return appRedirect("connected");
   } catch (error) {
     const code = error instanceof AppError ? error.code : "OAUTH_FAILED";
-    if (!(error instanceof AppError))
-      console.error(
-        JSON.stringify({
-          event: "meta_oauth_failed",
-          code,
-          errorName: error instanceof Error ? error.name : "Unknown",
-        }),
-      );
+    console.error(
+      JSON.stringify({
+        event: "meta_oauth_failed",
+        code,
+        errorName: error instanceof Error ? error.name : "Unknown",
+        provider: metaProviderError(error),
+      }),
+    );
     return appRedirect("error", code);
   }
 }
