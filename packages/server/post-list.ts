@@ -10,6 +10,8 @@ const cursorShape = z.object({
 });
 
 const postProjection = `SELECT p.*,author.name AS author_name,
+ to_char(p.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+   AS cursor_created_at,
  current_review.step_kind AS approval_kind,
  current_review.status AS approval_status,
  current_review.expires_at AS approval_expires_at,
@@ -48,7 +50,12 @@ const postProjection = `SELECT p.*,author.name AS author_name,
    SELECT ar.*,reviewer.name AS reviewer_name
    FROM approval_requests ar
    LEFT JOIN "user" reviewer ON reviewer.id=ar.assigned_to
-   WHERE ar.post_id=p.id AND ar.revision=p.revision
+   WHERE ar.post_id=p.id
+     -- Rescheduling bumps posts.revision without changing content, so the
+     -- review belongs to the latest content version, not posts.revision.
+     AND ar.revision=coalesce((
+       SELECT max(v.revision) FROM post_versions v WHERE v.post_id=p.id
+     ),p.revision)
    ORDER BY ar.created_at DESC,ar.id DESC LIMIT 1
  ) current_review ON true`;
 
@@ -76,10 +83,12 @@ function decodeCursor(value: string) {
   }
 }
 
-function encodeCursor(row: { created_at: Date | string; id: string }) {
+// The timestamp comes from SQL with microseconds: a JS Date would round it to
+// milliseconds and skip rows created within the same millisecond.
+function encodeCursor(row: { cursor_created_at: string; id: string }) {
   return Buffer.from(
     JSON.stringify({
-      createdAt: new Date(row.created_at).toISOString(),
+      createdAt: row.cursor_created_at,
       id: row.id,
     }),
   ).toString("base64url");

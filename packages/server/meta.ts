@@ -117,6 +117,14 @@ function graphError(response: Response, payload: GraphErrorPayload) {
   );
 }
 
+function uncertainDelivery() {
+  return new AppError(
+    409,
+    "META_DELIVERY_UNCERTAIN",
+    "Meta did not confirm whether the content was published. Review the account before retrying.",
+  );
+}
+
 type FetchLike = typeof fetch;
 
 export type MetaPublishedContent = {
@@ -168,17 +176,23 @@ export class MetaGraphClient {
     try {
       response = await this.fetchImpl(url, init);
     } catch {
+      if (options.delivery) throw uncertainDelivery();
       throw new AppError(
-        options.delivery ? 409 : 503,
-        options.delivery ? "META_DELIVERY_UNCERTAIN" : "META_UNAVAILABLE",
-        options.delivery
-          ? "Meta did not confirm whether the content was published. Review the account before retrying."
-          : "Meta is temporarily unavailable.",
+        503,
+        "META_UNAVAILABLE",
+        "Meta is temporarily unavailable.",
       );
     }
     const payload = (await response.json().catch(() => ({}))) as T &
       GraphErrorPayload;
-    if (!response.ok || payload.error) throw graphError(response, payload);
+    if (!response.ok || payload.error) {
+      const error = graphError(response, payload);
+      // A server-side failure after a mutation may still have published the
+      // content, so it must not be retried blindly.
+      if (options.delivery && error.code === "META_UNAVAILABLE")
+        throw uncertainDelivery();
+      throw error;
+    }
     return payload;
   }
 
@@ -1124,12 +1138,8 @@ export async function publishMeta(input: {
           input.content,
           url!,
         );
-  if (!result.id)
-    throw new AppError(
-      502,
-      "META_RESPONSE_INVALID",
-      "Meta did not return a publication identifier.",
-    );
+  // The mutation succeeded at HTTP level, so the content may be live.
+  if (!result.id) throw uncertainDelivery();
   const inserted = (
     await pool.query(
       `INSERT INTO provider_receipts(idempotency_key,organization_id,client_id,provider,remote_id)

@@ -211,9 +211,14 @@ export function Hub() {
   function openPost(p: Post) {
     setSelected(p);
     setApprovalUrl("");
+    // Authors may only review their own post when nobody else can.
+    const independent = data?.reviewers.filter(
+      (reviewer) => reviewer.id !== p.author_id,
+    );
     setReviewerId(
       p.approval_assigned_to ??
-        data?.reviewers.find((reviewer) => reviewer.id === data.user.id)?.id ??
+        independent?.find((reviewer) => reviewer.id === data?.user.id)?.id ??
+        independent?.[0]?.id ??
         data?.reviewers[0]?.id ??
         "",
     );

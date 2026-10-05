@@ -110,23 +110,44 @@ export async function reviewerCandidates(c: Context) {
     )
   ).rows;
 }
+const eligibleReviewers = `FROM organization_members om
+       JOIN "user" u ON u.id=om.user_id
+       LEFT JOIN client_members cm ON cm.organization_id=om.organization_id
+         AND cm.client_id=$2 AND cm.user_id=om.user_id
+       WHERE om.organization_id=$1 AND (
+         om.role IN ('OWNER','ADMIN')
+         OR cm.role IN ('SOCIAL_MANAGER','CLIENT_REVIEWER')
+       )`;
+// Authors may review their own post only when nobody else could.
+export async function assertNotSelfReview(
+  tx: PoolClient,
+  c: Context,
+  reviewerId: string,
+  authorId: string | null | undefined,
+) {
+  if (!authorId || reviewerId !== authorId) return;
+  const others = await tx.query(
+    `SELECT 1 ${eligibleReviewers} AND u.id<>$3 LIMIT 1`,
+    [c.organizationId, c.clientId, authorId],
+  );
+  if (others.rowCount)
+    throw new AppError(
+      422,
+      "SELF_REVIEW",
+      "Choose a reviewer other than the post author.",
+    );
+}
 export async function validateReviewer(
   tx: PoolClient,
   c: Context,
   reviewerId: string,
+  authorId?: string | null,
 ) {
   const reviewer = (
     await tx.query(
       `SELECT u.id,u.name,u.email,
        CASE WHEN om.role IN ('OWNER','ADMIN') THEN om.role ELSE cm.role END AS role
-       FROM organization_members om
-       JOIN "user" u ON u.id=om.user_id
-       LEFT JOIN client_members cm ON cm.organization_id=om.organization_id
-         AND cm.client_id=$2 AND cm.user_id=om.user_id
-       WHERE om.organization_id=$1 AND u.id=$3 AND (
-         om.role IN ('OWNER','ADMIN')
-         OR cm.role IN ('SOCIAL_MANAGER','CLIENT_REVIEWER')
-       )`,
+       ${eligibleReviewers} AND u.id=$3`,
       [c.organizationId, c.clientId, reviewerId],
     )
   ).rows[0];
@@ -136,6 +157,7 @@ export async function validateReviewer(
       "INVALID_REVIEWER",
       "Choose a reviewer with approval access to this client.",
     );
+  await assertNotSelfReview(tx, c, reviewer.id, authorId);
   return reviewer;
 }
 export async function workflowSteps(tx: PoolClient, c: Context) {

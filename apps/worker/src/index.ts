@@ -7,6 +7,7 @@ import {
 } from "../../../packages/server/queue";
 import {
   executePublish,
+  recoverInterruptedPublishes,
   syncAnalytics,
 } from "../../../packages/server/publishing";
 import {
@@ -68,62 +69,87 @@ mediaWorker.on("error", () =>
   ),
 );
 let stopping = false;
-let lastAnalytics = 0;
-let lastMediaMaintenance = 0;
-let lastCredentialMaintenance = 0;
-let lastHeartbeat = 0;
-let lastApprovalMaintenance = 0;
-let lastPrivacyMaintenance = 0;
-let lastPublishReconciliation = 0;
+const lastRun = new Map<string, number>();
+// Each maintenance task fails independently so one broken task cannot starve
+// the others; a failure waits for the task's normal interval before retrying.
+async function periodic(
+  task: string,
+  intervalMs: number,
+  run: () => Promise<void>,
+) {
+  if (Date.now() - (lastRun.get(task) ?? 0) <= intervalMs) return;
+  lastRun.set(task, Date.now());
+  try {
+    await run();
+  } catch {
+    console.error(
+      JSON.stringify({
+        event: "maintenance_error",
+        task,
+        code: "MAINTENANCE_FAILED",
+      }),
+    );
+  }
+}
+async function dispatchQueued() {
+  const jobs = (
+    await pool.query(
+      "SELECT id,attempts FROM publish_jobs WHERE status IN ('PENDING','RETRY') AND run_at<=now() ORDER BY run_at LIMIT 100",
+    )
+  ).rows;
+  for (const j of jobs) {
+    const jobId = `${j.id}-${j.attempts}`;
+    const existing = await publishQueue().getJob(jobId);
+    if (existing) {
+      const state = await existing.getState();
+      if (state === "failed" || state === "completed") await existing.remove();
+      else continue;
+    }
+    await publishQueue().add("publish", { id: j.id }, { jobId });
+  }
+  const mediaJobs = (
+    await pool.query(
+      "SELECT id,attempts FROM media_processing_jobs WHERE status IN ('PENDING','RETRY') AND run_at<=now() ORDER BY run_at LIMIT 100",
+    )
+  ).rows;
+  for (const j of mediaJobs) {
+    const jobId = `${j.id}-${j.attempts}`;
+    const existing = await mediaQueue().getJob(jobId);
+    if (existing) {
+      const state = await existing.getState();
+      if (state === "failed" || state === "completed") await existing.remove();
+      else continue;
+    }
+    await mediaQueue().add("process", { id: j.id }, { jobId });
+  }
+}
 async function dispatch() {
   if (stopping) return;
   try {
-    if (Date.now() - lastHeartbeat > 10_000) {
-      await recordServiceHeartbeat("worker", instanceId, {
+    await periodic("heartbeat", 10_000, () =>
+      recordServiceHeartbeat("worker", instanceId, {
         pid: process.pid,
         revision: process.env.APP_REVISION ?? "development",
-      });
-      lastHeartbeat = Date.now();
+      }),
+    );
+    try {
+      await dispatchQueued();
+    } catch {
+      console.error(
+        JSON.stringify({ event: "dispatcher_error", code: "DISPATCH_FAILED" }),
+      );
     }
-    const jobs = (
-      await pool.query(
-        "SELECT id,attempts FROM publish_jobs WHERE status IN ('PENDING','RETRY') AND run_at<=now() ORDER BY run_at LIMIT 100",
-      )
-    ).rows;
-    for (const j of jobs) {
-      const jobId = `${j.id}-${j.attempts}`;
-      const existing = await publishQueue().getJob(jobId);
-      if (existing) {
-        const state = await existing.getState();
-        if (state === "failed" || state === "completed")
-          await existing.remove();
-        else continue;
-      }
-      await publishQueue().add("publish", { id: j.id }, { jobId });
-    }
-    const mediaJobs = (
-      await pool.query(
-        "SELECT id,attempts FROM media_processing_jobs WHERE status IN ('PENDING','RETRY') AND run_at<=now() ORDER BY run_at LIMIT 100",
-      )
-    ).rows;
-    for (const j of mediaJobs) {
-      const jobId = `${j.id}-${j.attempts}`;
-      const existing = await mediaQueue().getJob(jobId);
-      if (existing) {
-        const state = await existing.getState();
-        if (state === "failed" || state === "completed")
-          await existing.remove();
-        else continue;
-      }
-      await mediaQueue().add("process", { id: j.id }, { jobId });
-    }
-    if (Date.now() - lastAnalytics > 60000) {
+    await periodic("publishRecovery", 60_000, async () => {
+      const recovered = await recoverInterruptedPublishes();
+      if (recovered)
+        console.log(JSON.stringify({ event: "publish_recovered", recovered }));
+    });
+    await periodic("analytics", 60_000, async () => {
       const analytics = await syncAnalytics();
       if (analytics.retried || analytics.failed)
         console.log(JSON.stringify({ event: "analytics_sync", ...analytics }));
-      lastAnalytics = Date.now();
-    }
-    if (Date.now() - lastPublishReconciliation > 60_000) {
+    });
+    await periodic("publishReconciliation", 60_000, async () => {
       const reconciliation = await syncPublishReconciliations();
       if (
         reconciliation.queued ||
@@ -138,23 +164,22 @@ async function dispatch() {
             ...reconciliation,
           }),
         );
-      lastPublishReconciliation = Date.now();
-    }
-    if (Date.now() - lastApprovalMaintenance > 60_000) {
+    });
+    await periodic("approvalAutomation", 60_000, async () => {
       const automation = await processApprovalAutomations();
       if (automation.queued || automation.sent || automation.failed)
         console.log(
           JSON.stringify({ event: "approval_automation", ...automation }),
         );
+    });
+    await periodic("approvalExpiry", 60_000, async () => {
       await expireDueApprovals();
-      lastApprovalMaintenance = Date.now();
-    }
-    if (Date.now() - lastMediaMaintenance > 60000) {
-      await recoverMediaJobs();
+    });
+    await periodic("mediaRecovery", 60_000, recoverMediaJobs);
+    await periodic("uploadCleanup", 60_000, async () => {
       await cleanupAbandonedUploads();
-      lastMediaMaintenance = Date.now();
-    }
-    if (Date.now() - lastPrivacyMaintenance > 60_000) {
+    });
+    await periodic("privacy", 60_000, async () => {
       const privacy = await processPrivacyMaintenance();
       if (
         privacy.erasures.completed ||
@@ -164,17 +189,13 @@ async function dispatch() {
         console.log(
           JSON.stringify({ event: "privacy_maintenance", ...privacy }),
         );
-      lastPrivacyMaintenance = Date.now();
-    }
-    if (Date.now() - lastCredentialMaintenance > 60 * 60 * 1000) {
+    });
+    await periodic("metaCredentials", 60 * 60 * 1000, async () => {
       await refreshDueMetaCredentials();
+    });
+    await periodic("heartbeatCleanup", 60 * 60 * 1000, async () => {
       await cleanupServiceHeartbeats();
-      lastCredentialMaintenance = Date.now();
-    }
-  } catch {
-    console.error(
-      JSON.stringify({ event: "dispatcher_error", code: "DISPATCH_FAILED" }),
-    );
+    });
   } finally {
     if (!stopping) setTimeout(dispatch, 2000);
   }

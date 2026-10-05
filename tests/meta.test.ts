@@ -166,6 +166,42 @@ describe("Meta Graph publishing", () => {
     });
   });
 
+  it("marks a server error during publication as uncertain instead of retryable", async () => {
+    const graph = new MetaGraphClient(
+      config,
+      fakeFetch(() =>
+        Response.json(
+          { error: { message: "Service unavailable", is_transient: true } },
+          { status: 503 },
+        ),
+      ),
+    );
+    await expect(
+      graph.publishFacebook("page-1", "token", {
+        caption: "Hello",
+        media: [],
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "META_DELIVERY_UNCERTAIN",
+    });
+  });
+
+  it("keeps rate limits on publication retryable", async () => {
+    const graph = new MetaGraphClient(
+      config,
+      fakeFetch(() =>
+        Response.json({ error: { code: 4 } }, { status: 400 }),
+      ),
+    );
+    await expect(
+      graph.publishFacebook("page-1", "token", {
+        caption: "Hello",
+        media: [],
+      }),
+    ).rejects.toMatchObject({ status: 429, code: "META_RATE_LIMIT" });
+  });
+
   it("reads recent Facebook and Instagram publications without exposing tokens", async () => {
     const calls: { url: URL; init: RequestInit }[] = [];
     const graph = new MetaGraphClient(

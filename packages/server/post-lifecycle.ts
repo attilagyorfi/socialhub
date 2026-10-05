@@ -129,6 +129,35 @@ export async function cancelPost(c: Context, id: string) {
         "ALREADY_PUBLISHED",
         "Some content has already published. Cancelling cannot remove published content.",
       );
+    if (
+      (
+        await tx.query(
+          `SELECT 1 FROM publish_jobs j JOIN post_targets t ON t.id=j.target_id
+           WHERE t.post_id=$1 AND j.status='RUNNING' LIMIT 1`,
+          [id],
+        )
+      ).rowCount
+    )
+      throw new AppError(
+        409,
+        "PUBLISHING_IN_PROGRESS",
+        "Publishing is in progress. Try again once it has finished.",
+      );
+    // An unresolved ambiguous delivery may already be live on the provider.
+    const uncertain = (
+      await tx.query(
+        `SELECT 1 FROM publish_jobs j JOIN post_targets t ON t.id=j.target_id
+         WHERE t.post_id=$1 AND j.last_error='META_DELIVERY_UNCERTAIN'
+           AND j.status<>'DONE' LIMIT 1`,
+        [id],
+      )
+    ).rowCount;
+    if (uncertain)
+      throw new AppError(
+        409,
+        "DELIVERY_UNCERTAIN",
+        "Meta may already have published this post. It cannot be cancelled while that delivery is unconfirmed; recheck it in Settings → Operations.",
+      );
     if (post.status === "CANCELLED") return { id, status: "CANCELLED" };
     await tx.query(
       "UPDATE publish_jobs SET status='CANCELLED',updated_at=now() WHERE target_id IN (SELECT id FROM post_targets WHERE post_id=$1)",

@@ -24,9 +24,11 @@ describe("post list cursors", () => {
   });
 
   it("returns a stable cursor from the last visible row", async () => {
-    const rows = [0, 1, 2].map((index) => ({
+    // Rows created within one millisecond differ only in microseconds.
+    const rows = [900, 400, 100].map((micros) => ({
       id: crypto.randomUUID(),
-      created_at: new Date(Date.now() - index * 1000),
+      created_at: new Date("2026-10-05T09:37:54.123Z"),
+      cursor_created_at: `2026-10-05T09:37:54.123${micros}Z`,
     }));
     query.mockReturnValueOnce({ rows }).mockReturnValueOnce({ rows: [] });
 
@@ -37,7 +39,12 @@ describe("post list cursors", () => {
       JSON.parse(Buffer.from(first.nextCursor!, "base64url").toString("utf8")),
     ).toEqual({
       id: rows[1].id,
-      createdAt: rows[1].created_at.toISOString(),
+      createdAt: "2026-10-05T09:37:54.123400Z",
     });
+    query.mockReturnValueOnce({ rows: rows.slice(2) }).mockReturnValueOnce({
+      rows: [],
+    });
+    await listPosts(context, { limit: 2, cursor: first.nextCursor! });
+    expect(query.mock.calls[2][1]).toContain("2026-10-05T09:37:54.123400Z");
   });
 });

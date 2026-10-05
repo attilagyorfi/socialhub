@@ -4,6 +4,7 @@ import { AppError, hashToken } from "../core/security";
 import { pool } from "../db";
 import { mediaUrl } from "./media";
 import {
+  assertNotSelfReview,
   insertReview,
   validateReviewer,
   workflowSteps,
@@ -61,7 +62,7 @@ export async function requestApproval(
     const steps = await workflowSteps(tx, c);
     const reviewer =
       steps[0] === "INTERNAL"
-        ? await validateReviewer(tx, c, reviewerId ?? c.userId)
+        ? await validateReviewer(tx, c, reviewerId ?? c.userId, post.author_id)
         : undefined;
     const next = await insertReview(
       tx,
@@ -472,7 +473,12 @@ export async function decideApproval(
       await tx.query(
         actor
           ? "SELECT * FROM approval_requests WHERE post_id=$1 AND organization_id=$2 AND client_id=$3 AND step_kind='INTERNAL' AND status='PENDING' AND expires_at>now() FOR UPDATE"
-          : "SELECT * FROM approval_requests WHERE token_hash=$1 AND step_kind='EXTERNAL' AND expires_at>now() FOR UPDATE",
+          : // Same visibility rules as approvalView: no decisions for deleted tenants.
+            `SELECT ar.* FROM approval_requests ar
+             JOIN clients c ON c.id=ar.client_id AND c.deleted_at IS NULL
+             JOIN organizations o ON o.id=c.organization_id AND o.deleted_at IS NULL
+             WHERE ar.token_hash=$1 AND ar.step_kind='EXTERNAL' AND ar.expires_at>now()
+             FOR UPDATE OF ar`,
         actor
           ? [secret, actor.organizationId, actor.clientId]
           : [hashToken(secret)],
@@ -505,6 +511,8 @@ export async function decideApproval(
         "STALE_APPROVAL",
         "This request has already been decided or the post has changed.",
       );
+    if (actor && action !== "comment")
+      await assertNotSelfReview(tx, actor, actor.userId, post.author_id);
     if (action !== "approve" && !comment.trim())
       throw new AppError(
         422,
@@ -589,21 +597,24 @@ export async function decideApproval(
   });
 }
 
+function requireReviewManager(c: Context, message: string) {
+  if (!["OWNER", "ADMIN", "SOCIAL_MANAGER"].includes(c.role))
+    throw new AppError(403, "FORBIDDEN", message);
+}
+
 export async function assignApprovalReviewer(
   c: Context,
   postId: string,
   reviewerId: string,
 ) {
-  if (!["OWNER", "ADMIN", "SOCIAL_MANAGER"].includes(c.role))
-    throw new AppError(
-      403,
-      "FORBIDDEN",
-      "A social manager or administrator must assign reviewers.",
-    );
+  requireReviewManager(
+    c,
+    "A social manager or administrator must assign reviewers.",
+  );
   return transaction(async (tx) => {
     const request = (
       await tx.query(
-        `SELECT ar.* FROM approval_requests ar
+        `SELECT ar.*,p.author_id FROM approval_requests ar
          JOIN posts p ON p.id=ar.post_id AND p.revision=ar.revision
          WHERE ar.organization_id=$1 AND ar.client_id=$2 AND ar.post_id=$3
            AND ar.step_kind='INTERNAL' AND ar.status='PENDING'
@@ -618,7 +629,12 @@ export async function assignApprovalReviewer(
         "NO_INTERNAL_REVIEW",
         "No active internal review is waiting for this post.",
       );
-    const reviewer = await validateReviewer(tx, c, reviewerId);
+    const reviewer = await validateReviewer(
+      tx,
+      c,
+      reviewerId,
+      request.author_id,
+    );
     await tx.query(
       `UPDATE approval_requests SET assigned_to=$1,reminder_sent_at=NULL,
          next_reminder_at=CASE
@@ -659,7 +675,7 @@ export async function renewApproval(
   return transaction(async (tx) => {
     const request = (
       await tx.query(
-        `SELECT ar.* FROM approval_requests ar
+        `SELECT ar.*,p.author_id FROM approval_requests ar
          JOIN posts p ON p.id=ar.post_id AND p.revision=ar.revision
          WHERE ar.organization_id=$1 AND ar.client_id=$2 AND ar.post_id=$3
            AND (
@@ -686,14 +702,16 @@ export async function renewApproval(
       ...request.remaining_steps,
     ] as ReviewKind[];
     let assignedTo: string | undefined;
-    if (request.step_kind === "INTERNAL")
-      assignedTo = (
-        await validateReviewer(
-          tx,
+    if (request.step_kind === "INTERNAL") {
+      const requested = reviewerId ?? request.assigned_to ?? c.userId;
+      if (requested !== request.assigned_to)
+        requireReviewManager(
           c,
-          reviewerId ?? request.assigned_to ?? c.userId,
-        )
-      ).id;
+          "A social manager or administrator must choose a different reviewer.",
+        );
+      assignedTo = (await validateReviewer(tx, c, requested, request.author_id))
+        .id;
+    }
     const next = await insertReview(tx, request, steps, assignedTo);
     await audit(tx, c, "approval.renewed", postId, {
       previousApprovalRequestId: request.id,
@@ -714,6 +732,10 @@ export async function renewApproval(
 }
 
 export async function sendApprovalReminder(c: Context, postId: string) {
+  requireReviewManager(
+    c,
+    "A social manager or administrator must send review reminders.",
+  );
   const reminder = await transaction(async (tx) => {
     const request = (
       await tx.query(
