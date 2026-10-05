@@ -9,6 +9,8 @@ export default defineConfig({
     browserName: "chromium",
     channel: "chrome",
     headless: true,
+    // Local Meta OAuth testing serves a self-signed certificate.
+    ignoreHTTPSErrors: true,
     viewport: { width: 1440, height: 1000 },
     screenshot: "only-on-failure",
     trace: "off",

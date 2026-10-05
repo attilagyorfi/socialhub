@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "dev": "next dev apps/web --port 3010",
+    "dev:https": "next dev apps/web --port 3010 --experimental-https --experimental-https-key .local/certs/localhost-key.pem --experimental-https-cert .local/certs/localhost.pem",
     "build": "next build apps/web",
     "start": "next start apps/web --port 3010",
     "worker": "tsx --env-file=.env apps/worker/src/index.ts",
