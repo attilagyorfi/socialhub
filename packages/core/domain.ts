@@ -92,6 +92,8 @@ export type Media = {
   mime_type: string;
   size_bytes: number;
   status: string;
+  width?: number | null;
+  height?: number | null;
 };
 export type Content = { caption: string; link?: string | null; media: Media[] };
 export function validatePost(platform: Platform, content: Content) {
@@ -129,6 +131,17 @@ export function validatePost(platform: Platform, content: Content) {
     )
       errors.push("Video is not supported on this network.");
   }
+  for (const m of content.media)
+    if (
+      platform === "instagram" &&
+      m.mime_type.startsWith("image/") &&
+      m.width &&
+      m.height &&
+      (m.width / m.height < 0.8 - 0.005 || m.width / m.height > 1.91 + 0.005)
+    )
+      errors.push(
+        "Instagram images must have an aspect ratio between 4:5 (portrait) and 1.91:1 (landscape).",
+      );
   if (
     content.media.length > 1 &&
     !capabilities[platform].includes("MULTI_IMAGE")

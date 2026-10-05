@@ -250,6 +250,82 @@ export async function uploadMedia(c: Context, file: File) {
   }
 }
 
+type StoredMedia = {
+  id: string;
+  organization_id: string;
+  client_id: string;
+  object_key: string;
+  mime_type: string;
+  width?: number | null;
+};
+
+// Renditions derived from an asset; storage cleanup must remove them too.
+export function derivedObjectKeys(media: {
+  id: string;
+  organization_id: string;
+  client_id: string;
+}) {
+  return [
+    `${media.organization_id}/${media.client_id}/publish/${media.id}-instagram.jpg`,
+  ];
+}
+
+const INSTAGRAM_MAX_WIDTH = 1440;
+const INSTAGRAM_MAX_BYTES = 8 * 1024 * 1024;
+
+// Instagram accepts only JPEG images up to 8 MB and 1440 px wide. Other
+// images get a cached JPEG rendition, created on first publication.
+export async function instagramImageObjectKey(media: StoredMedia) {
+  if (
+    media.mime_type === "image/jpeg" &&
+    media.width &&
+    media.width <= INSTAGRAM_MAX_WIDTH
+  )
+    return media.object_key;
+  const [key] = derivedObjectKeys(media);
+  try {
+    await storageClient().send(
+      new HeadObjectCommand({ Bucket: mediaBucket(), Key: key }),
+    );
+    return key;
+  } catch (error) {
+    if (!["NotFound", "NoSuchKey"].includes((error as Error).name)) throw error;
+  }
+  const original = await storageClient().send(
+    new GetObjectCommand({ Bucket: mediaBucket(), Key: media.object_key }),
+  );
+  if (!original.Body)
+    throw new AppError(422, "INVALID_MEDIA", "Attachment missing");
+  const source = Buffer.from(await original.Body.transformToByteArray());
+  // Loaded lazily: the native module is only needed for this rare conversion.
+  const { default: sharp } = await import("sharp");
+  let rendition: Buffer | undefined;
+  for (const quality of [90, 80, 70]) {
+    rendition = await sharp(source)
+      .rotate()
+      .resize({ width: INSTAGRAM_MAX_WIDTH, withoutEnlargement: true })
+      .flatten({ background: "#ffffff" })
+      .jpeg({ quality })
+      .toBuffer();
+    if (rendition.length <= INSTAGRAM_MAX_BYTES) break;
+  }
+  if (!rendition || rendition.length > INSTAGRAM_MAX_BYTES)
+    throw new AppError(
+      422,
+      "META_MEDIA_TOO_LARGE",
+      "The image cannot be reduced below Instagram's 8 MB limit.",
+    );
+  await storageClient().send(
+    new PutObjectCommand({
+      Bucket: mediaBucket(),
+      Key: key,
+      Body: rendition,
+      ContentType: "image/jpeg",
+    }),
+  );
+  return key;
+}
+
 export async function signedObjectUrl(objectKey: string, expiresIn = 300) {
   return getSignedUrl(
     storageClient(true),
@@ -304,7 +380,7 @@ export async function deleteMedia(c: Context, id: string) {
         "This file is attached to a post.",
       );
     await Promise.all(
-      [media.object_key, media.preview_object_key]
+      [media.object_key, media.preview_object_key, ...derivedObjectKeys(media)]
         .filter(Boolean)
         .map((Key) =>
           storageClient().send(

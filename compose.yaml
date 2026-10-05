@@ -39,8 +39,9 @@ services:
     environment:
       DATABASE_URL: postgresql://g2a:g2a_local_only@postgres:5432/g2a
       REDIS_URL: redis://redis:6379
-      S3_ENDPOINT: http://minio:9000
-      S3_PUBLIC_ENDPOINT: http://localhost:9000
+      # Point both at the hosted endpoint when using external storage (e.g. R2).
+      S3_ENDPOINT: ${WORKER_S3_ENDPOINT:-http://minio:9000}
+      S3_PUBLIC_ENDPOINT: ${WORKER_S3_PUBLIC_ENDPOINT:-http://localhost:9000}
     depends_on:
       postgres:
         condition: service_healthy

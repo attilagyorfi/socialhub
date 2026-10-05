@@ -4,7 +4,7 @@ import { AppError, decrypt, encrypt, hashToken, token } from "../core/security";
 import { validatePost, type Content, type Platform } from "../core/domain";
 import type { Context } from "./context";
 import { audit, transaction } from "./transaction";
-import { signedObjectUrl } from "./media";
+import { instagramImageObjectKey, signedObjectUrl } from "./media";
 
 const META_SCOPES = [
   "pages_show_list",
@@ -1164,7 +1164,17 @@ export async function publishMeta(input: {
     input.accountId,
   );
   const media = input.content.media[0];
-  const url = media ? await signedObjectUrl(media.object_key, 900) : undefined;
+  const objectKey =
+    media &&
+    input.platform === "instagram" &&
+    media.mime_type.startsWith("image/")
+      ? await instagramImageObjectKey({
+          ...media,
+          organization_id: input.organizationId,
+          client_id: input.clientId,
+        })
+      : media?.object_key;
+  const url = objectKey ? await signedObjectUrl(objectKey, 900) : undefined;
   if (url) assertPublicMediaUrl(url);
   const graph = new MetaGraphClient(metaConfig());
   if (

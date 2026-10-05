@@ -3,7 +3,7 @@ import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { pool } from "../db";
 import { AppError } from "../core/security";
 import type { Context } from "./context";
-import { mediaBucket, storageClient } from "./media";
+import { derivedObjectKeys, mediaBucket, storageClient } from "./media";
 import { audit, transaction } from "./transaction";
 
 type PrivacyRequest = {
@@ -561,13 +561,17 @@ async function eraseOrganization(request: PrivacyRequest) {
     );
   const media = (
     await pool.query(
-      `SELECT object_key,preview_object_key FROM media_assets
+      `SELECT id,organization_id,client_id,object_key,preview_object_key FROM media_assets
        WHERE organization_id=$1`,
       [request.organization_id],
     )
   ).rows;
   await deleteStorageKeys(
-    media.flatMap((item) => [item.object_key, item.preview_object_key]),
+    media.flatMap((item) => [
+      item.object_key,
+      item.preview_object_key,
+      ...derivedObjectKeys(item),
+    ]),
   );
   await transaction(async (tx) => {
     await tx.query(`DELETE FROM organizations WHERE id=$1`, [
@@ -668,7 +672,7 @@ export async function processRetentionPolicies(
     try {
       const expiredMedia = (
         await pool.query(
-          `SELECT id,object_key,preview_object_key FROM media_assets
+          `SELECT id,organization_id,client_id,object_key,preview_object_key FROM media_assets
            WHERE organization_id=$1 AND deleted_at IS NOT NULL
              AND deleted_at<now()-make_interval(days => $2)`,
           [organization.id, organization.retention_days],
@@ -678,6 +682,7 @@ export async function processRetentionPolicies(
         expiredMedia.flatMap((item) => [
           item.object_key,
           item.preview_object_key,
+          ...derivedObjectKeys(item),
         ]),
       );
       await transaction(async (tx) => {
