@@ -210,7 +210,12 @@ export async function GET(request: Request) {
            SELECT ar.*,reviewer.name AS reviewer_name
            FROM approval_requests ar
            LEFT JOIN "user" reviewer ON reviewer.id=ar.assigned_to
-           WHERE ar.post_id=p.id AND ar.revision=p.revision
+           WHERE ar.post_id=p.id
+             -- Rescheduling bumps posts.revision without changing content, so the
+             -- review belongs to the latest content version, not posts.revision.
+             AND ar.revision=coalesce((
+               SELECT max(v.revision) FROM post_versions v WHERE v.post_id=p.id
+             ),p.revision)
            ORDER BY ar.created_at DESC,ar.id DESC LIMIT 1
          ) current_review ON true
          WHERE p.organization_id=$1 AND p.client_id=$2 AND p.deleted_at IS NULL

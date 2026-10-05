@@ -3,7 +3,11 @@ import {
   approvalView,
   decideApproval,
 } from "../../../../../../packages/server/approvals";
-import { sameOrigin, AppError } from "../../../../../../packages/core/security";
+import {
+  sameOrigin,
+  AppError,
+  hashToken,
+} from "../../../../../../packages/core/security";
 import { rateLimit } from "../../../../../../packages/server/queue";
 const valid = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 function failure(e: unknown) {
@@ -40,7 +44,8 @@ export async function POST(
   try {
     sameOrigin(request);
     const secret = valid.parse((await params).token);
-    if (!(await rateLimit(`approval:${secret}`)))
+    // Key by hash so live approval secrets never appear in Redis.
+    if (!(await rateLimit(`approval:${hashToken(secret)}`)))
       throw new AppError(429, "RATE_LIMIT", "Please try again shortly.");
     const body = z
       .object({

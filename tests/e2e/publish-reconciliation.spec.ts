@@ -106,6 +106,12 @@ test("an exact Meta match safely reconciles an uncertain delivery", async ({
       [publishJob.id],
     );
 
+    const cancelUncertain = await api.post("/api/hub", {
+      data: { action: "post.cancel", clientId, id: postId },
+    });
+    expect(cancelUncertain.status()).toBe(409);
+    expect((await cancelUncertain.json()).code).toBe("DELIVERY_UNCERTAIN");
+
     const result = await processPublishReconciliationJobsWith(
       1,
       async () => [

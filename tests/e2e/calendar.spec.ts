@@ -77,6 +77,18 @@ test("calendar loads its date range and safely reschedules an existing job", asy
       )
     ).rows[0];
 
+    await db.query(
+      `INSERT INTO post_versions(organization_id,client_id,post_id,revision,snapshot)
+       VALUES($1,$2,$3,1,'{}')`,
+      [owner.organization_id, clientId, post.id],
+    );
+    await db.query(
+      `INSERT INTO approval_requests(
+         organization_id,client_id,post_id,revision,token_hash,expires_at,status
+       ) VALUES($1,$2,$3,1,$4,now()+interval '7 days','APPROVED')`,
+      [owner.organization_id, clientId, post.id, `calendar-${unique}`],
+    );
+
     await page.goto("/login");
     await page.getByLabel("Email address").fill(process.env.DEMO_EMAIL!);
     await page
@@ -140,6 +152,14 @@ test("calendar loads its date range and safely reschedules an existing job", asy
         runAt: movedTime.toUTC().toISO(),
         status: "PENDING",
       });
+    // Rescheduling changes the revision but must keep the content approval.
+    const listed = await (
+      await page.request.get(`/api/posts?clientId=${clientId}&id=${post.id}`)
+    ).json();
+    expect(listed.post).toMatchObject({
+      revision: 3,
+      approval_status: "APPROVED",
+    });
     expect(
       Number(
         (
