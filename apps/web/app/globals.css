@@ -904,6 +904,16 @@ td {
 .media-picks small {
   margin-left: auto;
 }
+.composer-form > .alert,
+.composer-form > .notice {
+  margin: 0 24px 16px;
+}
+.composer-footer .button-row {
+  margin: 0;
+}
+.dialog-alert {
+  margin: 16px 0 8px;
+}
 .composer-footer {
   padding: 20px 24px;
   display: flex;

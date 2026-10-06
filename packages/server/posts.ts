@@ -4,6 +4,50 @@ import { validatePost, type Platform } from "../core/domain";
 import { AppError } from "../core/security";
 import { postInput } from "./validation";
 import type { z } from "zod";
+import type { PoolClient } from "pg";
+
+// Shared by approval submission and scheduling, so a post that cannot be
+// published is rejected before anyone reviews it, not after.
+export async function publishabilityErrors(
+  tx: PoolClient,
+  c: Context,
+  post: { id: string; link: string | null },
+) {
+  const targets = (
+    await tx.query(
+      "SELECT t.*,a.platform,a.status AS account_status FROM post_targets t JOIN social_accounts a ON a.id=t.social_account_id WHERE t.post_id=$1 AND t.organization_id=$2 AND t.client_id=$3",
+      [post.id, c.organizationId, c.clientId],
+    )
+  ).rows;
+  if (!targets.length)
+    return { targets, errors: ["Select at least one account."] };
+  const errors: string[] = [];
+  for (const target of targets) {
+    if (target.account_status !== "CONNECTED") {
+      errors.push(
+        `${target.platform}: Reconnect the selected account before publishing.`,
+      );
+      continue;
+    }
+    const media = (
+      await tx.query(
+        "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL",
+        [c.organizationId, c.clientId, target.media_ids],
+      )
+    ).rows;
+    if (media.length !== target.media_ids.length) {
+      errors.push(`${target.platform}: An attachment is missing.`);
+      continue;
+    }
+    for (const message of validatePost(target.platform as Platform, {
+      caption: target.caption,
+      link: post.link,
+      media,
+    }))
+      errors.push(`${target.platform}: ${message}`);
+  }
+  return { targets, errors };
+}
 export async function createPost(c: Context, input: z.infer<typeof postInput>) {
   return transaction(async (tx) => {
     if (
@@ -94,40 +138,9 @@ export async function schedulePost(
         "APPROVAL_REQUIRED",
         "The post must be approved before scheduling.",
       );
-    const targets = (
-      await tx.query(
-        "SELECT t.*,a.platform,a.status AS account_status FROM post_targets t JOIN social_accounts a ON a.id=t.social_account_id WHERE t.post_id=$1",
-        [id],
-      )
-    ).rows;
-    if (!targets.length)
-      throw new AppError(422, "NO_TARGETS", "Select at least one account.");
+    const { targets, errors } = await publishabilityErrors(tx, c, post);
+    if (errors.length) throw new AppError(422, "VALIDATION", errors.join(" "));
     for (const target of targets) {
-      if (target.account_status !== "CONNECTED")
-        throw new AppError(
-          422,
-          "DISCONNECTED",
-          "Reconnect the selected account before scheduling.",
-        );
-      const media = (
-        await tx.query(
-          "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL",
-          [c.organizationId, c.clientId, target.media_ids],
-        )
-      ).rows;
-      if (media.length !== target.media_ids.length)
-        throw new AppError(422, "INVALID_MEDIA", "An attachment is missing.");
-      const errors = validatePost(target.platform as Platform, {
-        caption: target.caption,
-        link: post.link,
-        media,
-      });
-      if (errors.length)
-        throw new AppError(
-          422,
-          "VALIDATION",
-          `${target.platform}: ${errors.join(" ")}`,
-        );
       await tx.query(
         "UPDATE post_targets SET status='SCHEDULED',updated_at=now() WHERE id=$1",
         [target.id],

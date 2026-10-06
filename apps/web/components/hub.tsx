@@ -371,7 +371,8 @@ export function Hub() {
           </div>
         </header>
         <main className="content">
-          {error && (
+          {/* While a post dialog is open its own alert shows the error. */}
+          {error && !currentPost && (
             <div role="alert" className="alert">
               {error}
               <button
@@ -683,10 +684,12 @@ export function Hub() {
                       data={data}
                       mutate={mutate}
                       busy={busy}
-                      onCreated={(p) => {
+                      error={error}
+                      onCreated={(p, reviewUrl) => {
                         setEditing(undefined);
                         setView("Posts");
                         openPost(p);
+                        if (reviewUrl) setApprovalUrl(reviewUrl);
                       }}
                     />
                   )}
@@ -1246,6 +1249,11 @@ export function Hub() {
                       <small>{formatDate(review.createdAt, timeZone)}</small>
                     </div>
                   ))}
+                </div>
+              )}
+              {error && (
+                <div role="alert" className="alert dialog-alert">
+                  {error}
                 </div>
               )}
               {currentPost.status === "DRAFT" && (
