@@ -27,12 +27,14 @@ export function Composer({
   busy,
   onCreated,
   editing,
+  error,
 }: {
   data: HubData;
   mutate: Mutate;
   busy: boolean;
-  onCreated: (p: Post) => void;
+  onCreated: (p: Post, reviewUrl?: string) => void;
   editing?: Post;
+  error?: string;
 }) {
   const [caption, setCaption] = useState(editing?.caption ?? "");
   const [link, setLink] = useState(editing?.link ?? "");
@@ -66,6 +68,14 @@ export function Composer({
   const [guardrails, setGuardrails] = useState<GuardrailResult>();
   const [history, setHistory] = useState<Generation[]>([]);
   const [operation, setOperation] = useState("generate");
+  const internalReview = data.workflow[0] === "INTERNAL";
+  // Authors may review their own post only when nobody else can.
+  const independentReviewers = data.reviewers.filter(
+    (reviewer) => reviewer.id !== data.user.id,
+  );
+  const [reviewerId, setReviewerId] = useState(
+    independentReviewers[0]?.id ?? data.reviewers[0]?.id ?? "",
+  );
   const selected = data.accounts.filter((a) => ids.includes(a.id));
   const active = selected.find((a) => a.id === preview) ?? selected[0];
   const validation = selected.flatMap((a) =>
@@ -95,7 +105,7 @@ export function Composer({
     setSuggestion(undefined);
     await loadHistory();
   }
-  async function save() {
+  async function save(submit = false) {
     try {
       const p = await mutate(editing ? "post.edit" : "post.create", {
         id: editing?.id,
@@ -107,7 +117,7 @@ export function Composer({
           mediaIds: networkMedia[a.id] ?? mediaIds,
         })),
       });
-      onCreated({
+      const draft = {
         ...p,
         targets: selected.map((a) => ({
           id: a.id,
@@ -117,7 +127,18 @@ export function Composer({
           mediaIds: networkMedia[a.id] ?? mediaIds,
           status: "DRAFT",
         })),
-      });
+      };
+      if (!submit) return onCreated(draft);
+      try {
+        const review = await mutate("post.submit", {
+          id: p.id,
+          ...(internalReview ? { reviewerId } : {}),
+        });
+        onCreated({ ...draft, status: "PENDING_APPROVAL" }, review.url);
+      } catch {
+        // The draft is saved; its details show why submission was refused.
+        onCreated(draft);
+      }
     } catch {}
   }
   return (
@@ -428,23 +449,59 @@ export function Composer({
           </div>
         )}
         {!!validation.length && (
-          <div className="notice">
-            <strong>Before scheduling</strong>
+          <div className="notice warning" role="status">
+            <strong>Fix before sending for approval</strong>
             {validation.map((v, i) => (
               <p key={i}>{v}</p>
             ))}
           </div>
         )}
+        {internalReview && !!selected.length && (
+          <label className="form-section">
+            Internal reviewer
+            <select
+              aria-label="Internal reviewer"
+              value={reviewerId}
+              onChange={(event) => setReviewerId(event.target.value)}
+            >
+              <option value="">Choose a reviewer</option>
+              {data.reviewers.map((reviewer) => (
+                <option key={reviewer.id} value={reviewer.id}>
+                  {reviewer.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {error && (
+          <div role="alert" className="alert">
+            {error}
+          </div>
+        )}
         <div className="composer-footer">
-          <small>Save a draft, then send it for approval.</small>
-          <button
-            className="primary"
-            disabled={busy || !ids.length}
-            onClick={save}
-          >
-            <Send size={16} />
-            Save draft
-          </button>
+          <small>
+            {internalReview
+              ? "The reviewer is notified when you send it."
+              : "Sending creates a link for your client to approve."}
+          </small>
+          <div className="button-row">
+            <button disabled={busy || !ids.length} onClick={() => save(false)}>
+              Save draft
+            </button>
+            <button
+              className="primary"
+              disabled={
+                busy ||
+                !ids.length ||
+                !!validation.length ||
+                (internalReview && !reviewerId)
+              }
+              onClick={() => save(true)}
+            >
+              <Send size={16} />
+              Send for approval
+            </button>
+          </div>
         </div>
       </section>
       <aside className="preview-column">

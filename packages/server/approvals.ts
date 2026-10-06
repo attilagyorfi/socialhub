@@ -12,6 +12,7 @@ import {
 } from "./approval-workflows";
 import { sendMail } from "./mail";
 import { checkBrandGuardrails } from "../core/brand-guardrails";
+import { publishabilityErrors } from "./posts";
 import type { Platform } from "../core/domain";
 export async function requestApproval(
   c: Context,
@@ -53,6 +54,13 @@ export async function requestApproval(
         target.platform,
       ]).issues.filter((issue) => issue.severity === "BLOCK"),
     );
+    const { errors: publishErrors } = await publishabilityErrors(tx, c, post);
+    if (publishErrors.length)
+      throw new AppError(
+        422,
+        "VALIDATION",
+        `This post cannot be published as it is. ${publishErrors.join(" ")}`,
+      );
     if (blocking.length)
       throw new AppError(
         422,
