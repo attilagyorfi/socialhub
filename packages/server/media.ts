@@ -257,6 +257,7 @@ type StoredMedia = {
   object_key: string;
   mime_type: string;
   width?: number | null;
+  height?: number | null;
 };
 
 // Fails permanently before a provider is handed a URL to a missing object,
@@ -290,16 +291,75 @@ export function derivedObjectKeys(media: {
 
 const INSTAGRAM_MAX_WIDTH = 1440;
 const INSTAGRAM_MAX_BYTES = 8 * 1024 * 1024;
+// Instagram feed images must be between 4:5 (portrait) and 1.91:1 (landscape).
+const INSTAGRAM_MIN_RATIO = 4 / 5;
+const INSTAGRAM_MAX_RATIO = 1.91;
 
-// Instagram accepts only JPEG images up to 8 MB and 1440 px wide. Other
-// images get a cached JPEG rendition, created on first publication.
+function instagramReady(media: StoredMedia) {
+  if (media.mime_type !== "image/jpeg" || !media.width || !media.height)
+    return false;
+  const ratio = media.width / media.height;
+  return (
+    media.width <= INSTAGRAM_MAX_WIDTH &&
+    ratio >= INSTAGRAM_MIN_RATIO &&
+    ratio <= INSTAGRAM_MAX_RATIO
+  );
+}
+
+// Builds an Instagram-compatible JPEG: at most 1440 px wide and 8 MB. Images
+// outside the allowed aspect ratio are framed rather than cropped: the whole
+// image is centred on a blurred, darkened copy of itself.
+export async function instagramRendition(source: Buffer) {
+  // Loaded lazily: the native module is only needed for this rare conversion.
+  const { default: sharp } = await import("sharp");
+  const { data: upright, info } = await sharp(source)
+    .rotate()
+    .flatten({ background: "#ffffff" })
+    .toBuffer({ resolveWithObject: true });
+  const ratio = info.width / info.height;
+  let canvas: { width: number; height: number } | undefined;
+  if (ratio < INSTAGRAM_MIN_RATIO) {
+    const height = Math.min(info.height, 1800);
+    canvas = { width: Math.round(height * INSTAGRAM_MIN_RATIO), height };
+  } else if (ratio > INSTAGRAM_MAX_RATIO) {
+    const width = Math.min(info.width, INSTAGRAM_MAX_WIDTH);
+    canvas = { width, height: Math.round(width / INSTAGRAM_MAX_RATIO) };
+  }
+  let image: Buffer;
+  if (canvas) {
+    const [background, foreground] = await Promise.all([
+      sharp(upright)
+        .resize(canvas.width, canvas.height, { fit: "cover" })
+        .blur(40)
+        .modulate({ brightness: 0.8 })
+        .toBuffer(),
+      sharp(upright)
+        .resize(canvas.width, canvas.height, { fit: "inside" })
+        .toBuffer(),
+    ]);
+    image = await sharp(background)
+      .composite([{ input: foreground, gravity: "centre" }])
+      .toBuffer();
+  } else {
+    image = await sharp(upright)
+      .resize({ width: INSTAGRAM_MAX_WIDTH, withoutEnlargement: true })
+      .toBuffer();
+  }
+  for (const quality of [90, 80, 70]) {
+    const rendition = await sharp(image).jpeg({ quality }).toBuffer();
+    if (rendition.length <= INSTAGRAM_MAX_BYTES) return rendition;
+  }
+  throw new AppError(
+    422,
+    "META_MEDIA_TOO_LARGE",
+    "The image cannot be reduced below Instagram's 8 MB limit.",
+  );
+}
+
+// Instagram-ready JPEGs are published as-is; anything else gets a cached
+// rendition, created on first publication.
 export async function instagramImageObjectKey(media: StoredMedia) {
-  if (
-    media.mime_type === "image/jpeg" &&
-    media.width &&
-    media.width <= INSTAGRAM_MAX_WIDTH
-  )
-    return media.object_key;
+  if (instagramReady(media)) return media.object_key;
   const [key] = derivedObjectKeys(media);
   try {
     await storageClient().send(
@@ -314,25 +374,9 @@ export async function instagramImageObjectKey(media: StoredMedia) {
   );
   if (!original.Body)
     throw new AppError(422, "INVALID_MEDIA", "Attachment missing");
-  const source = Buffer.from(await original.Body.transformToByteArray());
-  // Loaded lazily: the native module is only needed for this rare conversion.
-  const { default: sharp } = await import("sharp");
-  let rendition: Buffer | undefined;
-  for (const quality of [90, 80, 70]) {
-    rendition = await sharp(source)
-      .rotate()
-      .resize({ width: INSTAGRAM_MAX_WIDTH, withoutEnlargement: true })
-      .flatten({ background: "#ffffff" })
-      .jpeg({ quality })
-      .toBuffer();
-    if (rendition.length <= INSTAGRAM_MAX_BYTES) break;
-  }
-  if (!rendition || rendition.length > INSTAGRAM_MAX_BYTES)
-    throw new AppError(
-      422,
-      "META_MEDIA_TOO_LARGE",
-      "The image cannot be reduced below Instagram's 8 MB limit.",
-    );
+  const rendition = await instagramRendition(
+    Buffer.from(await original.Body.transformToByteArray()),
+  );
   await storageClient().send(
     new PutObjectCommand({
       Bucket: mediaBucket(),

@@ -48,6 +48,7 @@ const media = {
   object_key: "org-1/client-1/ready/asset-1",
   mime_type: "image/png",
   width: 1080,
+  height: 1080,
 };
 
 describe("Instagram image renditions", () => {
@@ -95,6 +96,45 @@ describe("Instagram image renditions", () => {
       status: 422,
       code: "MEDIA_MISSING",
     });
+  });
+
+  it("frames portrait photos to 4:5 instead of cropping them", async () => {
+    const portrait = await sharp({
+      create: { width: 3000, height: 4000, channels: 3, background: "#cc3300" },
+    })
+      .jpeg()
+      .toBuffer();
+    objects.set(media.object_key, { body: portrait, type: "image/jpeg" });
+    const key = await instagramImageObjectKey({
+      ...media,
+      mime_type: "image/jpeg",
+      width: 3000,
+      height: 4000,
+    });
+    expect(key).toBe(derivedObjectKeys(media)[0]);
+    const { width, height, format } = await sharp(
+      objects.get(key)!.body,
+    ).metadata();
+    expect(format).toBe("jpeg");
+    expect(height).toBe(1800);
+    expect(width).toBe(1440);
+  });
+
+  it("frames very wide images to 1.91:1", async () => {
+    const wide = await sharp({
+      create: { width: 3000, height: 1000, channels: 3, background: "#0033cc" },
+    })
+      .png()
+      .toBuffer();
+    objects.set(media.object_key, { body: wide, type: "image/png" });
+    const key = await instagramImageObjectKey({
+      ...media,
+      width: 3000,
+      height: 1000,
+    });
+    const { width, height } = await sharp(objects.get(key)!.body).metadata();
+    expect(width).toBe(1440);
+    expect(height).toBe(Math.round(1440 / 1.91));
   });
 
   it("publishes a suitable JPEG as-is", async () => {
