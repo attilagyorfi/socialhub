@@ -457,16 +457,21 @@ export class MetaGraphClient {
         },
       });
     if (media.mime_type.startsWith("image/"))
-      return this.request<{ id?: string }>(`${pageId}/photos`, {
-        method: "POST",
-        token: accessToken,
-        delivery: true,
-        params: {
-          url: mediaUrl!,
-          caption: content.caption,
-          published: "true",
+      // /photos returns the photo id plus the feed post id; post insights and
+      // reconciliation work with the post id.
+      return this.request<{ id?: string; post_id?: string }>(
+        `${pageId}/photos`,
+        {
+          method: "POST",
+          token: accessToken,
+          delivery: true,
+          params: {
+            url: mediaUrl!,
+            caption: content.caption,
+            published: "true",
+          },
         },
-      });
+      ).then((result) => ({ id: result.post_id ?? result.id }));
     return this.request<{ id?: string }>(`${pageId}/videos`, {
       method: "POST",
       token: accessToken,
