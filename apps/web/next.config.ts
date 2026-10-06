@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 const config: NextConfig = {
-  output: "standalone",
+  // Vercel's build adapter packages the server itself; standalone output
+  // conflicts with it (missing next-server.js.nft.json under Turbopack).
+  output: process.env.VERCEL ? undefined : "standalone",
   serverExternalPackages: ["pg", "bullmq", "ioredis"],
   async headers() {
     return [
