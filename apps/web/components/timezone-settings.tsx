@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useT } from "../i18n";
 import type { HubData, Mutate } from "./types";
 
 const suggestedTimeZones = [
@@ -30,6 +31,7 @@ export function TimeZoneSettings({
   mutate: Mutate;
   busy: boolean;
 }) {
+  const { t } = useT();
   const [timeZone, setTimeZone] = useState(data.user.timezone);
   const [detected, setDetected] = useState("");
   useEffect(() => {
@@ -42,10 +44,8 @@ export function TimeZoneSettings({
     <section className="panel">
       <div className="panel-title">
         <div>
-          <h2>Date and time</h2>
-          <span className="muted">
-            Scheduled times are stored safely in UTC.
-          </span>
+          <h2>{t("settings.timezone.title")}</h2>
+          <span className="muted">{t("settings.timezone.subtitle")}</span>
         </div>
       </div>
       <form
@@ -56,9 +56,9 @@ export function TimeZoneSettings({
         }}
       >
         <label>
-          Display timezone
+          {t("settings.timezone.label")}
           <input
-            aria-label="Display timezone"
+            aria-label={t("settings.timezone.label")}
             list="time-zone-options"
             required
             maxLength={100}
@@ -73,18 +73,15 @@ export function TimeZoneSettings({
           </datalist>
         </label>
         <button disabled={busy || timeZone === data.user.timezone}>
-          Save timezone
+          {t("settings.timezone.save")}
         </button>
         {detected && detected !== timeZone && (
           <button type="button" onClick={() => setTimeZone(detected)}>
-            Use device timezone
+            {t("settings.timezone.useDevice")}
           </button>
         )}
       </form>
-      <p className="panel-note">
-        Calendar dates, post schedules, approvals and activity timestamps use
-        this personal setting. Use an IANA timezone such as Europe/Budapest.
-      </p>
+      <p className="panel-note">{t("settings.timezone.note")}</p>
     </section>
   );
 }

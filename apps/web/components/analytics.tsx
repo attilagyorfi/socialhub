@@ -2,6 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { Network } from "./types";
+import {
+  apiError,
+  currentLocale,
+  intlLocale,
+  useT,
+  type MessageKey,
+  type Vars,
+} from "../i18n";
 
 const metricKeys = ["followers", "reach", "impressions", "engagement"] as const;
 type Metric = (typeof metricKeys)[number];
@@ -43,14 +51,21 @@ function daysAgo(days: number) {
   return isoDay(date);
 }
 
+// en-GB writes compact thousands as "2.1k"; plain "en" keeps "2.1K".
 function number(value: number) {
-  return new Intl.NumberFormat("en", { notation: "compact" }).format(value);
+  const locale = currentLocale() === "hu" ? intlLocale() : "en";
+  return new Intl.NumberFormat(locale, { notation: "compact" }).format(value);
 }
 
-function comparison(value: MetricValue) {
-  if (value.changePercent === null) return "No previous baseline";
-  if (!value.changePercent) return "No change";
-  return `${value.changePercent > 0 ? "+" : ""}${value.changePercent}% vs previous period`;
+function comparison(
+  value: MetricValue,
+  t: (key: MessageKey, vars?: Vars) => string,
+) {
+  if (value.changePercent === null) return t("analytics.comparison.none");
+  if (!value.changePercent) return t("analytics.comparison.same");
+  return t("analytics.comparison.change", {
+    change: `${value.changePercent > 0 ? "+" : ""}${value.changePercent}`,
+  });
 }
 
 export function Analytics({
@@ -64,6 +79,7 @@ export function Analytics({
   onOpen: (postId: string) => void;
   onError: (message: string) => void;
 }) {
+  const { t } = useT();
   const [metric, setMetric] = useState<Metric>("reach");
   const [platform, setPlatform] = useState("all");
   const [from, setFrom] = useState(() => daysAgo(29));
@@ -87,22 +103,21 @@ export function Analytics({
     })
       .then(async (response) => {
         const body = await response.json();
-        if (!response.ok)
-          throw new Error(body.error ?? "Unable to load analytics.");
+        if (!response.ok) throw new Error(apiError(body));
         setResult(body);
       })
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError")
           return;
         onError(
-          error instanceof Error ? error.message : "Unable to load analytics.",
+          error instanceof Error ? error.message : t("analytics.error.load"),
         );
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [clientId, from, onError, platform, refreshKey, to]);
+  }, [clientId, from, onError, platform, refreshKey, t, to]);
 
   const points = result?.series ?? [];
   const max = Math.max(1, ...points.map((point) => point[metric]));
@@ -116,48 +131,50 @@ export function Analytics({
     <>
       <div className="notice">
         {result?.mockOnly
-          ? "Demonstration data from mock providers. "
-          : "Metrics retain their provider source. "}
-        Reach is summed per account and is not a deduplicated audience.
-        Engagement definitions may differ by network.
+          ? t("analytics.notice.mock")
+          : t("analytics.notice.real")}
+        {t("analytics.notice.caveat")}
       </div>
       <section className="panel analytics-controls" aria-busy={loading}>
         <div className="panel-title">
           <div>
-            <h2>Performance overview</h2>
+            <h2>{t("analytics.title.overview")}</h2>
             <span className="muted">
               {result
                 ? `${result.range.from} – ${result.range.to}`
-                : "Loading analytics…"}
+                : t("analytics.loading")}
             </span>
           </div>
-          <div className="analytics-presets" aria-label="Date range presets">
+          <div
+            className="analytics-presets"
+            aria-label={t("analytics.presets")}
+          >
             {[7, 30, 90].map((days) => (
               <button key={days} onClick={() => setPreset(days)}>
-                {days} days
+                {t("analytics.preset.days", { days })}
               </button>
             ))}
           </div>
         </div>
         <div className="calendar-filters">
           <select
-            aria-label="Analytics network"
+            aria-label={t("analytics.filter.network")}
             value={platform}
             onChange={(event) => setPlatform(event.target.value)}
           >
-            <option value="all">All networks</option>
+            <option value="all">{t("analytics.filter.allNetworks")}</option>
             {["facebook", "instagram", "linkedin", "tiktok", "google"].map(
               (value) => (
                 <option key={value} value={value}>
-                  {value}
+                  {t(`common.network.${value}` as MessageKey)}
                 </option>
               ),
             )}
           </select>
           <label>
-            From
+            {t("analytics.from")}
             <input
-              aria-label="Analytics from"
+              aria-label={t("analytics.from.aria")}
               type="date"
               value={from}
               max={to}
@@ -165,9 +182,9 @@ export function Analytics({
             />
           </label>
           <label>
-            To
+            {t("analytics.to")}
             <input
-              aria-label="Analytics to"
+              aria-label={t("analytics.to.aria")}
               type="date"
               value={to}
               min={from}
@@ -183,7 +200,7 @@ export function Analytics({
           const value = result?.summary[key];
           return (
             <section className="analytics-kpi" key={key}>
-              <span>{key}</span>
+              <span>{t(`analytics.metric.${key}`)}</span>
               <strong>{value ? number(value.value) : "—"}</strong>
               <small
                 className={
@@ -192,7 +209,7 @@ export function Analytics({
                     : ""
                 }
               >
-                {value ? comparison(value) : "Loading…"}
+                {value ? comparison(value, t) : t("analytics.loadingShort")}
               </small>
             </section>
           );
@@ -202,20 +219,22 @@ export function Analytics({
       <section className="panel analytics-chart-panel">
         <div className="panel-title">
           <div>
-            <h2>Daily trend</h2>
+            <h2>{t("analytics.title.trend")}</h2>
             <span className="muted">
-              Compared with {result?.previousRange.from ?? "…"} –{" "}
-              {result?.previousRange.to ?? "…"}
+              {t("analytics.comparedWith", {
+                from: result?.previousRange.from ?? "…",
+                to: result?.previousRange.to ?? "…",
+              })}
             </span>
           </div>
           <select
-            aria-label="Analytics metric"
+            aria-label={t("analytics.metricSelect")}
             value={metric}
             onChange={(event) => setMetric(event.target.value as Metric)}
           >
             {metricKeys.map((key) => (
               <option key={key} value={key}>
-                {key}
+                {t(`analytics.metric.${key}`)}
               </option>
             ))}
           </select>
@@ -224,9 +243,12 @@ export function Analytics({
           <div
             className="chart"
             role="img"
-            aria-label={`${metric} by day. ${points
-              .map((point) => `${point.day}: ${point[metric]}`)
-              .join(", ")}`}
+            aria-label={t("analytics.chart.aria", {
+              metric: t(`analytics.metric.${metric}`),
+              points: points
+                .map((point) => `${point.day}: ${point[metric]}`)
+                .join(", "),
+            })}
             style={{ minWidth: `${Math.max(680, points.length * 18)}px` }}
           >
             <div className="chart-labels">
@@ -256,26 +278,24 @@ export function Analytics({
           </div>
         </div>
         {!loading && !points.length && (
-          <div className="empty compact">
-            No account metrics were captured in this period.
-          </div>
+          <div className="empty compact">{t("analytics.chart.empty")}</div>
         )}
       </section>
 
       <div className="analytics-grid">
         <section className="panel">
           <div className="panel-title">
-            <h2>Network breakdown</h2>
-            <span className="muted">Current period</span>
+            <h2>{t("analytics.title.networks")}</h2>
+            <span className="muted">{t("analytics.currentPeriod")}</span>
           </div>
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
-                  <th>Network</th>
-                  <th>Reach</th>
-                  <th>Impressions</th>
-                  <th>Engagement</th>
+                  <th>{t("analytics.column.network")}</th>
+                  <th>{t("analytics.metric.reach")}</th>
+                  <th>{t("analytics.metric.impressions")}</th>
+                  <th>{t("analytics.metric.engagement")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -293,37 +313,40 @@ export function Analytics({
             </table>
           </div>
           {!loading && !result?.platforms.length && (
-            <div className="empty compact">No network data in this period.</div>
+            <div className="empty compact">{t("analytics.networks.empty")}</div>
           )}
         </section>
 
         <section className="panel">
           <div className="panel-title">
-            <h2>Top content</h2>
-            <span className="muted">Ranked by interactions</span>
+            <h2>{t("analytics.title.top")}</h2>
+            <span className="muted">{t("analytics.top.ranked")}</span>
           </div>
           <div className="top-content-list">
             {result?.topContent.map((post, index) => (
               <button key={post.id} onClick={() => onOpen(post.id)}>
                 <span className="top-content-rank">{index + 1}</span>
                 <span className="top-content-copy">
-                  <strong>{post.caption.slice(0, 90) || "Media post"}</strong>
+                  <strong>
+                    {post.caption.slice(0, 90) || t("analytics.mediaPost")}
+                  </strong>
                   <small>
-                    {post.platforms.join(" · ")} · {number(post.impressions)}
-                    {" impressions"}
+                    {post.platforms
+                      .map((name) => t(`common.network.${name}` as MessageKey))
+                      .join(" · ")}{" "}
+                    · {number(post.impressions)}
+                    {t("analytics.top.impressions")}
                   </small>
                 </span>
                 <span className="top-content-score">
                   {number(post.engagement)}
-                  <small>interactions</small>
+                  <small>{t("analytics.top.interactions")}</small>
                 </span>
               </button>
             ))}
           </div>
           {!loading && !result?.topContent.length && (
-            <div className="empty compact">
-              No published posts with metrics in this period.
-            </div>
+            <div className="empty compact">{t("analytics.top.empty")}</div>
           )}
         </section>
       </div>

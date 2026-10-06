@@ -29,15 +29,16 @@ import { Team } from "./team";
 import { PostList } from "./post-list";
 import { TimeZoneSettings } from "./timezone-settings";
 import { PrivacySettings } from "./privacy-settings";
-import { localDateTimeToUtc, localInputValue } from "./time";
+import { LanguageSettings } from "./language-settings";
 import {
-  type HubData,
-  type Post,
-  Badge,
-  formatDate,
-  Network,
-  names,
-} from "./types";
+  apiError,
+  errorMessage,
+  intlLocale,
+  useT,
+  type MessageKey,
+} from "../i18n";
+import { localDateTimeToUtc, localInputValue } from "./time";
+import { type HubData, type Post, Badge, formatDate, Network } from "./types";
 const navigation = [
   ["Home", Home],
   ["Calendar", CalendarDays],
@@ -51,7 +52,16 @@ const navigation = [
   ["Connected accounts", Link2],
   ["Settings", Settings],
 ] as const;
+// Post states in which per-network delivery status means something.
+const deliveryStates = [
+  "QUEUED",
+  "PUBLISHING",
+  "PUBLISHED",
+  "PARTIALLY_PUBLISHED",
+  "FAILED",
+];
 export function Hub() {
+  const { t, locale, setLocale } = useT();
   const [data, setData] = useState<HubData>();
   const [clientId, setClientId] = useState("");
   const [view, setView] = useState("Home");
@@ -72,13 +82,19 @@ export function Hub() {
     const result = params.get("meta");
     if (!result) return;
     setView("Connected accounts");
-    if (result === "connected") setNotice("Meta accounts connected.");
+    const code = params.get("code") ?? "OAUTH_FAILED";
+    if (result === "connected") setNotice(t("hub.meta.connected"));
     else
       setError(
-        `Meta connection failed (${params.get("code") ?? "OAUTH_FAILED"}).`,
+        t("hub.meta.failed", { reason: errorMessage(locale, code, code) }),
       );
     window.history.replaceState({}, "", window.location.pathname);
   }, []);
+  // A saved per-user language wins over the browser cookie.
+  const savedLocale = data?.user.locale;
+  useEffect(() => {
+    if (savedLocale && savedLocale !== locale) setLocale(savedLocale);
+  }, [savedLocale, locale, setLocale]);
   useEffect(() => {
     if (!selected) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -125,7 +141,7 @@ export function Hub() {
     }
     const result = await res.json();
     if (sequence !== loadSequence.current) return;
-    if (!res.ok) throw new Error(result.error);
+    if (!res.ok) throw new Error(apiError(result));
     setData(result);
   }, [clientId]);
   useEffect(() => {
@@ -148,7 +164,7 @@ export function Hub() {
         body: JSON.stringify({ action, clientId: data?.clientId, ...fields }),
       });
       const result = await res.json();
-      if (!res.ok) throw new Error(result.error);
+      if (!res.ok) throw new Error(apiError(result));
       await load();
       if (selected?.id && data?.clientId) {
         const detailResponse = await fetch(
@@ -160,10 +176,10 @@ export function Hub() {
         if (detailResponse.ok) setSelected((await detailResponse.json()).post);
       }
       setCalendarRefresh((value) => value + 1);
-      setNotice("Changes saved.");
+      setNotice(t("hub.notice.saved"));
       return result;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to save changes.");
+      setError(e instanceof Error ? e.message : t("common.error.save"));
       throw e;
     } finally {
       setBusy(false);
@@ -189,7 +205,7 @@ export function Hub() {
         }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error);
+      if (!response.ok) throw new Error(apiError(result));
       if (updateDialog)
         setSelected({
           ...post,
@@ -198,11 +214,11 @@ export function Hub() {
         });
       setCalendarRefresh((value) => value + 1);
       await load();
-      setNotice("Post rescheduled.");
+      setNotice(t("hub.notice.rescheduled"));
       return true;
     } catch (reason) {
       setError(
-        reason instanceof Error ? reason.message : "Unable to reschedule post.",
+        reason instanceof Error ? reason.message : t("hub.error.reschedule"),
       );
       return false;
     } finally {
@@ -231,17 +247,25 @@ export function Hub() {
         `/api/posts?${new URLSearchParams({ clientId: data.clientId, id })}`,
       );
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Unable to load post.");
+      if (!response.ok) throw new Error(apiError(body));
       openPost(body.post);
     } catch (reason) {
       setError(
-        reason instanceof Error ? reason.message : "Unable to load post.",
+        reason instanceof Error ? reason.message : t("hub.error.loadPost"),
       );
     }
   }
   const currentPost =
     data?.posts.find((p) => p.id === selected?.id) ?? selected;
   const timeZone = data?.user.timezone ?? "Europe/Budapest";
+  const viewLabel = (name: string) => t(`hub.nav.${name}` as MessageKey);
+  const roleLabel = (role: string) => t(`common.role.${role}` as MessageKey);
+  const failedOperations = data?.operations
+    ? data.operations.publishDead +
+      data.operations.mediaDead +
+      data.operations.approvalDeliveriesFailed +
+      data.operations.analyticsDead
+    : 0;
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -252,10 +276,10 @@ export function Hub() {
           <div className="agency-icon">G</div>
           <div>
             <strong>G2A Marketing</strong>
-            <small>Agency workspace</small>
+            <small>{t("hub.sidebar.agency")}</small>
           </div>
         </div>
-        <p className="nav-label">WORKSPACE</p>
+        <p className="nav-label">{t("hub.sidebar.workspace")}</p>
         <nav>
           {navigation
             .filter(([label]) => label !== "Team" || data?.canManageTeam)
@@ -270,7 +294,7 @@ export function Hub() {
                 }}
               >
                 <Icon size={18} />
-                {label}
+                {viewLabel(label)}
                 {label === "Approvals" &&
                   !!data?.posts.filter((p) => p.status === "PENDING_APPROVAL")
                     .length && (
@@ -289,16 +313,16 @@ export function Hub() {
           <div className="mode">
             <span className="dot" />
             {data?.meta.enabled
-              ? "Meta integration enabled"
+              ? t("hub.mode.meta")
               : data?.mode === "mock"
-                ? "Mock social connections"
-                : "Social workspace"}
+                ? t("hub.mode.mock")
+                : t("hub.mode.other")}
             <small>
               {data?.meta.enabled
-                ? "Live accounts require approved Meta access"
+                ? t("hub.mode.metaHint")
                 : data?.mode === "mock"
-                  ? "No real posts will be published"
-                  : "Check provider status before publishing"}
+                  ? t("hub.mode.mockHint")
+                  : t("hub.mode.otherHint")}
             </small>
           </div>
           <button
@@ -316,8 +340,8 @@ export function Hub() {
               {data?.user.name.slice(0, 2).toUpperCase() ?? "G2"}
             </span>
             <span>
-              {data?.user.name ?? "Your workspace"}
-              <small>Sign out</small>
+              {data?.user.name ?? t("hub.profile.fallback")}
+              <small>{t("hub.profile.signOut")}</small>
             </span>
             <LogOut size={16} />
           </button>
@@ -326,11 +350,12 @@ export function Hub() {
       <div className="main">
         <header className="topbar">
           <div className="breadcrumb">
-            Workspace <ChevronRight size={14} /> <strong>{view}</strong>
+            {t("hub.topbar.workspace")} <ChevronRight size={14} />{" "}
+            <strong>{viewLabel(view)}</strong>
           </div>
           <div className="topbar-actions">
             <label className="client-select">
-              <span className="sr-only">Active client</span>
+              <span className="sr-only">{t("hub.topbar.client")}</span>
               <select
                 disabled={busy}
                 value={data?.clientId ?? ""}
@@ -351,7 +376,7 @@ export function Hub() {
             </label>
             <button
               className="icon-button"
-              title="Refresh workspace"
+              title={t("hub.topbar.refresh")}
               onClick={() => {
                 setCalendarRefresh((value) => value + 1);
                 load().catch((e) => setError(e.message));
@@ -361,7 +386,7 @@ export function Hub() {
             </button>
             <button
               className="icon-button"
-              title="Notifications"
+              title={t("hub.topbar.notifications")}
               onClick={() => setView("Notifications")}
             >
               <Bell size={19} />
@@ -383,7 +408,7 @@ export function Hub() {
                   load().catch((e) => setError(e.message));
                 }}
               >
-                Try again
+                {t("common.action.tryAgain")}
               </button>
             </div>
           )}
@@ -391,15 +416,15 @@ export function Hub() {
             <div role="status" className="success-notice">
               {notice}
               <button className="text-button" onClick={() => setNotice("")}>
-                Dismiss
+                {t("common.action.dismiss")}
               </button>
             </div>
           )}
           {!data ? (
             <div className="empty">
               <RefreshCw />
-              <h2>Loading your workspace</h2>
-              <p>Connecting to the application services.</p>
+              <h2>{t("hub.loading.title")}</h2>
+              <p>{t("hub.loading.body")}</p>
             </div>
           ) : (
             <>
@@ -407,28 +432,34 @@ export function Hub() {
                 <div>
                   <p className="eyebrow">
                     {view === "Home"
-                      ? "YOUR WORKSPACE AT A GLANCE"
+                      ? t("hub.home.eyebrow")
                       : (data.clients.find((c) => c.id === data.clientId)
                           ?.name ?? "G2A MARKETING")}
                   </p>
                   <h1>
                     {view === "Home"
-                      ? `Let’s make good things happen${data.user.name ? ", " + data.user.name.split(" ")[0] : ""}.`
-                      : view}
+                      ? t("hub.home.greeting", {
+                          name: data.user.name
+                            ? ", " + data.user.name.split(" ")[0]
+                            : "",
+                        })
+                      : viewLabel(view)}
                   </h1>
                   <p className="muted">
                     {view === "Home"
-                      ? "A clear view of what’s next, and what needs your attention."
+                      ? t("hub.subtitle.Home")
                       : view === "Create"
-                        ? "One idea. Every network. Your brand’s voice."
+                        ? t("hub.subtitle.Create")
                         : view === "Calendar"
-                          ? `Plan your content with confidence. Times shown in ${timeZone}.`
+                          ? t("hub.subtitle.Calendar", { timeZone })
                           : view === "Approvals"
-                            ? "Keep feedback and decisions moving."
+                            ? t("hub.subtitle.Approvals")
                             : view === "Analytics"
-                              ? "Mock metrics are labeled and kept separate by network."
+                              ? data.mode === "mock"
+                                ? t("hub.subtitle.AnalyticsMock")
+                                : t("hub.subtitle.Analytics")
                               : view === "Team"
-                                ? "Invite people and give them only the client access they need."
+                                ? t("hub.subtitle.Team")
                                 : ""}
                   </p>
                 </div>
@@ -441,23 +472,20 @@ export function Hub() {
                     }}
                     disabled={!data.clientId}
                   >
-                    <Plus size={17} /> Create post
+                    <Plus size={17} /> {t("hub.createPost")}
                   </button>
                 )}
               </div>
               {!data.clients.length && view !== "Clients" ? (
                 <div className="empty">
                   <Users />
-                  <h2>Create your first client workspace</h2>
-                  <p>
-                    Each client gets separate accounts, media, brand knowledge
-                    and content.
-                  </p>
+                  <h2>{t("hub.noClients.title")}</h2>
+                  <p>{t("hub.noClients.body")}</p>
                   <button
                     className="primary"
                     onClick={() => setView("Clients")}
                   >
-                    Add a client
+                    {t("hub.noClients.action")}
                   </button>
                 </div>
               ) : (
@@ -466,33 +494,42 @@ export function Hub() {
                     <>
                       {data.operations?.needsAttention && (
                         <div role="status" className="notice">
-                          <strong>Operations needs attention.</strong>{" "}
-                          {data.operations.publishDead +
-                            data.operations.mediaDead +
-                            data.operations.approvalDeliveriesFailed +
-                            data.operations.analyticsDead}{" "}
-                          failed jobs or deliveries,{" "}
-                          {data.operations.unhealthyTokens} account tokens
-                          requiring review.
+                          <strong>{t("hub.ops.title")}</strong>{" "}
+                          {!!failedOperations &&
+                            t(
+                              failedOperations === 1
+                                ? "hub.ops.failed.one"
+                                : "hub.ops.failed.other",
+                              { count: failedOperations },
+                            )}{" "}
+                          {!!data.operations.unhealthyTokens &&
+                            t(
+                              data.operations.unhealthyTokens === 1
+                                ? "hub.ops.tokens.one"
+                                : "hub.ops.tokens.other",
+                              { count: data.operations.unhealthyTokens },
+                            )}
                           <button
                             className="text-button"
                             onClick={() => setView("Settings")}
                           >
-                            View operations
+                            {t("hub.ops.view")}
                           </button>
                         </div>
                       )}
                       <div className="stats">
-                        {[
-                          ["Scheduled", "SCHEDULED", "Calendar"],
+                        {(
                           [
-                            "Awaiting approval",
-                            "PENDING_APPROVAL",
-                            "Approvals",
-                          ],
-                          ["Published", "PUBLISHED", "Posts"],
-                          ["Needs attention", "FAILED", "Posts"],
-                        ].map(([label, status, target]) => (
+                            ["hub.stats.Scheduled", "SCHEDULED", "Calendar"],
+                            [
+                              "hub.stats.Awaiting",
+                              "PENDING_APPROVAL",
+                              "Approvals",
+                            ],
+                            ["hub.stats.Published", "PUBLISHED", "Posts"],
+                            ["hub.stats.Attention", "FAILED", "Posts"],
+                          ] as const
+                        ).map(([label, status, target]) => (
                           <button
                             className="stat"
                             key={status}
@@ -502,7 +539,7 @@ export function Hub() {
                             }}
                           >
                             <span>
-                              {label}
+                              {t(label)}
                               <ArrowUpRight size={15} />
                             </span>
                             <strong>
@@ -515,23 +552,26 @@ export function Hub() {
                                 ).length
                               }
                             </strong>
-                            <small>In the current 50-post page</small>
+                            <small>{t("hub.stats.scope")}</small>
                           </button>
                         ))}
                       </div>
                       <div className="dashboard-grid">
                         <section className="panel">
                           <div className="panel-title">
-                            <h2>Coming up next</h2>
+                            <h2>{t("hub.upcoming.title")}</h2>
                             <button
                               className="text-button"
                               onClick={() => setView("Calendar")}
                             >
-                              View calendar <ArrowUpRight size={15} />
+                              {t("hub.upcoming.viewCalendar")}{" "}
+                              <ArrowUpRight size={15} />
                             </button>
                           </div>
                           <div className="list-tabs">
-                            <span className="active">Scheduled content</span>
+                            <span className="active">
+                              {t("hub.upcoming.tab")}
+                            </span>
                             <span>{timeZone}</span>
                           </div>
                           {data.posts
@@ -547,7 +587,7 @@ export function Hub() {
                                   <strong>
                                     {new Date(
                                       p.scheduled_at!,
-                                    ).toLocaleDateString("en-GB", {
+                                    ).toLocaleDateString(intlLocale(), {
                                       timeZone,
                                       day: "2-digit",
                                     })}
@@ -555,7 +595,7 @@ export function Hub() {
                                   <span>
                                     {new Date(
                                       p.scheduled_at!,
-                                    ).toLocaleDateString("en-GB", {
+                                    ).toLocaleDateString(intlLocale(), {
                                       timeZone,
                                       month: "short",
                                     })}
@@ -563,7 +603,8 @@ export function Hub() {
                                 </div>
                                 <div className="row-body">
                                   <strong>
-                                    {p.caption.slice(0, 75) || "Media post"}
+                                    {p.caption.slice(0, 75) ||
+                                      t("hub.upcoming.mediaPost")}
                                   </strong>
                                   <small>
                                     {formatDate(p.scheduled_at, timeZone)}
@@ -581,20 +622,19 @@ export function Hub() {
                             (p) => p.status === "SCHEDULED",
                           ) && (
                             <div className="empty compact">
-                              Your approved and scheduled posts will appear
-                              here.
+                              {t("hub.upcoming.empty")}
                             </div>
                           )}
                           <button
                             className="panel-footer"
                             onClick={() => setView("Create")}
                           >
-                            <Plus size={16} /> Plan your next post
+                            <Plus size={16} /> {t("hub.upcoming.plan")}
                           </button>
                         </section>
                         <section className="panel">
                           <div className="panel-title">
-                            <h2>Needs your attention</h2>
+                            <h2>{t("hub.attention.title")}</h2>
                             <span className="attention-dot" />
                           </div>
                           {data.posts
@@ -624,8 +664,8 @@ export function Hub() {
                                 <div>
                                   <strong>
                                     {p.status === "PENDING_APPROVAL"
-                                      ? "Ready for review"
-                                      : "Publishing needs a look"}
+                                      ? t("hub.attention.review")
+                                      : t("hub.attention.failed")}
                                   </strong>
                                   <p>{p.caption.slice(0, 60)}</p>
                                   <Badge status={p.status} />
@@ -641,19 +681,20 @@ export function Hub() {
                             ].includes(p.status),
                           ) && (
                             <div className="empty compact">
-                              You’re all caught up.
+                              {t("hub.attention.empty")}
                             </div>
                           )}
                         </section>
                       </div>
                       <section className="panel">
                         <div className="panel-title">
-                          <h2>Your connected accounts</h2>
+                          <h2>{t("hub.accounts.title")}</h2>
                           <button
                             className="text-button"
                             onClick={() => setView("Connected accounts")}
                           >
-                            Manage accounts <ArrowUpRight size={15} />
+                            {t("hub.accounts.manage")}{" "}
+                            <ArrowUpRight size={15} />
                           </button>
                         </div>
                         <div className="account-strip">
@@ -664,14 +705,16 @@ export function Hub() {
                                 <strong>{a.name}</strong>
                                 <small>
                                   <span className="dot" />
-                                  {a.status.toLowerCase()}
+                                  {t(`common.status.${a.status}` as MessageKey)}
                                 </small>
                               </span>
                             </div>
                           ))}
                           {!data.accounts.length && (
                             <p className="muted">
-                              Connect a mock account to start creating.
+                              {data.mode === "mock"
+                                ? t("hub.accounts.emptyMock")
+                                : t("hub.accounts.empty")}
                             </p>
                           )}
                         </div>
@@ -759,7 +802,7 @@ export function Hub() {
                   {view === "Notifications" && (
                     <section className="panel">
                       <div className="panel-title">
-                        <h2>Latest notifications</h2>
+                        <h2>{t("hub.notifications.title")}</h2>
                       </div>
                       {data.notifications.map((n) => (
                         <div className="activity-row" key={n.id}>
@@ -770,7 +813,7 @@ export function Hub() {
                       ))}
                       {!data.notifications.length && (
                         <div className="empty compact">
-                          No notifications yet.
+                          {t("hub.notifications.empty")}
                         </div>
                       )}
                     </section>
@@ -784,6 +827,11 @@ export function Hub() {
                         mutate={mutate}
                         busy={busy}
                       />
+                      <LanguageSettings
+                        data={data}
+                        mutate={mutate}
+                        busy={busy}
+                      />
                       <PrivacySettings
                         key={`${data.privacy.organization?.retentionDays ?? 0}-${data.privacy.userRequest?.id ?? "none"}-${data.privacy.organization?.request?.id ?? "none"}`}
                         data={data}
@@ -793,7 +841,7 @@ export function Hub() {
                       {data.operations && (
                         <section className="panel">
                           <div className="panel-title">
-                            <h2>Operations</h2>
+                            <h2>{t("hub.operations.title")}</h2>
                             <Badge
                               status={
                                 data.operations.needsAttention
@@ -804,11 +852,11 @@ export function Hub() {
                           </div>
                           <div className="settings-grid operations-grid">
                             <div>
-                              <small>Worker</small>
+                              <small>{t("hub.operations.worker")}</small>
                               <strong>
                                 {data.operations.worker.healthy
-                                  ? "Healthy"
-                                  : "Offline or stale"}
+                                  ? t("hub.operations.healthy")
+                                  : t("hub.operations.offline")}
                               </strong>
                               <small>
                                 {data.operations.worker.lastSeenAt
@@ -816,95 +864,112 @@ export function Hub() {
                                       data.operations.worker.lastSeenAt,
                                       timeZone,
                                     )
-                                  : "No heartbeat"}
+                                  : t("hub.operations.noHeartbeat")}
                               </small>
                             </div>
                             <div>
-                              <small>Publish queue</small>
+                              <small>{t("hub.operations.publishQueue")}</small>
                               <strong>
-                                {data.operations.publishWaiting} waiting ·{" "}
-                                {data.operations.publishDead} dead
+                                {t("hub.operations.waitingDead", {
+                                  waiting: data.operations.publishWaiting,
+                                  dead: data.operations.publishDead,
+                                })}
                               </strong>
                               <small>
-                                {data.operations.publishUncertain} uncertain
-                                deliveries
+                                {t("hub.operations.uncertain", {
+                                  count: data.operations.publishUncertain,
+                                })}
                               </small>
                               <small>
-                                {data.operations.publishReconciliationWaiting}{" "}
-                                reconciling ·{" "}
-                                {
-                                  data.operations
-                                    .publishReconciliationUnresolved
-                                }{" "}
-                                unresolved
+                                {t("hub.operations.reconciling", {
+                                  waiting:
+                                    data.operations
+                                      .publishReconciliationWaiting,
+                                  unresolved:
+                                    data.operations
+                                      .publishReconciliationUnresolved,
+                                })}
                               </small>
                               <small>
-                                Last confirmed: {" "}
-                                {data.operations
-                                  .publishReconciliationLastSuccessAt
-                                  ? formatDate(
-                                      data.operations
-                                        .publishReconciliationLastSuccessAt,
-                                      timeZone,
-                                    )
-                                  : "No reconciled delivery"}
+                                {t("hub.operations.lastConfirmed", {
+                                  when: data.operations
+                                    .publishReconciliationLastSuccessAt
+                                    ? formatDate(
+                                        data.operations
+                                          .publishReconciliationLastSuccessAt,
+                                        timeZone,
+                                      )
+                                    : t("hub.operations.noReconciled"),
+                                })}
                               </small>
                               <button
                                 className="text-button"
                                 disabled={busy}
                                 onClick={() =>
-                                  mutate("publishing.reconcile").catch(
-                                    () => {},
-                                  )
+                                  mutate("publishing.reconcile").catch(() => {})
                                 }
                               >
-                                Recheck uncertain deliveries
+                                {t("hub.operations.recheck")}
                               </button>
                             </div>
                             <div>
-                              <small>Media queue</small>
+                              <small>{t("hub.operations.mediaQueue")}</small>
                               <strong>
-                                {data.operations.mediaWaiting} active ·{" "}
-                                {data.operations.mediaDead} dead
+                                {t("hub.operations.activeDead", {
+                                  active: data.operations.mediaWaiting,
+                                  dead: data.operations.mediaDead,
+                                })}
                               </strong>
                               <small>
-                                Oldest due job:{" "}
-                                {data.operations.oldestDueSeconds}s
+                                {t("hub.operations.oldestDue", {
+                                  seconds: data.operations.oldestDueSeconds,
+                                })}
                               </small>
                             </div>
                             <div>
-                              <small>Approval email outbox</small>
+                              <small>
+                                {t("hub.operations.approvalOutbox")}
+                              </small>
                               <strong>
-                                {data.operations.approvalDeliveriesWaiting}{" "}
-                                waiting ·{" "}
-                                {data.operations.approvalDeliveriesFailed}{" "}
-                                failed
+                                {t("hub.operations.waitingFailed", {
+                                  waiting:
+                                    data.operations.approvalDeliveriesWaiting,
+                                  failed:
+                                    data.operations.approvalDeliveriesFailed,
+                                })}
                               </strong>
-                              <small>Automatic reminders and escalations</small>
+                              <small>{t("hub.operations.approvalHint")}</small>
                             </div>
                             <div>
-                              <small>Social credentials</small>
+                              <small>{t("hub.operations.credentials")}</small>
                               <strong>
-                                {data.operations.connectedAccounts} connected
+                                {t("hub.operations.connected", {
+                                  count: data.operations.connectedAccounts,
+                                })}
                               </strong>
                               <small>
-                                {data.operations.unhealthyTokens} require review
+                                {t("hub.operations.requireReview", {
+                                  count: data.operations.unhealthyTokens,
+                                })}
                               </small>
                             </div>
                             <div>
-                              <small>Analytics reconciliation</small>
+                              <small>{t("hub.operations.analytics")}</small>
                               <strong>
-                                {data.operations.analyticsWaiting} active ·{" "}
-                                {data.operations.analyticsDead} dead
+                                {t("hub.operations.activeDead", {
+                                  active: data.operations.analyticsWaiting,
+                                  dead: data.operations.analyticsDead,
+                                })}
                               </strong>
                               <small>
-                                Last success:{" "}
-                                {data.operations.analyticsLastSuccessAt
-                                  ? formatDate(
-                                      data.operations.analyticsLastSuccessAt,
-                                      timeZone,
-                                    )
-                                  : "No completed sync"}
+                                {t("hub.operations.lastSuccess", {
+                                  when: data.operations.analyticsLastSuccessAt
+                                    ? formatDate(
+                                        data.operations.analyticsLastSuccessAt,
+                                        timeZone,
+                                      )
+                                    : t("hub.operations.noSync"),
+                                })}
                               </small>
                               <button
                                 className="text-button"
@@ -915,42 +980,48 @@ export function Hub() {
                                   }).catch(() => {})
                                 }
                               >
-                                Queue 30-day backfill
+                                {t("hub.operations.backfill")}
                               </button>
                             </div>
                           </div>
                           <p className="panel-note">
-                            Liveness: <code>/api/health/live</code> · Readiness:{" "}
+                            {t("hub.operations.liveness")}:{" "}
+                            <code>/api/health/live</code> ·{" "}
+                            {t("hub.operations.readiness")}:{" "}
                             <code>/api/health/ready</code>
                           </p>
                         </section>
                       )}
                       <section className="panel">
                         <div className="panel-title">
-                          <h2>Workspace settings</h2>
+                          <h2>{t("hub.workspace.title")}</h2>
                         </div>
                         <div className="settings-grid">
                           <div>
-                            <small>Current role</small>
-                            <strong>{data.role}</strong>
+                            <small>{t("hub.workspace.role")}</small>
+                            <strong>{roleLabel(data.role)}</strong>
                           </div>
                           <div>
-                            <small>Social provider</small>
-                            <strong>{data.mode}</strong>
+                            <small>{t("hub.workspace.provider")}</small>
+                            <strong>
+                              {data.mode === "mock"
+                                ? t("hub.workspace.providerMock")
+                                : data.mode}
+                            </strong>
                           </div>
                         </div>
                         <p className="panel-note">
-                          <a href="/legal/privacy">Privacy</a> ·{" "}
-                          <a href="/legal/terms">Terms</a> ·{" "}
+                          <a href="/legal/privacy">{t("hub.legal.privacy")}</a>{" "}
+                          · <a href="/legal/terms">{t("hub.legal.terms")}</a> ·{" "}
                           <a href="/legal/deletion">
-                            Data deletion instructions
+                            {t("hub.legal.deletion")}
                           </a>
                         </p>
                       </section>
                       <section className="panel">
                         <div className="panel-title">
-                          <h2>Audit log</h2>
-                          <span className="muted">Latest 50 events</span>
+                          <h2>{t("hub.audit.title")}</h2>
+                          <span className="muted">{t("hub.audit.latest")}</span>
                         </div>
                         {data.audit.map((a, i) => (
                           <div className="activity-row" key={i}>
@@ -980,12 +1051,12 @@ export function Hub() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="panel-title">
-              <h2 id="post-title">Post details</h2>
+              <h2 id="post-title">{t("hub.dialog.title")}</h2>
               <button
                 onClick={() => setSelected(undefined)}
-                aria-label="Close post"
+                aria-label={t("hub.dialog.close")}
               >
-                Close
+                {t("common.action.close")}
               </button>
             </div>
             <div className="dialog-body">
@@ -994,17 +1065,21 @@ export function Hub() {
               <p className="muted">
                 {formatDate(currentPost.scheduled_at, timeZone)}
               </p>
-              {currentPost.targets.map((t) => (
-                <div className="target-detail" key={t.id}>
+              {currentPost.targets.map((target) => (
+                <div className="target-detail" key={target.id}>
                   <div>
-                    <Network platform={t.platform} />
-                    <strong>{names[t.platform]}</strong>
-                    <Badge status={t.status} />
+                    <Network platform={target.platform} />
+                    <strong>
+                      {t(`common.network.${target.platform}` as MessageKey)}
+                    </strong>
+                    {deliveryStates.includes(currentPost.status) && (
+                      <Badge status={target.status} />
+                    )}
                   </div>
-                  <p>{t.caption}</p>
-                  {!!t.mediaIds.length && data?.clientId && (
+                  <p>{target.caption}</p>
+                  {!!target.mediaIds.length && data?.clientId && (
                     <div className="target-media">
-                      {t.mediaIds.map((id) => (
+                      {target.mediaIds.map((id) => (
                         <MediaThumb
                           key={id}
                           clientId={data.clientId!}
@@ -1019,17 +1094,21 @@ export function Hub() {
                       ))}
                     </div>
                   )}
-                  {t.errorCode && <p className="alert">{t.errorCode}</p>}
+                  {target.errorCode && (
+                    <p className="alert">
+                      {errorMessage(locale, target.errorCode, target.errorCode)}
+                    </p>
+                  )}
                 </div>
               ))}
               {approvalUrl && (
                 <div className="notice">
-                  <strong>External approval link · expires in 7 days</strong>
+                  <strong>{t("hub.dialog.approvalLink")}</strong>
                   <a href={approvalUrl} target="_blank" rel="noreferrer">
-                    Open client review
+                    {t("hub.dialog.openReview")}
                   </a>
                   <input
-                    aria-label="Approval link"
+                    aria-label={t("hub.dialog.approvalLinkLabel")}
                     value={approvalUrl}
                     readOnly
                     onFocus={(e) => e.target.select()}
@@ -1039,10 +1118,14 @@ export function Hub() {
               {currentPost.status === "PENDING_APPROVAL" &&
                 currentPost.approval_escalated_at && (
                   <div className="notice warning">
-                    <strong>Approval escalated</strong>
+                    <strong>{t("hub.dialog.escalated")}</strong>
                     <p>
-                      Organization administrators were notified on{" "}
-                      {formatDate(currentPost.approval_escalated_at, timeZone)}.
+                      {t("hub.dialog.escalatedBody", {
+                        date: formatDate(
+                          currentPost.approval_escalated_at,
+                          timeZone,
+                        ),
+                      })}
                     </p>
                   </div>
                 )}
@@ -1063,7 +1146,7 @@ export function Hub() {
                         .catch(() => {})
                     }
                   >
-                    Generate new review link
+                    {t("hub.dialog.newLink")}
                   </button>
                 )}
               {currentPost.status === "PENDING_APPROVAL" &&
@@ -1071,27 +1154,33 @@ export function Hub() {
                 currentPost.approval_status === "PENDING" && (
                   <div className="notice">
                     <strong>
-                      Internal review ·{" "}
-                      {currentPost.approval_reviewer_name ?? "Unassigned"}
+                      {t("hub.dialog.internalReview", {
+                        name:
+                          currentPost.approval_reviewer_name ??
+                          t("hub.dialog.unassigned"),
+                      })}
                     </strong>
                     <p>
-                      Due{" "}
-                      {currentPost.approval_expires_at
-                        ? formatDate(currentPost.approval_expires_at, timeZone)
-                        : "within seven days"}
-                      . Reminders sent:{" "}
-                      {currentPost.approval_reminder_count ?? 0}, including{" "}
-                      {currentPost.approval_automatic_reminder_count ?? 0}{" "}
-                      automatic.
+                      {t("hub.dialog.due", {
+                        due: currentPost.approval_expires_at
+                          ? formatDate(
+                              currentPost.approval_expires_at,
+                              timeZone,
+                            )
+                          : t("hub.dialog.dueWithin"),
+                        sent: currentPost.approval_reminder_count ?? 0,
+                        automatic:
+                          currentPost.approval_automatic_reminder_count ?? 0,
+                      })}
                     </p>
                     {currentPost.approval_next_reminder_at && (
                       <p>
-                        Next automatic reminder:{" "}
-                        {formatDate(
-                          currentPost.approval_next_reminder_at,
-                          timeZone,
-                        )}
-                        .
+                        {t("hub.dialog.nextReminder", {
+                          date: formatDate(
+                            currentPost.approval_next_reminder_at,
+                            timeZone,
+                          ),
+                        })}
                       </p>
                     )}
                     {["OWNER", "ADMIN", "SOCIAL_MANAGER"].includes(
@@ -1099,9 +1188,9 @@ export function Hub() {
                     ) && (
                       <div className="review-assignment">
                         <label>
-                          Assigned reviewer
+                          {t("hub.dialog.assignedReviewer")}
                           <select
-                            aria-label="Assigned reviewer"
+                            aria-label={t("hub.dialog.assignedReviewer")}
                             value={reviewerId}
                             onChange={(event) =>
                               setReviewerId(event.target.value)
@@ -1109,10 +1198,7 @@ export function Hub() {
                           >
                             {data?.reviewers.map((reviewer) => (
                               <option key={reviewer.id} value={reviewer.id}>
-                                {reviewer.name} ·{" "}
-                                {reviewer.role
-                                  .toLowerCase()
-                                  .replaceAll("_", " ")}
+                                {reviewer.name} · {roleLabel(reviewer.role)}
                               </option>
                             ))}
                           </select>
@@ -1131,7 +1217,7 @@ export function Hub() {
                               }).catch(() => {})
                             }
                           >
-                            Assign reviewer
+                            {t("hub.dialog.assign")}
                           </button>
                           <button
                             disabled={busy}
@@ -1141,7 +1227,7 @@ export function Hub() {
                               }).catch(() => {})
                             }
                           >
-                            Send reminder
+                            {t("hub.dialog.remind")}
                           </button>
                         </div>
                       </div>
@@ -1149,7 +1235,7 @@ export function Hub() {
                     {currentPost.approval_assigned_to === data?.user.id ? (
                       <>
                         <label>
-                          Review feedback
+                          {t("hub.dialog.feedback")}
                           <textarea
                             value={reviewComment}
                             onChange={(e) => setReviewComment(e.target.value)}
@@ -1172,7 +1258,7 @@ export function Hub() {
                                 .catch(() => {})
                             }
                           >
-                            Approve internally
+                            {t("hub.dialog.approve")}
                           </button>
                           <button
                             disabled={busy || !reviewComment.trim()}
@@ -1184,16 +1270,17 @@ export function Hub() {
                               }).catch(() => {})
                             }
                           >
-                            Request changes
+                            {t("hub.dialog.requestChanges")}
                           </button>
                         </div>
                       </>
                     ) : (
                       <p>
-                        Waiting for{" "}
-                        {currentPost.approval_reviewer_name ??
-                          "the assigned reviewer"}
-                        .
+                        {t("hub.dialog.waitingFor", {
+                          name:
+                            currentPost.approval_reviewer_name ??
+                            t("hub.dialog.assignedFallback"),
+                        })}
                       </p>
                     )}
                   </div>
@@ -1201,16 +1288,19 @@ export function Hub() {
               {currentPost.status === "PENDING_APPROVAL" &&
                 currentPost.approval_status === "EXPIRED" && (
                   <div className="notice warning">
-                    <strong>Review expired</strong>
+                    <strong>{t("hub.dialog.expired")}</strong>
                     <p>
-                      Renew this {currentPost.approval_kind?.toLowerCase()}{" "}
-                      review for another seven days.
+                      {t(
+                        currentPost.approval_kind === "INTERNAL"
+                          ? "hub.dialog.renew.INTERNAL"
+                          : "hub.dialog.renew.EXTERNAL",
+                      )}
                     </p>
                     {currentPost.approval_kind === "INTERNAL" && (
                       <label>
-                        Assigned reviewer
+                        {t("hub.dialog.assignedReviewer")}
                         <select
-                          aria-label="Renewal reviewer"
+                          aria-label={t("hub.dialog.renewalReviewer")}
                           value={reviewerId}
                           onChange={(event) =>
                             setReviewerId(event.target.value)
@@ -1248,23 +1338,34 @@ export function Hub() {
                           .catch(() => {})
                       }
                     >
-                      Renew review
+                      {t("hub.dialog.renewAction")}
                     </button>
                   </div>
                 )}
               {!!currentPost.approval_history?.length && (
                 <div className="approval-history">
-                  <h3>Approval history</h3>
+                  <h3>{t("hub.dialog.history")}</h3>
                   {currentPost.approval_history.map((review) => (
                     <div className="approval-history-row" key={review.id}>
                       <Badge status={review.status} />
                       <span>
-                        {review.kind.toLowerCase()} review
+                        {t(
+                          review.kind === "INTERNAL"
+                            ? "hub.dialog.history.INTERNAL"
+                            : "hub.dialog.history.EXTERNAL",
+                        )}
                         {review.reviewerName ? ` · ${review.reviewerName}` : ""}
                         {review.automaticReminderCount
-                          ? ` · ${review.automaticReminderCount} automatic reminder${review.automaticReminderCount === 1 ? "" : "s"}`
+                          ? ` · ${t(
+                              review.automaticReminderCount === 1
+                                ? "hub.dialog.history.reminders.one"
+                                : "hub.dialog.history.reminders.other",
+                              { count: review.automaticReminderCount },
+                            )}`
                           : ""}
-                        {review.escalatedAt ? " · escalated" : ""}
+                        {review.escalatedAt
+                          ? ` · ${t("hub.dialog.history.escalated")}`
+                          : ""}
                       </span>
                       <small>{formatDate(review.createdAt, timeZone)}</small>
                     </div>
@@ -1284,43 +1385,25 @@ export function Hub() {
                     setView("Create");
                   }}
                 >
-                  Edit draft
-                </button>
-              )}
-              {[
-                "DRAFT",
-                "PENDING_APPROVAL",
-                "APPROVED",
-                "SCHEDULED",
-                "QUEUED",
-                "FAILED",
-              ].includes(currentPost.status) && (
-                <button
-                  disabled={busy}
-                  onClick={() =>
-                    mutate("post.cancel", { id: currentPost.id })
-                      .then(() => setSelected(undefined))
-                      .catch(() => {})
-                  }
-                >
-                  Cancel post
+                  {t("hub.dialog.editDraft")}
                 </button>
               )}
               {currentPost.status === "DRAFT" && (
                 <>
                   {data?.workflow[0] === "INTERNAL" && (
                     <label>
-                      Internal reviewer
+                      {t("hub.dialog.internalReviewer")}
                       <select
-                        aria-label="Internal reviewer"
+                        aria-label={t("hub.dialog.internalReviewer")}
                         value={reviewerId}
                         onChange={(event) => setReviewerId(event.target.value)}
                       >
-                        <option value="">Choose a reviewer</option>
+                        <option value="">
+                          {t("hub.dialog.chooseReviewer")}
+                        </option>
                         {data.reviewers.map((reviewer) => (
                           <option key={reviewer.id} value={reviewer.id}>
-                            {reviewer.name} ·{" "}
-                            {reviewer.role.toLowerCase().replaceAll("_", " ")}
+                            {reviewer.name} · {roleLabel(reviewer.role)}
                           </option>
                         ))}
                       </select>
@@ -1342,7 +1425,7 @@ export function Hub() {
                         .catch(() => {})
                     }
                   >
-                    Send for approval
+                    {t("hub.dialog.submit")}
                   </button>
                 </>
               )}
@@ -1365,12 +1448,12 @@ export function Hub() {
                   }}
                 >
                   <label>
-                    Schedule · {timeZone}
+                    {t("hub.dialog.schedule", { timeZone })}
                     <input name="schedule" type="datetime-local" required />
                   </label>
                   <div className="button-row">
                     <button className="primary" disabled={busy}>
-                      Schedule post
+                      {t("hub.dialog.schedulePost")}
                     </button>
                     <button
                       type="button"
@@ -1384,7 +1467,7 @@ export function Hub() {
                         }).catch(() => {})
                       }
                     >
-                      Publish now
+                      {t("hub.dialog.publishNow")}
                     </button>
                   </div>
                 </form>
@@ -1408,7 +1491,7 @@ export function Hub() {
                     }}
                   >
                     <label>
-                      Move to · {timeZone}
+                      {t("hub.dialog.moveTo", { timeZone })}
                       <input
                         name="reschedule"
                         type="datetime-local"
@@ -1420,10 +1503,30 @@ export function Hub() {
                       />
                     </label>
                     <button className="primary" disabled={busy}>
-                      Reschedule post
+                      {t("hub.dialog.reschedule")}
                     </button>
                   </form>
                 )}
+              {[
+                "DRAFT",
+                "PENDING_APPROVAL",
+                "APPROVED",
+                "SCHEDULED",
+                "QUEUED",
+                "FAILED",
+              ].includes(currentPost.status) && (
+                <button
+                  className="text-button danger-button dialog-cancel"
+                  disabled={busy}
+                  onClick={() =>
+                    mutate("post.cancel", { id: currentPost.id })
+                      .then(() => setSelected(undefined))
+                      .catch(() => {})
+                  }
+                >
+                  {t("hub.dialog.cancelPost")}
+                </button>
+              )}
             </div>
           </section>
         </div>

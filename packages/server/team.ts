@@ -4,6 +4,7 @@ import type { Role } from "../core/domain";
 import { AppError, hashToken, token } from "../core/security";
 import type { Context } from "./context";
 import { sendMail } from "./mail";
+import { invitationMail, userLocale } from "./mail-templates";
 import { audit, transaction } from "./transaction";
 
 const assignableRoles: Role[] = [
@@ -132,16 +133,12 @@ export async function inviteMember(
   const url = `${process.env.APP_URL}/invite/${secret}`;
   let emailDelivered = true;
   try {
-    await sendMail(
-      normalized,
-      "Join the G2A Social Hub",
-      `You have been invited to the G2A Social Hub as ${role.toLowerCase().replaceAll("_", " ")}.
-
-Accept your invitation within seven days:
-${url}
-
-If you did not expect this invitation, you can ignore this message.`,
-    );
+    // The invitee has no account yet, so the inviter's language is used.
+    const mail = invitationMail(await userLocale({ id: c.userId }), {
+      role,
+      url,
+    });
+    await sendMail(normalized, mail.subject, mail.text);
   } catch (error) {
     emailDelivered = false;
     console.error(

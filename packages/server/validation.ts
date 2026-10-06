@@ -2,6 +2,7 @@ import { z } from "zod";
 import { platforms } from "../core/domain";
 import { canonicalTimeZone, validTimeZone } from "../core/timezones";
 export const uuid = z.string().uuid();
+export const localeInput = z.enum(["hu", "en"]);
 export const timeZoneInput = z
   .string()
   .trim()

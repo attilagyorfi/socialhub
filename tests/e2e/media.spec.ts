@@ -35,7 +35,7 @@ test("direct video upload validates, extracts metadata and removes invalid input
     buffer: readFileSync("tests/fixtures/campaign.mp4"),
   });
   const videoCard = page.locator(".media-card").filter({ hasText: videoName });
-  await expect(videoCard.getByText("ready", { exact: true })).toBeVisible({
+  await expect(videoCard.getByText("Ready", { exact: true })).toBeVisible({
     timeout: 30_000,
   });
 

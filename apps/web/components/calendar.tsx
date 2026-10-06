@@ -2,6 +2,7 @@
 import { type DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { DateTime } from "luxon";
 import { Badge, type Post, Network } from "./types";
+import { apiError, intlLocale, useT, type MessageKey } from "../i18n";
 
 type CalendarMode = "Month" | "Week" | "List";
 type CalendarResult = {
@@ -44,6 +45,8 @@ export function Calendar({
   onError: (message: string) => void;
   onReschedule: (post: Post, scheduledAt: string) => Promise<boolean>;
 }) {
+  const { t, locale } = useT();
+  const luxonLocale = intlLocale(locale);
   const [date, setDate] = useState(DateTime.now().setZone(timeZone));
   const [mode, setMode] = useState<CalendarMode>("Month");
   const [network, setNetwork] = useState("all");
@@ -99,8 +102,7 @@ export function Calendar({
     })
       .then(async (response) => {
         const body = await response.json();
-        if (!response.ok)
-          throw new Error(body.error ?? "Unable to load calendar.");
+        if (!response.ok) throw new Error(apiError(body));
         if (sequence === requestSequence.current) setResult(body);
       })
       .catch((error) => {
@@ -108,14 +110,14 @@ export function Calendar({
           return;
         if (sequence === requestSequence.current)
           onError(
-            error instanceof Error ? error.message : "Unable to load calendar.",
+            error instanceof Error ? error.message : t("calendar.error.load"),
           );
       })
       .finally(() => {
         if (sequence === requestSequence.current) setLoading(false);
       });
     return () => controller.abort();
-  }, [author, clientId, from, network, onError, refreshKey, status, to]);
+  }, [author, clientId, from, network, onError, refreshKey, status, t, to]);
 
   const movePeriod = (direction: -1 | 1) => {
     setDate((current) =>
@@ -161,9 +163,7 @@ export function Calendar({
       next.minute !== current.minute ||
       next.getPossibleOffsets().length > 1
     ) {
-      onError(
-        `That local time is unavailable or ambiguous in ${timeZone} during a daylight-saving change. Open the post and choose an exact time.`,
-      );
+      onError(t("calendar.error.dstMove", { timeZone }));
       return;
     }
     setMovingId(post.id);
@@ -178,15 +178,23 @@ export function Calendar({
     <section className="panel" aria-busy={loading}>
       <div className="panel-title">
         <div className="inline">
-          <button aria-label="Previous period" onClick={() => movePeriod(-1)}>
+          <button
+            aria-label={t("calendar.nav.previous")}
+            onClick={() => movePeriod(-1)}
+          >
             ‹
           </button>
-          <h2>{date.toFormat("MMMM yyyy")}</h2>
-          <button aria-label="Next period" onClick={() => movePeriod(1)}>
+          <h2>
+            {date.setLocale(luxonLocale).toFormat(t("calendar.format.month"))}
+          </h2>
+          <button
+            aria-label={t("calendar.nav.next")}
+            onClick={() => movePeriod(1)}
+          >
             ›
           </button>
           <button onClick={() => setDate(DateTime.now().setZone(timeZone))}>
-            Today
+            {t("calendar.nav.today")}
           </button>
         </div>
         <div className="segmented">
@@ -196,27 +204,29 @@ export function Calendar({
               className={mode === value ? "active" : ""}
               onClick={() => setMode(value)}
             >
-              {value}
+              {t(`calendar.mode.${value}`)}
             </button>
           ))}
         </div>
       </div>
       <div className="calendar-filters">
         <select
-          aria-label="Filter network"
+          aria-label={t("calendar.filter.network")}
           value={network}
           onChange={(event) => setNetwork(event.target.value)}
         >
           {["all", "facebook", "instagram", "linkedin", "tiktok", "google"].map(
             (value) => (
               <option key={value} value={value}>
-                {value === "all" ? "All networks" : value}
+                {value === "all"
+                  ? t("calendar.filter.allNetworks")
+                  : t(`common.network.${value}` as MessageKey)}
               </option>
             ),
           )}
         </select>
         <select
-          aria-label="Calendar status"
+          aria-label={t("calendar.filter.status")}
           value={status}
           onChange={(event) => setStatus(event.target.value)}
         >
@@ -228,16 +238,18 @@ export function Calendar({
             "PARTIALLY_PUBLISHED",
           ].map((value) => (
             <option key={value} value={value}>
-              {value}
+              {value === "all"
+                ? t("calendar.filter.allStatuses")
+                : t(`common.status.${value}` as MessageKey)}
             </option>
           ))}
         </select>
         <select
-          aria-label="Filter author"
+          aria-label={t("calendar.filter.author")}
           value={author}
           onChange={(event) => setAuthor(event.target.value)}
         >
-          <option value="all">All authors</option>
+          <option value="all">{t("calendar.filter.allAuthors")}</option>
           {result.authors.map((item) => (
             <option key={item.id} value={item.id}>
               {item.name}
@@ -245,7 +257,9 @@ export function Calendar({
           ))}
         </select>
         <span className="calendar-count" role="status">
-          {loading ? "Loading…" : `${result.posts.length} scheduled posts`}
+          {loading
+            ? t("calendar.loading")
+            : t("calendar.count", { count: result.posts.length })}
         </span>
       </div>
       {mode === "List" ? (
@@ -259,24 +273,23 @@ export function Calendar({
               <span>
                 {DateTime.fromISO(post.scheduled_at!)
                   .setZone(timeZone)
-                  .toFormat("dd MMM · HH:mm")}
+                  .setLocale(luxonLocale)
+                  .toFormat(t("calendar.format.listDate"))}
               </span>
               <span className="row-body">{post.caption.slice(0, 90)}</span>
               <Badge status={post.status} />
             </button>
           ))}
           {!loading && !result.posts.length && (
-            <div className="empty compact">
-              No scheduled posts match these filters.
-            </div>
+            <div className="empty compact">{t("calendar.empty")}</div>
           )}
         </div>
       ) : (
         <div className="calendar-scroll">
           <div className="calendar-grid">
-            {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((day) => (
-              <div className="weekday" key={day}>
-                {day}
+            {range.days.slice(0, 7).map((day) => (
+              <div className="weekday" key={day.weekday}>
+                {day.setLocale(luxonLocale).toFormat("ccc").toUpperCase()}
               </div>
             ))}
             {range.days.map((day) => (
@@ -340,7 +353,7 @@ export function Calendar({
                     onClick={() => onOpen(post)}
                     title={
                       canReschedule && post.status === "SCHEDULED"
-                        ? "Drag to another day, or open for an exact time"
+                        ? t("calendar.dragHint")
                         : undefined
                     }
                   >
@@ -363,18 +376,10 @@ export function Calendar({
         </div>
       )}
       {result.truncated ? (
-        <p className="panel-note">
-          This range contains more than 1,000 posts. Narrow the dates or filters
-          to see all results.
-        </p>
+        <p className="panel-note">{t("calendar.truncated")}</p>
       ) : (
         <p className="panel-note" id="calendar-drag-help">
-          Calendar data is loaded independently for the visible date range. Open
-          a scheduled post to choose an exact time
-          {canReschedule
-            ? ", or drag it to another day while keeping its current time"
-            : ""}
-          .
+          {canReschedule ? t("calendar.help.drag") : t("calendar.help")}
         </p>
       )}
     </section>

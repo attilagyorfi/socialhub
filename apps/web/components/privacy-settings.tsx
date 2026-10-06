@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Download, ShieldCheck, Trash2 } from "lucide-react";
+import { useT, type MessageKey } from "../i18n";
 import { formatDate, type HubData, type Mutate } from "./types";
 
 export function PrivacySettings({
@@ -12,6 +13,7 @@ export function PrivacySettings({
   mutate: Mutate;
   busy: boolean;
 }) {
+  const { t } = useT();
   const [retentionDays, setRetentionDays] = useState(
     data.privacy.organization?.retentionDays ?? 365,
   );
@@ -20,38 +22,31 @@ export function PrivacySettings({
   const userRequest = data.privacy.userRequest;
   const organization = data.privacy.organization;
   const organizationRequest = organization?.request;
+  const statusLabel = (status: string) =>
+    t(`settings.privacy.status.${status}` as MessageKey);
 
   return (
     <section className="panel privacy-settings">
       <div className="panel-title">
         <div>
-          <h2>Privacy and data retention</h2>
-          <span className="muted">
-            Export personal data or manage verified deletion requests.
-          </span>
+          <h2>{t("settings.privacy.title")}</h2>
+          <span className="muted">{t("settings.privacy.subtitle")}</span>
         </div>
         <ShieldCheck size={20} />
       </div>
       <div className="privacy-grid">
         <article>
-          <h3>Personal data export</h3>
-          <p className="muted">
-            Download your profile, memberships, authored content, approval
-            activity and audit events as JSON. Passwords, sessions and provider
-            credentials are excluded.
-          </p>
+          <h3>{t("settings.privacy.export.title")}</h3>
+          <p className="muted">{t("settings.privacy.export.body")}</p>
           <a className="button-link" href="/api/privacy/export" download>
-            <Download size={15} /> Download my data
+            <Download size={15} /> {t("settings.privacy.export.download")}
           </a>
         </article>
 
         {organization && (
           <article>
-            <h3>Organization retention</h3>
-            <p className="muted">
-              Completed operational records older than this period are removed
-              by the worker. Active posts and media remain available.
-            </p>
+            <h3>{t("settings.privacy.retention.title")}</h3>
+            <p className="muted">{t("settings.privacy.retention.body")}</p>
             <form
               className="inline-form compact-form"
               onSubmit={(event) => {
@@ -62,9 +57,9 @@ export function PrivacySettings({
               }}
             >
               <label>
-                Retention days
+                {t("settings.privacy.retention.days")}
                 <input
-                  aria-label="Retention days"
+                  aria-label={t("settings.privacy.retention.days")}
                   type="number"
                   min={30}
                   max={3650}
@@ -82,7 +77,7 @@ export function PrivacySettings({
                   retentionDays === organization.retentionDays
                 }
               >
-                Save retention
+                {t("settings.privacy.retention.save")}
               </button>
             </form>
           </article>
@@ -90,16 +85,22 @@ export function PrivacySettings({
       </div>
 
       <div className="privacy-danger-zone">
-        <h3>Deletion requests</h3>
+        <h3>{t("settings.privacy.deletion.title")}</h3>
         {userRequest ? (
           <div className="notice warning privacy-request">
             <span>
               <strong>
-                Account deletion: {userRequest.status.toLowerCase()}
+                {t("settings.privacy.deletion.account", {
+                  status: statusLabel(userRequest.status),
+                })}
               </strong>
               <small>
-                Scheduled for{" "}
-                {formatDate(userRequest.executeAfter, data.user.timezone)}
+                {t("settings.privacy.deletion.scheduledFor", {
+                  date: formatDate(
+                    userRequest.executeAfter,
+                    data.user.timezone,
+                  ),
+                })}
                 {userRequest.errorCode ? ` · ${userRequest.errorCode}` : ""}
               </small>
             </span>
@@ -111,16 +112,14 @@ export function PrivacySettings({
                 }).catch(() => {})
               }
             >
-              Cancel request
+              {t("settings.privacy.deletion.cancel")}
             </button>
           </div>
         ) : (
           <details>
-            <summary>Delete my account</summary>
+            <summary>{t("settings.privacy.deletion.deleteAccount")}</summary>
             <p className="muted">
-              Deletion starts after 24 hours and can be cancelled before
-              processing. You must transfer ownership of organizations where you
-              are the sole owner.
+              {t("settings.privacy.deletion.accountBody")}
             </p>
             <form
               className="inline-form compact-form"
@@ -134,9 +133,9 @@ export function PrivacySettings({
               }}
             >
               <label>
-                Confirm your email address
+                {t("settings.privacy.deletion.confirmEmail")}
                 <input
-                  aria-label="Confirm your email address"
+                  aria-label={t("settings.privacy.deletion.confirmEmail")}
                   type="email"
                   autoComplete="off"
                   value={userConfirmation}
@@ -147,7 +146,8 @@ export function PrivacySettings({
                 className="danger-button"
                 disabled={busy || userConfirmation !== data.user.email}
               >
-                <Trash2 size={15} /> Request account deletion
+                <Trash2 size={15} />{" "}
+                {t("settings.privacy.deletion.requestAccount")}
               </button>
             </form>
           </details>
@@ -158,15 +158,17 @@ export function PrivacySettings({
             <div className="notice warning privacy-request">
               <span>
                 <strong>
-                  Organization deletion:{" "}
-                  {organizationRequest.status.toLowerCase()}
+                  {t("settings.privacy.deletion.organization", {
+                    status: statusLabel(organizationRequest.status),
+                  })}
                 </strong>
                 <small>
-                  Scheduled for{" "}
-                  {formatDate(
-                    organizationRequest.executeAfter,
-                    data.user.timezone,
-                  )}
+                  {t("settings.privacy.deletion.scheduledFor", {
+                    date: formatDate(
+                      organizationRequest.executeAfter,
+                      data.user.timezone,
+                    ),
+                  })}
                   {organizationRequest.errorCode
                     ? ` · ${organizationRequest.errorCode}`
                     : ""}
@@ -180,16 +182,18 @@ export function PrivacySettings({
                   }).catch(() => {})
                 }
               >
-                Cancel request
+                {t("settings.privacy.deletion.cancel")}
               </button>
             </div>
           ) : (
             <details>
-              <summary>Delete {organization.name}</summary>
+              <summary>
+                {t("settings.privacy.deletion.deleteOrganization", {
+                  name: organization.name,
+                })}
+              </summary>
               <p className="muted">
-                This permanently removes all clients, content, analytics and
-                stored media after 72 hours. Live provider grants must be
-                disconnected and revoked first.
+                {t("settings.privacy.deletion.organizationBody")}
               </p>
               <form
                 className="inline-form compact-form"
@@ -203,9 +207,11 @@ export function PrivacySettings({
                 }}
               >
                 <label>
-                  Type the organization name
+                  {t("settings.privacy.deletion.confirmOrganization")}
                   <input
-                    aria-label="Type the organization name"
+                    aria-label={t(
+                      "settings.privacy.deletion.confirmOrganization",
+                    )}
                     autoComplete="off"
                     value={organizationConfirmation}
                     onChange={(event) =>
@@ -219,7 +225,8 @@ export function PrivacySettings({
                     busy || organizationConfirmation !== organization.name
                   }
                 >
-                  <Trash2 size={15} /> Request organization deletion
+                  <Trash2 size={15} />{" "}
+                  {t("settings.privacy.deletion.requestOrganization")}
                 </button>
               </form>
             </details>

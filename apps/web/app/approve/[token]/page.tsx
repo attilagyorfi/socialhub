@@ -1,5 +1,25 @@
 "use client";
 import { use, useEffect, useState } from "react";
+import {
+  apiError,
+  intlLocale,
+  isLocale,
+  LOCALE_COOKIE,
+  translate,
+  useT,
+  type Locale,
+  type MessageKey,
+  type Vars,
+} from "../../../i18n";
+
+// A visitor's explicit language choice (cookie) wins; otherwise the page
+// follows the client's language.
+function cookieLocale() {
+  const match = document.cookie.match(
+    new RegExp(`(?:^|; )${LOCALE_COOKIE}=([^;]*)`),
+  );
+  return match && isLocale(match[1]) ? match[1] : undefined;
+}
 export default function Approval({
   params,
 }: {
@@ -10,11 +30,20 @@ export default function Approval({
   const [error, setError] = useState("");
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
+  const { locale: appLocale } = useT();
+  const [chosen, setChosen] = useState<Locale>();
+  useEffect(() => setChosen(cookieLocale()), []);
+  const locale: Locale =
+    chosen ?? (isLocale(data?.locale) ? data.locale : appLocale);
+  const t = (key: MessageKey, vars?: Vars) => translate(locale, key, vars);
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
   useEffect(() => {
     fetch(`/api/approval/${token}`)
       .then(async (r) => {
         const d = await r.json();
-        if (!r.ok) throw new Error(d.error);
+        if (!r.ok) throw new Error(apiError(d));
         setData(d);
       })
       .catch((e) => setError(e.message));
@@ -29,7 +58,7 @@ export default function Approval({
         body: JSON.stringify({ action, comment }),
       });
       const result = await res.json();
-      if (!res.ok) throw new Error(result.error);
+      if (!res.ok) throw new Error(apiError(result, locale));
       setData({ ...data, status: result.status });
       setComment("");
       if (action === "comment") {
@@ -37,7 +66,7 @@ export default function Approval({
         setData(await updated.json());
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to save response");
+      setError(e instanceof Error ? e.message : t("approve.saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -45,13 +74,13 @@ export default function Approval({
   return (
     <main className="approval-page">
       <div className="wordmark dark">
-        g2a<span> / client review</span>
+        g2a<span>{t("approve.wordmark")}</span>
       </div>
       <section className="panel">
         <div className="panel-title">
           <div>
-            <p className="eyebrow">CONTENT APPROVAL</p>
-            <h1>{data?.client_name ?? "Client review"}</h1>
+            <p className="eyebrow">{t("approve.eyebrow")}</p>
+            <h1>{data?.client_name ?? t("approve.title")}</h1>
           </div>
         </div>
         <div className="dialog-body">
@@ -65,19 +94,21 @@ export default function Approval({
               <p className="caption-full">{data.caption}</p>
               <p className="muted">
                 {data.scheduled_at
-                  ? new Date(data.scheduled_at).toLocaleString("en-GB", {
-                      timeZone: data.timezone ?? "Europe/Budapest",
-                    })
-                  : "Scheduling follows your approval."}
+                  ? new Date(data.scheduled_at).toLocaleString(
+                      intlLocale(locale),
+                      { timeZone: data.timezone ?? "Europe/Budapest" },
+                    )
+                  : t("approve.schedulingFollows")}
               </p>
-              {data.versions?.map((t: any, i: number) => (
+              {data.versions?.map((version: any, i: number) => (
                 <div className="target-detail" key={i}>
                   <strong>
-                    {t.platform} · {t.name}
+                    {t(`common.network.${version.platform}` as MessageKey)} ·{" "}
+                    {version.name}
                   </strong>
-                  <p>{t.caption}</p>
+                  <p>{version.caption}</p>
                   <div className="approval-media">
-                    {t.media.map((m: any) => (
+                    {version.media.map((m: any) => (
                       <div key={m.id}>
                         {m.mime_type.startsWith("video/") ? (
                           <video src={m.url} controls />
@@ -98,10 +129,10 @@ export default function Approval({
               {data.status === "PENDING" ? (
                 <>
                   <label>
-                    Feedback
+                    {t("approve.feedback")}
                     <textarea
                       rows={4}
-                      placeholder="Leave a comment or explain what should change…"
+                      placeholder={t("approve.placeholder")}
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
                     />
@@ -112,33 +143,41 @@ export default function Approval({
                       disabled={busy}
                       onClick={() => void decide("approve")}
                     >
-                      Approve post
+                      {t("approve.approve")}
                     </button>
                     <button
                       disabled={busy || !comment.trim()}
                       onClick={() => void decide("changes")}
                     >
-                      Request changes
+                      {t("approve.requestChanges")}
                     </button>
                     <button
                       disabled={busy || !comment.trim()}
                       onClick={() => void decide("comment")}
                     >
-                      Comment
+                      {t("approve.comment")}
                     </button>
                   </div>
                   <small>
-                    This link expires{" "}
-                    {new Date(data.expires_at).toLocaleDateString("en-GB", {
-                      timeZone: data.timezone ?? "Europe/Budapest",
+                    {t("approve.expires", {
+                      date: new Date(data.expires_at).toLocaleDateString(
+                        intlLocale(locale),
+                        { timeZone: data.timezone ?? "Europe/Budapest" },
+                      ),
                     })}
-                    .
                   </small>
                 </>
               ) : (
                 <div className="notice" role="status">
-                  Thank you. This review is{" "}
-                  {data.status.toLowerCase().replaceAll("_", " ")}.
+                  {t("approve.thanks", {
+                    status: (() => {
+                      const key = `approve.status.${data.status}` as MessageKey;
+                      const label = t(key);
+                      return label === key
+                        ? data.status.toLowerCase().replaceAll("_", " ")
+                        : label;
+                    })(),
+                  })}
                 </div>
               )}
             </>

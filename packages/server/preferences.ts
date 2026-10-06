@@ -3,12 +3,23 @@ import { DEFAULT_TIME_ZONE } from "../core/timezones";
 import { transaction } from "./transaction";
 
 export async function userPreferences(userId: string) {
-  const result = await pool.query(`SELECT timezone FROM "user" WHERE id=$1`, [
-    userId,
-  ]);
+  const result = await pool.query(
+    `SELECT timezone,locale FROM "user" WHERE id=$1`,
+    [userId],
+  );
   return {
     timezone: result.rows[0]?.timezone ?? DEFAULT_TIME_ZONE,
+    // null: the user has not chosen; the interface follows the browser.
+    locale: (result.rows[0]?.locale ?? null) as "hu" | "en" | null,
   };
+}
+
+export async function updateUserLocale(userId: string, locale: "hu" | "en") {
+  await pool.query(
+    `UPDATE "user" SET locale=$1,"updatedAt"=now() WHERE id=$2`,
+    [locale, userId],
+  );
+  return { locale };
 }
 
 export async function updateUserTimeZone(userId: string, timezone: string) {

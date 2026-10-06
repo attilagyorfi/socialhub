@@ -2360,3 +2360,19 @@ td {
   font-size: 11px;
   color: var(--muted);
 }
+.dialog-cancel {
+  justify-self: start;
+  margin-top: 6px;
+}
+.client-locale {
+  display: grid;
+  gap: 6px;
+  max-width: 420px;
+  margin-top: 18px;
+}
+.client-locale .panel-note {
+  margin: 0;
+}
+.language-switch {
+  justify-content: center;
+}

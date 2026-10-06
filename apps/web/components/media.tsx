@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Check, Plus, Video } from "lucide-react";
 import type { Asset, Mutate } from "./types";
+import { apiError, useT } from "../i18n";
 
 export const MEDIA_TYPES = [
   "image/png",
@@ -61,14 +62,15 @@ export function useMediaUpload({
   reload: () => Promise<void>;
   onError: (message: string) => void;
 }) {
+  const { t } = useT();
   const [uploading, setUploading] = useState(false);
   async function upload(file: File) {
     setUploading(true);
     try {
       if (!file.size || file.size > MAX_MEDIA_BYTES)
-        throw new Error("Choose a file between 1 byte and 20 MB.");
+        throw new Error(t("media.error.size"));
       if (!MEDIA_TYPES.includes(file.type))
-        throw new Error("Upload a PNG, JPEG, WebP image or MP4 video.");
+        throw new Error(t("media.error.type"));
       const prepared = await mutate("media.upload.prepare", {
         name: file.name,
         mimeType: file.type,
@@ -79,8 +81,7 @@ export function useMediaUpload({
         headers: { "Content-Type": file.type },
         body: file,
       });
-      if (!uploadResponse.ok)
-        throw new Error("The private storage upload failed.");
+      if (!uploadResponse.ok) throw new Error(t("media.error.storage"));
       await mutate("media.upload.complete", { id: prepared.id });
       for (let attempt = 0; attempt < 60; attempt++) {
         await new Promise((resolve) => window.setTimeout(resolve, 500));
@@ -88,13 +89,13 @@ export function useMediaUpload({
           `/api/hub?${new URLSearchParams({ clientId })}`,
         );
         const statusData = await statusResponse.json();
-        if (!statusResponse.ok) throw new Error(statusData.error);
+        if (!statusResponse.ok) throw new Error(apiError(statusData));
         const asset = statusData.media.find(
           (candidate: { id: string; status: string }) =>
             candidate.id === prepared.id,
         );
         if (asset?.status === "FAILED")
-          throw new Error("The file could not be processed.");
+          throw new Error(t("media.error.processing"));
         if (asset?.status === "READY") {
           await reload();
           return prepared.id as string;
@@ -102,7 +103,7 @@ export function useMediaUpload({
       }
       await reload();
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Upload failed");
+      onError(e instanceof Error ? e.message : t("media.error.upload"));
     } finally {
       setUploading(false);
     }
@@ -117,12 +118,17 @@ export function MediaThumb({
   clientId: string;
   asset: Pick<Asset, "id" | "name" | "mime_type">;
 }) {
+  const { t } = useT();
   const { url, previewUrl } = useSignedMedia(clientId, asset.id);
   const video = asset.mime_type.startsWith("video/");
   const src = previewUrl || (video ? "" : url);
   return (
     <span className="media-thumb">
-      {src ? <img src={src} alt="" /> : <span className="media-thumb-empty" />}
+      {src ? (
+        <img src={src} alt={asset.name || t("media.preview")} />
+      ) : (
+        <span className="media-thumb-empty" />
+      )}
       {video && <Video size={14} className="media-thumb-badge" />}
     </span>
   );
@@ -145,13 +151,14 @@ export function MediaPicker({
   uploading?: boolean;
   label: string;
 }) {
+  const { t } = useT();
   const ready = media.filter((m) => m.status === "READY");
   return (
     <div className="media-tiles" role="group" aria-label={label}>
       {onUpload && (
         <label className="media-tile upload-tile">
           <Plus size={20} />
-          <span>{uploading ? "Uploading…" : "Upload"}</span>
+          <span>{uploading ? t("media.uploading") : t("media.upload")}</span>
           <input
             type="file"
             accept={MEDIA_TYPES.join(",")}
@@ -211,12 +218,18 @@ export function FramedImage({
   asset: Pick<Asset, "id" | "name" | "mime_type">;
   aspectRatio: string;
 }) {
+  const { t } = useT();
   const { url } = useSignedMedia(clientId, asset.id);
-  if (!url) return <div className="media-placeholder">Media preview</div>;
+  if (!url)
+    return <div className="media-placeholder">{t("media.preview")}</div>;
   return (
     <div className="framed-image" style={{ aspectRatio }}>
       <img src={url} alt="" aria-hidden="true" className="framed-backdrop" />
-      <img src={url} alt="Attached media" className="framed-foreground" />
+      <img
+        src={url}
+        alt={asset.name || t("media.preview")}
+        className="framed-foreground"
+      />
     </div>
   );
 }

@@ -1,8 +1,13 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { Sparkles, ImageIcon, Check, Send, ShieldCheck } from "lucide-react";
-import { type HubData, type Mutate, type Post, Network, names } from "./types";
-import { validatePost, type Platform } from "../../../packages/core/domain";
+import { type HubData, type Mutate, type Post, Network } from "./types";
+import {
+  capabilities,
+  validatePost,
+  type Platform,
+} from "../../../packages/core/domain";
+import { useT, type MessageKey, type Vars } from "../i18n";
 import {
   FramedImage,
   MediaPicker,
@@ -28,6 +33,51 @@ type Generation = {
   applied_at?: string;
   created_at: string;
 };
+const OPERATIONS = [
+  "generate",
+  "alternatives",
+  "rewrite",
+  "shorten",
+  "expand",
+  "professional",
+  "casual",
+  "facebook",
+  "instagram",
+  "linkedin",
+  "tiktok",
+  "hashtags",
+  "cta",
+  "translate",
+  "ideas",
+  "series",
+];
+// validatePost (packages/core) returns English messages; map the known ones.
+const VALIDATION: Record<string, MessageKey> = {
+  "Add a caption or media.": "composer.validation.empty",
+  "Instagram requires an image or video.": "composer.validation.instagramMedia",
+  "TikTok requires one video.": "composer.validation.tiktokVideo",
+  "This network does not support a link post. Remove the link or deselect this account.":
+    "composer.validation.link",
+  "Media is not ready.": "composer.validation.mediaNotReady",
+  "Media exceeds the MVP 100 MB upload limit.":
+    "composer.validation.mediaTooLarge",
+  "Video is not supported on this network.": "composer.validation.video",
+  "Multiple media attachments are not supported.":
+    "composer.validation.multiMedia",
+};
+function localizeValidation(
+  t: (key: MessageKey, vars?: Vars) => string,
+  message: string,
+) {
+  if (VALIDATION[message]) return t(VALIDATION[message]);
+  const tooLong = /^Caption exceeds (\d+) characters\.$/.exec(message);
+  return tooLong
+    ? t("composer.validation.tooLong", { limit: tooLong[1] })
+    : message;
+}
+const supportsLinks = (platform: string) =>
+  capabilities[platform as Platform]?.includes("LINK_POST") ?? false;
+
 export function Composer({
   data,
   mutate,
@@ -47,6 +97,13 @@ export function Composer({
   editing?: Post;
   error?: string;
 }) {
+  const { t } = useT();
+  const networkName = (platform: string) =>
+    t(`common.network.${platform}` as MessageKey);
+  const operationLabel = (operation: string) =>
+    OPERATIONS.includes(operation)
+      ? t(`composer.ai.op.${operation}` as MessageKey)
+      : operation;
   const [caption, setCaption] = useState(editing?.caption ?? "");
   const [link, setLink] = useState(editing?.link ?? "");
   const [ids, setIds] = useState<string[]>(
@@ -104,8 +161,17 @@ export function Composer({
       media: data.media.filter((m) =>
         (networkMedia[a.id] ?? mediaIds).includes(m.id),
       ),
-    }).map((message) => `${names[a.platform]}: ${message}`),
+    }).map(
+      (message) =>
+        `${networkName(a.platform)}: ${localizeValidation(t, message)}`,
+    ),
   );
+  // Instagram and TikTok captions cannot carry a link. Keep the field visible
+  // while it still holds a value so the user can remove it.
+  const showLink =
+    !selected.length ||
+    selected.some((a) => supportsLinks(a.platform)) ||
+    !!link;
   const loadHistory = useCallback(async () => {
     if (!data.clientId) return;
     const response = await fetch(
@@ -164,11 +230,11 @@ export function Composer({
     <div className="composer-grid">
       <section className="panel composer-form">
         <div className="panel-title">
-          <h2>Post composer</h2>
-          <span className="muted">Draft</span>
+          <h2>{t("composer.title")}</h2>
+          <span className="muted">{t("composer.draft")}</span>
         </div>
         <div className="form-section">
-          <h3>1. Choose your accounts</h3>
+          <h3>{t("composer.step.accounts")}</h3>
           <div className="profile-picks">
             {data.accounts
               .filter((a) => a.status === "CONNECTED")
@@ -187,58 +253,43 @@ export function Composer({
                   <Network platform={a.platform} />
                   <span>
                     {a.name}
-                    <small>{names[a.platform]}</small>
+                    <small>{networkName(a.platform)}</small>
                   </span>
                   {ids.includes(a.id) && <Check size={16} />}
                 </button>
               ))}
           </div>
           {!data.accounts.length && (
-            <p className="notice">
-              Connect an account in Connected accounts first.
-            </p>
+            <p className="notice">{t("composer.noAccounts")}</p>
           )}
         </div>
         <div className="form-section">
           <label>
-            <h3>2. Write your content</h3>
+            <h3>{t("composer.step.content")}</h3>
             <textarea
               rows={7}
-              placeholder="What would you like to share?"
+              placeholder={t("composer.caption.placeholder")}
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
             />
           </label>
           <div className="caption-tools">
-            <span>{caption.length} characters</span>
-            <span>Base caption · all selected networks</span>
+            <span>
+              {t("composer.caption.characters", { count: caption.length })}
+            </span>
+            <span>{t("composer.caption.base")}</span>
           </div>
           <div className="ai-tools">
             <Sparkles size={18} />
             <select
-              aria-label="AI action"
+              aria-label={t("composer.ai.action")}
               value={operation}
               onChange={(e) => setOperation(e.target.value)}
             >
-              {[
-                "generate",
-                "alternatives",
-                "rewrite",
-                "shorten",
-                "expand",
-                "professional",
-                "casual",
-                "facebook",
-                "instagram",
-                "linkedin",
-                "tiktok",
-                "hashtags",
-                "cta",
-                "translate",
-                "ideas",
-                "series",
-              ].map((s) => (
-                <option key={s}>{s}</option>
+              {OPERATIONS.map((s) => (
+                <option key={s} value={s}>
+                  {operationLabel(s)}
+                </option>
               ))}
             </select>
             <button
@@ -258,7 +309,7 @@ export function Composer({
                   .catch(() => {})
               }
             >
-              Suggest caption
+              {t("composer.ai.suggest")}
             </button>
             <button
               disabled={busy}
@@ -271,13 +322,13 @@ export function Composer({
                   .catch(() => {})
               }
             >
-              Check content
+              {t("composer.ai.check")}
             </button>
           </div>
           {suggestion && (
             <div className="ai-suggestion" role="status">
               <div className="panel-title">
-                <strong>AI suggestion</strong>
+                <strong>{t("composer.ai.suggestion")}</strong>
                 <small>
                   {suggestion.provider} · {suggestion.model}
                 </small>
@@ -289,16 +340,14 @@ export function Composer({
                   disabled={busy}
                   onClick={() => applySuggestion(suggestion).catch(() => {})}
                 >
-                  Apply suggestion
+                  {t("composer.ai.apply")}
                 </button>
                 <button onClick={() => setSuggestion(undefined)}>
-                  Discard
+                  {t("composer.ai.discard")}
                 </button>
               </div>
               {suggestion.mode === "mock" && (
-                <small>
-                  Mock writing suggestion — no AI service was called.
-                </small>
+                <small>{t("composer.ai.mock")}</small>
               )}
             </div>
           )}
@@ -308,34 +357,47 @@ export function Composer({
             >
               <div className="inline">
                 <ShieldCheck size={17} />
-                <strong>Brand score: {guardrails.score}/100</strong>
+                <strong>
+                  {t("composer.guardrail.score", { score: guardrails.score })}
+                </strong>
                 <span>
-                  {guardrails.passed ? "Ready for review" : "Changes required"}
+                  {guardrails.passed
+                    ? t("composer.guardrail.passed")
+                    : t("composer.guardrail.failed")}
                 </span>
               </div>
               {guardrails.issues.map((issue, index) => (
                 <p key={`${issue.code}-${index}`}>
                   <strong>
-                    {issue.severity === "BLOCK" ? "Block" : "Tip"}:
+                    {issue.severity === "BLOCK"
+                      ? t("composer.guardrail.block")
+                      : t("composer.guardrail.tip")}
+                    :
                   </strong>{" "}
                   {issue.message}
                 </p>
               ))}
               {!guardrails.issues.length && (
-                <p>No brand rule conflicts found.</p>
+                <p>{t("composer.guardrail.none")}</p>
               )}
             </div>
           )}
           {!!history.length && (
             <details className="ai-history">
-              <summary>Recent AI generations ({history.length})</summary>
+              <summary>
+                {t("composer.history.title", { count: history.length })}
+              </summary>
               {history.map((item) => (
                 <div key={item.id} className="ai-history-item">
                   <div>
-                    <strong>{item.operation}</strong>
+                    <strong>{operationLabel(item.operation)}</strong>
                     <small>
                       {item.provider} · {item.model} ·{" "}
-                      {item.status.toLowerCase()}
+                      {["PENDING", "COMPLETE", "FAILED"].includes(item.status)
+                        ? t(
+                            `composer.history.status.${item.status}` as MessageKey,
+                          )
+                        : item.status.toLowerCase()}
                     </small>
                   </div>
                   {item.output && <p>{item.output}</p>}
@@ -349,35 +411,35 @@ export function Composer({
                         }).catch(() => {})
                       }
                     >
-                      Use this version
+                      {t("composer.history.use")}
                     </button>
                   )}
                 </div>
               ))}
             </details>
           )}
-          <label>
-            Link URL
-            <input
-              type="url"
-              placeholder="https://"
-              value={link}
-              onChange={(e) => setLink(e.target.value)}
-            />
-          </label>
+          {showLink && (
+            <label>
+              {t("composer.link")}
+              <input
+                type="url"
+                placeholder="https://"
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+              />
+            </label>
+          )}
         </div>
         <div className="form-section">
           <h3>
-            <ImageIcon size={17} /> 3. Attach media
+            <ImageIcon size={17} /> {t("composer.step.media")}
           </h3>
-          <p className="muted">
-            Upload a new file or pick one from the media library.
-          </p>
+          <p className="muted">{t("composer.media.hint")}</p>
           <MediaPicker
             clientId={data.clientId!}
             media={data.media}
             selected={mediaIds}
-            label="Shared attachments"
+            label={t("composer.media.shared")}
             onToggle={(id) => setMediaIds((current) => toggle(current, id))}
             uploading={uploading}
             onUpload={(file) =>
@@ -389,16 +451,18 @@ export function Composer({
         </div>
         {!!selected.length && (
           <div className="form-section">
-            <h3>4. Customize each network</h3>
+            <h3>{t("composer.step.customize")}</h3>
             {selected.map((a) => (
               <div key={a.id} className="network-override">
                 <label>
                   <span className="inline">
                     <Network platform={a.platform} />
-                    {names[a.platform]} · {a.name}
+                    {networkName(a.platform)} · {a.name}
                   </span>
                   <textarea
-                    aria-label={`${names[a.platform]} caption`}
+                    aria-label={t("composer.network.caption", {
+                      network: networkName(a.platform),
+                    })}
                     rows={3}
                     value={overrides[a.id] ?? caption}
                     onChange={(e) =>
@@ -416,15 +480,21 @@ export function Composer({
                     })
                   }
                 >
-                  Use base caption
+                  {t("composer.network.useBase")}
                 </button>
                 <details>
-                  <summary>Customize {names[a.platform]} attachments</summary>
+                  <summary>
+                    {t("composer.media.customize", {
+                      network: networkName(a.platform),
+                    })}
+                  </summary>
                   <MediaPicker
                     clientId={data.clientId!}
                     media={data.media}
                     selected={networkMedia[a.id] ?? mediaIds}
-                    label={`${names[a.platform]} attachments`}
+                    label={t("composer.media.network", {
+                      network: networkName(a.platform),
+                    })}
                     onToggle={(id) =>
                       setNetworkMedia((current) => ({
                         ...current,
@@ -442,7 +512,7 @@ export function Composer({
                       })
                     }
                   >
-                    Use shared attachments
+                    {t("composer.media.useShared")}
                   </button>
                 </details>
               </div>
@@ -451,7 +521,7 @@ export function Composer({
         )}
         {!!validation.length && (
           <div className="notice warning" role="status">
-            <strong>Fix before sending for approval</strong>
+            <strong>{t("composer.validation.title")}</strong>
             {validation.map((v, i) => (
               <p key={i}>{v}</p>
             ))}
@@ -459,13 +529,13 @@ export function Composer({
         )}
         {internalReview && !!selected.length && (
           <label className="form-section">
-            Internal reviewer
+            {t("composer.reviewer.label")}
             <select
-              aria-label="Internal reviewer"
+              aria-label={t("composer.reviewer.label")}
               value={reviewerId}
               onChange={(event) => setReviewerId(event.target.value)}
             >
-              <option value="">Choose a reviewer</option>
+              <option value="">{t("composer.reviewer.choose")}</option>
               {data.reviewers.map((reviewer) => (
                 <option key={reviewer.id} value={reviewer.id}>
                   {reviewer.name}
@@ -482,12 +552,12 @@ export function Composer({
         <div className="composer-footer">
           <small>
             {internalReview
-              ? "The reviewer is notified when you send it."
-              : "Sending creates a link for your client to approve."}
+              ? t("composer.footer.internal")
+              : t("composer.footer.client")}
           </small>
           <div className="button-row">
             <button disabled={busy || !ids.length} onClick={() => save(false)}>
-              Save draft
+              {t("composer.saveDraft")}
             </button>
             <button
               className="primary"
@@ -500,15 +570,15 @@ export function Composer({
               onClick={() => save(true)}
             >
               <Send size={16} />
-              Send for approval
+              {t("composer.submit")}
             </button>
           </div>
         </div>
       </section>
       <aside className="preview-column">
         <div className="preview-heading">
-          <h3>Post preview</h3>
-          <span className="muted">Content preview</span>
+          <h3>{t("composer.preview.title")}</h3>
+          <span className="muted">{t("composer.preview.subtitle")}</span>
         </div>
         <div className="preview-tabs">
           {selected.map((a) => (
@@ -530,17 +600,22 @@ export function Composer({
                 .toUpperCase()}
             </span>
             <div>
-              <strong>{active?.name ?? "Choose an account"}</strong>
+              <strong>
+                {active?.name ?? t("composer.preview.chooseAccount")}
+              </strong>
               <small>
-                {active ? names[active.platform] : "Post preview"} · Just now
+                {active
+                  ? networkName(active.platform)
+                  : t("composer.preview.title")}{" "}
+                · {t("composer.preview.justNow")}
               </small>
             </div>
           </div>
           <p>
             {active
               ? (overrides[active.id] ?? caption) ||
-                "Your caption will appear here."
-              : "Select a profile to preview your post."}
+                t("composer.preview.captionPlaceholder")
+              : t("composer.preview.selectProfile")}
           </p>
           {(active ? (networkMedia[active.id] ?? mediaIds) : mediaIds).map(
             (id) => {
@@ -558,8 +633,9 @@ export function Composer({
                     aspectRatio={frame}
                   />
                   <small className="preview-frame-note">
-                    Instagram receives a {frame.replace(" / ", ":")} framed
-                    version; nothing is cropped.
+                    {t("composer.preview.instagramFrame", {
+                      ratio: frame.replace(" / ", ":"),
+                    })}
                   </small>
                 </div>
               ) : (
@@ -567,6 +643,7 @@ export function Composer({
                   key={id}
                   clientId={data.clientId!}
                   id={id}
+                  name={asset?.name}
                   video={asset?.mime_type.startsWith("video/") ?? false}
                 />
               );
@@ -574,13 +651,12 @@ export function Composer({
           )}
           {link && <div className="link-preview">{link}</div>}
           <div className="preview-reactions">
-            Like <span>Comment</span> Share
+            {t("composer.preview.like")}{" "}
+            <span>{t("composer.preview.comment")}</span>{" "}
+            {t("composer.preview.share")}
           </div>
         </div>
-        <p className="preview-note">
-          A content preview, not an exact rendering of the social network. Final
-          presentation may vary.
-        </p>
+        <p className="preview-note">{t("composer.preview.note")}</p>
       </aside>
     </div>
   );
@@ -588,12 +664,15 @@ export function Composer({
 export function MediaPreview({
   clientId,
   id,
+  name,
   video = false,
 }: {
   clientId: string;
   id: string;
+  name?: string;
   video?: boolean;
 }) {
+  const { t } = useT();
   const [url, setUrl] = useState("");
   const [poster, setPoster] = useState("");
   useEffect(() => {
@@ -619,9 +698,9 @@ export function MediaPreview({
         preload="metadata"
       />
     ) : (
-      <img src={url} alt="Attached media" />
+      <img src={url} alt={name || t("media.preview")} />
     )
   ) : (
-    <div className="media-placeholder">Media preview</div>
+    <div className="media-placeholder">{t("media.preview")}</div>
   );
 }
