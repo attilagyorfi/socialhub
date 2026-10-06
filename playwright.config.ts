@@ -12,6 +12,23 @@ export default defineConfig({
     // Local Meta OAuth testing serves a self-signed certificate.
     ignoreHTTPSErrors: true,
     viewport: { width: 1440, height: 1000 },
+    // The interface defaults to Hungarian; the suite asserts English copy.
+    storageState: {
+      cookies: [
+        {
+          name: "locale",
+          value: "en",
+          domain: new URL(process.env.APP_URL ?? "http://localhost:3010")
+            .hostname,
+          path: "/",
+          expires: -1,
+          httpOnly: false,
+          secure: false,
+          sameSite: "Lax",
+        },
+      ],
+      origins: [],
+    },
     screenshot: "only-on-failure",
     trace: "off",
   },

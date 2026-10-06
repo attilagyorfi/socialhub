@@ -74,6 +74,17 @@ export async function createClient(
     return client;
   });
 }
+// Language of the client's external approval page and client-facing email.
+export async function updateClientLocale(c: Context, locale: "hu" | "en") {
+  return transaction(async (tx) => {
+    await tx.query(
+      "UPDATE clients SET locale=$1 WHERE organization_id=$2 AND id=$3",
+      [locale, c.organizationId, c.clientId],
+    );
+    await audit(tx, c, "client.locale_updated", c.clientId, { locale });
+    return { locale };
+  });
+}
 export async function connectMock(
   c: Context,
   platform: Platform,

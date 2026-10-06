@@ -1,13 +1,15 @@
 "use client";
 import { useState } from "react";
+import { useT } from "../i18n";
 
 export function PasswordSettings() {
+  const { t } = useT();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   return (
     <section className="panel">
       <div className="panel-title">
-        <h2>Change password</h2>
+        <h2>{t("settings.password.title")}</h2>
       </div>
       <form
         className="settings-grid"
@@ -17,7 +19,7 @@ export function PasswordSettings() {
           const values = new FormData(form);
           setMessage("");
           if (values.get("newPassword") !== values.get("confirmPassword")) {
-            setMessage("The new passwords do not match.");
+            setMessage(t("settings.password.mismatch"));
             return;
           }
           setBusy(true);
@@ -32,24 +34,20 @@ export function PasswordSettings() {
               }),
             });
             if (!response.ok) {
-              setMessage(
-                "Password change failed. Check your current password and try again.",
-              );
+              setMessage(t("settings.password.failed"));
               return;
             }
             form.reset();
-            setMessage(
-              "Password changed. Other sessions have been signed out.",
-            );
+            setMessage(t("settings.password.changed"));
           } catch {
-            setMessage("Unable to connect. Please try again.");
+            setMessage(t("settings.password.offline"));
           } finally {
             setBusy(false);
           }
         }}
       >
         <label>
-          Current password
+          {t("settings.password.current")}
           <input
             name="currentPassword"
             type="password"
@@ -59,7 +57,7 @@ export function PasswordSettings() {
           />
         </label>
         <label>
-          New password
+          {t("settings.password.new")}
           <input
             name="newPassword"
             type="password"
@@ -69,10 +67,10 @@ export function PasswordSettings() {
             required
             disabled={busy}
           />
-          <small>At least 12 characters.</small>
+          <small>{t("settings.password.minLength")}</small>
         </label>
         <label>
-          Confirm new password
+          {t("settings.password.confirm")}
           <input
             name="confirmPassword"
             type="password"
@@ -85,7 +83,9 @@ export function PasswordSettings() {
         </label>
         <div>
           <button className="primary" disabled={busy}>
-            {busy ? "Saving…" : "Change password"}
+            {busy
+              ? t("settings.password.saving")
+              : t("settings.password.title")}
           </button>
         </div>
         {message && <p role="status">{message}</p>}

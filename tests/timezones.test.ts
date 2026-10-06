@@ -25,10 +25,10 @@ describe("local scheduling", () => {
 
   it("rejects missing and duplicated daylight-saving times", () => {
     expect(
-      localDateTimeToUtc("2026-03-29T02:30", "Europe/Budapest").error,
+      localDateTimeToUtc("2026-03-29T02:30", "Europe/Budapest", "en").error,
     ).toContain("does not exist");
     expect(
-      localDateTimeToUtc("2026-10-25T02:30", "Europe/Budapest").error,
+      localDateTimeToUtc("2026-10-25T02:30", "Europe/Budapest", "en").error,
     ).toContain("occurs twice");
   });
 });

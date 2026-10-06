@@ -117,12 +117,12 @@ test("login → client → mock accounts → media → AI → versions → appro
   await page.getByRole("button", { name: "Close post" }).click();
   await page.getByRole("button", { name: "Refresh workspace" }).click();
   await expect(
-    page.locator("table").getByText("approved", { exact: true }),
+    page.locator("table").getByText("Approved", { exact: true }),
   ).toBeVisible();
   await page.locator("table .table-caption").first().click();
   await page.getByRole("button", { name: "Publish now", exact: true }).click();
   await expect(
-    page.getByRole("dialog").getByText("scheduled", { exact: true }).first(),
+    page.getByRole("dialog").getByText("Scheduled", { exact: true }).first(),
   ).toBeVisible();
   const db = new Pool({ connectionString: process.env.DATABASE_URL });
   const client = (

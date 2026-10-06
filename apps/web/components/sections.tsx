@@ -9,8 +9,35 @@ import {
   Network,
   names,
 } from "./types";
+import { useT, type MessageKey } from "../i18n";
 import { MediaPreview } from "./composer";
 import { useMediaUpload } from "./media";
+
+const workflowFields = [
+  ["firstReminderHours", "sections.workflow.firstReminderHours"],
+  ["repeatReminderHours", "sections.workflow.repeatReminderHours"],
+  ["maxAutomaticReminders", "sections.workflow.maxAutomaticReminders"],
+  ["escalateAfterHours", "sections.workflow.escalateAfterHours"],
+] as const satisfies readonly (readonly [string, MessageKey])[];
+const brandFields = [
+  "brandName",
+  "description",
+  "website",
+  "products",
+  "targetAudience",
+  "toneOfVoice",
+  "preferredTerminology",
+  "forbiddenTerminology",
+  "requiredTerminology",
+  "forbiddenClaims",
+  "requiredDisclaimer",
+  "preferredCTA",
+  "languages",
+  "hashtags",
+  "competitors",
+  "instructions",
+] as const;
+
 export function Accounts({
   data,
   mutate,
@@ -20,12 +47,33 @@ export function Accounts({
   mutate: Mutate;
   busy: boolean;
 }) {
+  const { t } = useT();
+  // Token health reuses the shared status labels where one exists.
+  const healthLabel = (health: string) => {
+    for (const key of [
+      `common.status.${health}`,
+      `sections.tokenHealth.${health}`,
+    ] as MessageKey[]) {
+      const label = t(key);
+      if (label !== key) return label;
+    }
+    return health.toLowerCase().replaceAll("_", " ");
+  };
+  const capabilityLabel = (capability: string) => {
+    const key = `sections.capability.${capability}` as MessageKey;
+    const label = t(key);
+    return label === key
+      ? capability.toLowerCase().replaceAll("_", " ")
+      : label;
+  };
   return (
     <>
       <section className="panel">
         <div className="panel-title">
-          <h2>Connect an account</h2>
-          <span className="badge scheduled">{data.mode} mode</span>
+          <h2>{t("sections.accounts.connectTitle")}</h2>
+          <span className="badge scheduled">
+            {t("sections.accounts.mode", { mode: data.mode })}
+          </span>
         </div>
         <form
           className="inline-form"
@@ -39,28 +87,30 @@ export function Accounts({
           }}
         >
           <label>
-            Network
-            <select name="platform" aria-label="Network">
-              {Object.entries(names).map(([id, name]) => (
+            {t("sections.accounts.network")}
+            <select name="platform" aria-label={t("sections.accounts.network")}>
+              {Object.keys(names).map((id) => (
                 <option value={id} key={id}>
-                  {name}
+                  {t(`common.network.${id}` as MessageKey)}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Account name
-            <input name="name" required placeholder="e.g. Terra Studio" />
+            {t("sections.accounts.accountName")}
+            <input
+              name="name"
+              required
+              placeholder={t("sections.accounts.accountNamePlaceholder")}
+            />
           </label>
           <button className="primary" disabled={busy || data.mode !== "mock"}>
             <Plus size={16} />
-            Connect mock account
+            {t("sections.accounts.connectMock")}
           </button>
         </form>
         {data.mode !== "mock" && !data.meta.enabled && (
-          <p className="notice">
-            Live OAuth connections are not enabled in this build.
-          </p>
+          <p className="notice">{t("sections.accounts.oauthDisabled")}</p>
         )}
         <div className="button-row">
           <button
@@ -74,14 +124,11 @@ export function Accounts({
             }
           >
             <Link2 size={16} />
-            Connect Facebook &amp; Instagram
+            {t("sections.accounts.connectMeta")}
           </button>
         </div>
         {!data.meta.enabled && (
-          <p className="panel-note">
-            Meta OAuth becomes available after the Meta app credentials and API
-            version are configured.
-          </p>
+          <p className="panel-note">{t("sections.accounts.metaNote")}</p>
         )}
       </section>
       <div className="accounts-grid">
@@ -89,17 +136,19 @@ export function Accounts({
           <section className="panel account-card" key={a.id}>
             <Network platform={a.platform} />
             <h2>{a.name}</h2>
-            <p className="muted">{names[a.platform]}</p>
+            <p className="muted">
+              {t(`common.network.${a.platform}` as MessageKey)}
+            </p>
             <Badge status={a.status} />
             <dl>
-              <dt>Token health</dt>
-              <dd>{a.token_health}</dd>
-              <dt>Last sync</dt>
+              <dt>{t("sections.accounts.tokenHealth")}</dt>
+              <dd>{healthLabel(a.token_health)}</dd>
+              <dt>{t("sections.accounts.lastSync")}</dt>
               <dd>{formatDate(a.last_sync_at, data.user.timezone)}</dd>
             </dl>
             <div className="capabilities">
               {a.capabilities.map((c) => (
-                <span key={c}>{c.toLowerCase().replaceAll("_", " ")}</span>
+                <span key={c}>{capabilityLabel(c)}</span>
               ))}
             </div>
             <button
@@ -111,8 +160,8 @@ export function Accounts({
               <Link2 size={15} />
               {a.mode === "direct" &&
               ["facebook", "instagram"].includes(a.platform)
-                ? "Disconnect Meta grant"
-                : "Disconnect"}
+                ? t("sections.accounts.disconnectMeta")
+                : t("sections.accounts.disconnect")}
             </button>
           </section>
         ))}
@@ -134,12 +183,15 @@ export function Clients({
     (data.workflow ?? ["EXTERNAL"]).join(","),
   );
   const [automation, setAutomation] = useState(data.approvalAutomation);
+  const { t } = useT();
+  const activeClient = data.clients.find((c) => c.id === data.clientId);
+  const canManage = ["OWNER", "ADMIN"].includes(data.role);
   return (
     <>
       <section className="panel">
         <div className="panel-title">
-          <h2>Client workspaces</h2>
-          <span className="muted">Separate content. Shared clarity.</span>
+          <h2>{t("sections.clients.title")}</h2>
+          <span className="muted">{t("sections.clients.tagline")}</span>
         </div>
         <form
           className="inline-form"
@@ -155,17 +207,17 @@ export function Clients({
           }}
         >
           <label>
-            Client name
+            {t("sections.clients.name")}
             <input
               name="name"
               required
               maxLength={120}
-              placeholder="Your client’s brand"
+              placeholder={t("sections.clients.namePlaceholder")}
             />
           </label>
           <button disabled={busy} className="primary">
             <Plus size={16} />
-            Add client
+            {t("sections.clients.add")}
           </button>
         </form>
         <div className="account-strip">
@@ -176,16 +228,36 @@ export function Clients({
               </span>
               <span>
                 <strong>{c.name}</strong>
-                <small>{c.role.toLowerCase().replaceAll("_", " ")}</small>
+                <small>{t(`common.role.${c.role}` as MessageKey)}</small>
               </span>
             </div>
           ))}
         </div>
+        {activeClient && canManage && (
+          <div className="client-locale">
+            <label>
+              {t("sections.clients.language")}
+              <select
+                value={activeClient.locale}
+                disabled={busy}
+                onChange={(e) =>
+                  mutate("client.locale.update", {
+                    locale: e.target.value,
+                  }).catch(() => {})
+                }
+              >
+                <option value="hu">{t("common.language.hu")}</option>
+                <option value="en">{t("common.language.en")}</option>
+              </select>
+            </label>
+            <p className="panel-note">{t("sections.clients.languageHelp")}</p>
+          </div>
+        )}
       </section>
       {data.clientId && (
         <section className="panel">
           <div className="panel-title">
-            <h2>Approval workflow</h2>
+            <h2>{t("sections.workflow.title")}</h2>
           </div>
           <form
             className="workflow-settings"
@@ -198,16 +270,20 @@ export function Clients({
             }}
           >
             <label>
-              Review sequence
+              {t("sections.workflow.sequence")}
               <select
-                aria-label="Review sequence"
+                aria-label={t("sections.workflow.sequence")}
                 value={policy}
                 onChange={(e) => setPolicy(e.target.value)}
               >
-                <option value="EXTERNAL">Client approval</option>
-                <option value="INTERNAL">Internal approval</option>
+                <option value="EXTERNAL">
+                  {t("sections.workflow.external")}
+                </option>
+                <option value="INTERNAL">
+                  {t("sections.workflow.internal")}
+                </option>
                 <option value="INTERNAL,EXTERNAL">
-                  Internal, then client approval
+                  {t("sections.workflow.internalExternal")}
                 </option>
               </select>
             </label>
@@ -222,19 +298,14 @@ export function Clients({
                   })
                 }
               />
-              Send automatic reminders and escalation emails
+              {t("sections.workflow.reminders")}
             </label>
             <div className="automation-grid">
-              {[
-                ["firstReminderHours", "First reminder after (hours)"],
-                ["repeatReminderHours", "Repeat every (hours)"],
-                ["maxAutomaticReminders", "Maximum reminders"],
-                ["escalateAfterHours", "Escalate after (hours)"],
-              ].map(([key, label]) => (
+              {workflowFields.map(([key, labelKey]) => (
                 <label key={key}>
-                  {label}
+                  {t(labelKey)}
                   <input
-                    aria-label={label}
+                    aria-label={t(labelKey)}
                     type="number"
                     min={key === "maxAutomaticReminders" ? 0 : 1}
                     max={key === "maxAutomaticReminders" ? 10 : 168}
@@ -250,21 +321,16 @@ export function Clients({
                 </label>
               ))}
             </div>
-            <button disabled={busy}>Save workflow</button>
+            <button disabled={busy}>{t("sections.workflow.save")}</button>
           </form>
-          <p className="panel-note">
-            Sequence and automation changes apply to new approval requests.
-            Internal reviewers receive reminders; overdue internal or client
-            reviews are escalated to organization administrators.
-          </p>
+          <p className="panel-note">{t("sections.workflow.note")}</p>
         </section>
       )}
       {data.clientId && (
         <section className="panel">
           <div className="panel-title">
             <h2>
-              Brand knowledge ·{" "}
-              {data.clients.find((c) => c.id === data.clientId)?.name}
+              {t("sections.brand.title", { name: activeClient?.name ?? "" })}
             </h2>
           </div>
           <form
@@ -274,28 +340,11 @@ export function Clients({
               mutate("brand.save", { brand }).catch(() => {});
             }}
           >
-            {[
-              ["brandName", "Brand name"],
-              ["description", "Company description"],
-              ["website", "Website"],
-              ["products", "Products and services"],
-              ["targetAudience", "Target audience"],
-              ["toneOfVoice", "Tone of voice"],
-              ["preferredTerminology", "Preferred terminology"],
-              ["forbiddenTerminology", "Forbidden terminology"],
-              ["requiredTerminology", "Required terminology"],
-              ["forbiddenClaims", "Prohibited claims"],
-              ["requiredDisclaimer", "Required disclaimer"],
-              ["preferredCTA", "Preferred call to action"],
-              ["languages", "Languages"],
-              ["hashtags", "Hashtags"],
-              ["competitors", "Competitors"],
-              ["instructions", "Additional instructions"],
-            ].map(([key, label]) => (
+            {brandFields.map((key) => (
               <label key={key}>
-                {label}
+                {t(`sections.brand.${key}`)}
                 <textarea
-                  aria-label={label}
+                  aria-label={t(`sections.brand.${key}`)}
                   rows={key === "description" || key === "instructions" ? 3 : 2}
                   value={brand[key] ?? ""}
                   onChange={(e) =>
@@ -306,7 +355,7 @@ export function Clients({
             ))}
             <div>
               <button className="primary" disabled={busy}>
-                Save brand profile
+                {t("sections.brand.save")}
               </button>
             </div>
           </form>
@@ -328,6 +377,7 @@ export function Library({
 }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
+  const { t } = useT();
   const { upload, uploading } = useMediaUpload({
     clientId: data.clientId!,
     mutate,
@@ -351,11 +401,13 @@ export function Library({
       >
         <Upload size={25} />
         <h3>
-          {uploading ? "Uploading…" : "Drop a file into your media library"}
+          {uploading
+            ? t("sections.library.uploading")
+            : t("sections.library.drop")}
         </h3>
-        <p>PNG, JPEG, WebP or MP4 · up to 20 MB per file</p>
+        <p>{t("sections.library.formats")}</p>
         <label className="upload-button">
-          Choose file
+          {t("sections.library.choose")}
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp,video/mp4"
@@ -369,21 +421,21 @@ export function Library({
       </div>
       <div className="media-toolbar">
         <input
-          aria-label="Search media"
-          placeholder="Search your media…"
+          aria-label={t("sections.library.search")}
+          placeholder={t("sections.library.searchPlaceholder")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
         <select
-          aria-label="Media type"
+          aria-label={t("sections.library.type")}
           value={type}
           onChange={(e) => setType(e.target.value)}
         >
-          <option value="all">All media</option>
-          <option value="image">Images</option>
-          <option value="video">Videos</option>
+          <option value="all">{t("sections.library.all")}</option>
+          <option value="image">{t("sections.library.images")}</option>
+          <option value="video">{t("sections.library.videos")}</option>
         </select>
-        <span className="muted">Latest 50 files</span>
+        <span className="muted">{t("sections.library.latest")}</span>
       </div>
       <div className="media-grid">
         {data.media
@@ -399,13 +451,14 @@ export function Library({
                   <MediaPreview
                     clientId={data.clientId!}
                     id={m.id}
+                    name={m.name}
                     video={m.mime_type.startsWith("video/")}
                   />
                 ) : (
                   <div className="media-placeholder">
                     {m.status === "FAILED"
-                      ? "Processing failed"
-                      : "Processing media…"}
+                      ? t("sections.library.failed")
+                      : t("sections.library.processing")}
                   </div>
                 )}
               </div>
@@ -428,7 +481,7 @@ export function Library({
                     mutate("media.delete", { id: m.id }).catch(() => {})
                   }
                 >
-                  Delete file
+                  {t("sections.library.delete")}
                 </button>
               </div>
             </section>

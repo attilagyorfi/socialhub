@@ -3,6 +3,7 @@ import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { Badge, formatDate, Network, type Post } from "./types";
 import { ChevronRight, Search } from "lucide-react";
 import { MediaThumb } from "./media";
+import { apiError, useT, type MessageKey } from "../i18n";
 
 type PostListResult = {
   posts: Post[];
@@ -27,6 +28,7 @@ export function PostList({
   onOpen: (post: Post) => void;
   onError: (message: string) => void;
 }) {
+  const { t } = useT();
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.trim());
   const [status, setStatus] = useState(initialStatus);
@@ -67,8 +69,7 @@ export function PostList({
     })
       .then(async (response) => {
         const body = await response.json();
-        if (!response.ok)
-          throw new Error(body.error ?? "Unable to load posts.");
+        if (!response.ok) throw new Error(apiError(body));
         if (requestId === sequence.current) setResult(body);
       })
       .catch((error) => {
@@ -76,7 +77,7 @@ export function PostList({
           return;
         if (requestId === sequence.current)
           onError(
-            error instanceof Error ? error.message : "Unable to load posts.",
+            error instanceof Error ? error.message : t("posts.error.load"),
           );
       })
       .finally(() => {
@@ -92,6 +93,7 @@ export function PostList({
     platform,
     refreshKey,
     status,
+    t,
     view,
   ]);
 
@@ -113,28 +115,34 @@ export function PostList({
   return (
     <section className="panel" aria-busy={loading}>
       <div className="panel-title">
-        <h2>{view === "Approvals" ? "Review queue" : "All content"}</h2>
+        <h2>
+          {view === "Approvals"
+            ? t("posts.title.approvals")
+            : t("posts.title.all")}
+        </h2>
         <span className="muted">
-          {loading ? "Loading…" : `${result.posts.length} on this page`}
+          {loading
+            ? t("posts.loading")
+            : t("posts.pageCount", { count: result.posts.length })}
         </span>
       </div>
       <div className="post-toolbar">
         <label className="post-search">
-          <span className="sr-only">Search posts</span>
+          <span className="sr-only">{t("posts.search.label")}</span>
           <Search size={15} />
           <input
-            aria-label="Search posts"
+            aria-label={t("posts.search.label")}
             value={query}
             maxLength={200}
             onChange={(event) => {
               setQuery(event.target.value);
               resetPagination();
             }}
-            placeholder="Search captions or links"
+            placeholder={t("posts.search.placeholder")}
           />
         </label>
         <select
-          aria-label="Filter by status"
+          aria-label={t("posts.filter.status")}
           value={status}
           onChange={(event) => {
             setStatus(event.target.value);
@@ -142,35 +150,39 @@ export function PostList({
           }}
         >
           {statuses.map((value) => (
-            <option key={value}>{value}</option>
+            <option key={value} value={value}>
+              {value === "ALL"
+                ? t("posts.filter.allStatuses")
+                : t(`common.status.${value}` as MessageKey)}
+            </option>
           ))}
         </select>
         <select
-          aria-label="Filter posts by network"
+          aria-label={t("posts.filter.network")}
           value={platform}
           onChange={(event) => {
             setPlatform(event.target.value);
             resetPagination();
           }}
         >
-          <option value="all">All networks</option>
+          <option value="all">{t("posts.filter.allNetworks")}</option>
           {["facebook", "instagram", "linkedin", "tiktok", "google"].map(
             (value) => (
               <option key={value} value={value}>
-                {value}
+                {t(`common.network.${value}` as MessageKey)}
               </option>
             ),
           )}
         </select>
         <select
-          aria-label="Filter posts by author"
+          aria-label={t("posts.filter.author")}
           value={authorId}
           onChange={(event) => {
             setAuthorId(event.target.value);
             resetPagination();
           }}
         >
-          <option value="all">All authors</option>
+          <option value="all">{t("posts.filter.allAuthors")}</option>
           {result.authors.map((author) => (
             <option key={author.id} value={author.id}>
               {author.name}
@@ -182,10 +194,10 @@ export function PostList({
         <table>
           <thead>
             <tr>
-              <th>Content</th>
-              <th>Networks</th>
-              <th>Status</th>
-              <th>Scheduled for</th>
+              <th>{t("posts.column.content")}</th>
+              <th>{t("posts.column.networks")}</th>
+              <th>{t("posts.column.status")}</th>
+              <th>{t("posts.column.scheduledFor")}</th>
               <th />
             </tr>
           </thead>
@@ -207,7 +219,9 @@ export function PostList({
                         }}
                       />
                     )}
-                    <span>{post.caption.slice(0, 100) || "Media post"}</span>
+                    <span>
+                      {post.caption.slice(0, 100) || t("posts.mediaPost")}
+                    </span>
                   </button>
                 </td>
                 <td>
@@ -224,7 +238,7 @@ export function PostList({
                 <td>
                   <button
                     className="icon-button"
-                    aria-label="Open post"
+                    aria-label={t("posts.open")}
                     onClick={() => onOpen(post)}
                   >
                     <ChevronRight size={17} />
@@ -236,16 +250,16 @@ export function PostList({
         </table>
       </div>
       {!loading && !result.posts.length && (
-        <div className="empty compact">No posts match these filters.</div>
+        <div className="empty compact">{t("posts.empty")}</div>
       )}
       <div className="pagination">
         <button
           disabled={!page || loading}
           onClick={() => setPage((current) => Math.max(0, current - 1))}
         >
-          Previous
+          {t("posts.pagination.previous")}
         </button>
-        <span>Page {page + 1}</span>
+        <span>{t("posts.pagination.page", { page: page + 1 })}</span>
         <button
           disabled={!result.nextCursor || loading}
           onClick={() => {
@@ -257,7 +271,7 @@ export function PostList({
             setPage((current) => current + 1);
           }}
         >
-          Next
+          {t("posts.pagination.next")}
         </button>
       </div>
     </section>

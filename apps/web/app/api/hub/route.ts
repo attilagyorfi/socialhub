@@ -7,6 +7,7 @@ import {
   createClient,
   connectMock,
   disconnect,
+  updateClientLocale,
 } from "../../../../../packages/server/clients";
 import {
   editDraft,
@@ -40,6 +41,7 @@ import {
   uuid,
   brandInput,
   timeZoneInput,
+  localeInput,
 } from "../../../../../packages/server/validation";
 import { transaction, audit } from "../../../../../packages/server/transaction";
 import { rateLimit } from "../../../../../packages/server/queue";
@@ -64,6 +66,7 @@ import {
 } from "../../../../../packages/server/meta";
 import { operationalSummary } from "../../../../../packages/server/operations";
 import {
+  updateUserLocale,
   updateUserTimeZone,
   userPreferences,
 } from "../../../../../packages/server/preferences";
@@ -128,6 +131,7 @@ export async function GET(request: Request) {
             name: actor.name,
             email: actor.email,
             timezone: preferences.timezone,
+            locale: preferences.locale,
           },
           clients,
           posts: [],
@@ -270,6 +274,7 @@ export async function GET(request: Request) {
           name: actor.name,
           email: actor.email,
           timezone: preferences.timezone,
+          locale: preferences.locale,
         },
         clients,
         clientId,
@@ -341,7 +346,12 @@ export async function POST(request: Request) {
     const action = z.string().parse(body.action);
     if (action === "preferences.update")
       return Response.json(
-        await updateUserTimeZone(actor.id, timeZoneInput.parse(body.timezone)),
+        body.locale !== undefined
+          ? await updateUserLocale(actor.id, localeInput.parse(body.locale))
+          : await updateUserTimeZone(
+              actor.id,
+              timeZoneInput.parse(body.timezone),
+            ),
       );
     if (action === "privacy.user.erase.request")
       return Response.json(
@@ -377,6 +387,7 @@ export async function POST(request: Request) {
               action === "privacy.organization.erase.request" ||
               action === "privacy.retention.update" ||
               action === "analytics.backfill" ||
+              action === "client.locale.update" ||
               action === "publishing.reconcile" ||
               action.startsWith("team.")
             ? "manage"
@@ -405,6 +416,10 @@ export async function POST(request: Request) {
             c,
             z.number().int().min(1).max(90).parse(body.days),
           ),
+        );
+      case "client.locale.update":
+        return Response.json(
+          await updateClientLocale(c, localeInput.parse(body.locale)),
         );
       case "publishing.reconcile":
         return Response.json(await queueUncertainPublishReconciliation(c));

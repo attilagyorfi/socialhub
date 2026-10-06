@@ -1,5 +1,12 @@
 "use client";
 import { use, useEffect, useState } from "react";
+import {
+  apiError,
+  intlLocale,
+  useT,
+  type Locale,
+  type MessageKey,
+} from "../../../i18n";
 
 type Invitation = {
   email: string;
@@ -9,12 +16,26 @@ type Invitation = {
   clients: { id: string; name: string }[];
 };
 
+// English keeps Better Auth's own message; other locales map its error code.
+function authErrorMessage(
+  locale: Locale,
+  t: (key: MessageKey) => string,
+  body: { message?: string; code?: string } | undefined,
+  fallback: MessageKey,
+) {
+  if (locale === "en") return body?.message ?? t(fallback);
+  const key = `auth.code.${body?.code}` as MessageKey;
+  const translated = body?.code ? t(key) : key;
+  return translated === key ? t(fallback) : translated;
+}
+
 export default function InvitationPage({
   params,
 }: {
   params: Promise<{ token: string }>;
 }) {
   const { token } = use(params);
+  const { t, locale } = useT();
   const [data, setData] = useState<Invitation>();
   const [sessionEmail, setSessionEmail] = useState<string>();
   const [mode, setMode] = useState<"sign-up" | "sign-in">("sign-up");
@@ -24,7 +45,7 @@ export default function InvitationPage({
     Promise.all([
       fetch(`/api/invitation/${token}`).then(async (response) => {
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error);
+        if (!response.ok) throw new Error(apiError(result));
         return result;
       }),
       fetch("/api/auth/get-session").then((response) => response.json()),
@@ -43,18 +64,20 @@ export default function InvitationPage({
       body: "{}",
     });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error);
+    if (!response.ok) throw new Error(apiError(result));
     window.location.href = "/";
   }
 
   return (
     <main className="approval-page invitation-page">
       <div className="wordmark dark">
-        g2a<span> / workspace invitation</span>
+        g2a<span>{t("auth.invite.wordmark")}</span>
       </div>
       <section className="panel invitation-card">
-        <p className="eyebrow">YOU’RE INVITED</p>
-        <h1>{data?.organization_name ?? "Workspace invitation"}</h1>
+        <p className="eyebrow">{t("auth.invite.eyebrow")}</p>
+        <h1>
+          {data?.organization_name ?? t("auth.invite.fallbackTitle")}
+        </h1>
         {error && (
           <p className="alert" role="alert">
             {error}
@@ -63,12 +86,17 @@ export default function InvitationPage({
         {data && (
           <>
             <p>
-              Join as{" "}
-              <strong>{data.role.toLowerCase().replaceAll("_", " ")}</strong>
+              {t("auth.invite.joinAs")}{" "}
+              <strong>
+                {t(`auth.invite.role.${data.role}` as MessageKey)}
+              </strong>
               {data.clients.length
-                ? ` with access to ${data.clients.map((client) => client.name).join(", ")}`
-                : " with access to all clients"}
-              .
+                ? t("auth.invite.accessClients", {
+                    clients: data.clients
+                      .map((client) => client.name)
+                      .join(", "),
+                  })
+                : t("auth.invite.accessAll")}
             </p>
             {sessionEmail ? (
               sessionEmail.toLowerCase() === data.email ? (
@@ -84,12 +112,15 @@ export default function InvitationPage({
                     });
                   }}
                 >
-                  {busy ? "Joining…" : "Accept invitation"}
+                  {busy
+                    ? t("auth.invite.joining")
+                    : t("auth.invite.accept")}
                 </button>
               ) : (
                 <div className="notice">
-                  Sign out and use <strong>{data.email}</strong> to accept this
-                  invitation.
+                  {t("auth.invite.wrongAccountBefore")}{" "}
+                  <strong>{data.email}</strong>{" "}
+                  {t("auth.invite.wrongAccountAfter")}
                   <button
                     onClick={async () => {
                       await fetch("/api/auth/sign-out", {
@@ -100,7 +131,7 @@ export default function InvitationPage({
                       setSessionEmail(undefined);
                     }}
                   >
-                    Sign out
+                    {t("auth.invite.signOut")}
                   </button>
                 </div>
               )
@@ -125,31 +156,36 @@ export default function InvitationPage({
                     const result = await response.json();
                     if (!response.ok)
                       throw new Error(
-                        result.message ?? "Authentication failed.",
+                        authErrorMessage(
+                          locale,
+                          t,
+                          result,
+                          "auth.invite.authFailed",
+                        ),
                       );
                     await accept();
                   } catch (reason) {
                     setError(
                       reason instanceof Error
                         ? reason.message
-                        : "Unable to join.",
+                        : t("auth.invite.unableToJoin"),
                     );
                     setBusy(false);
                   }
                 }}
               >
                 <label>
-                  Email address
+                  {t("auth.field.email")}
                   <input value={data.email} readOnly />
                 </label>
                 {mode === "sign-up" && (
                   <label>
-                    Your name
+                    {t("auth.field.name")}
                     <input name="name" autoComplete="name" required />
                   </label>
                 )}
                 <label>
-                  Password
+                  {t("auth.field.password")}
                   <input
                     name="password"
                     type="password"
@@ -162,10 +198,10 @@ export default function InvitationPage({
                 </label>
                 <button className="primary" disabled={busy}>
                   {busy
-                    ? "Please wait…"
+                    ? t("auth.pleaseWait")
                     : mode === "sign-up"
-                      ? "Create account and join"
-                      : "Sign in and join"}
+                      ? t("auth.invite.createAndJoin")
+                      : t("auth.invite.signInAndJoin")}
                 </button>
                 <button
                   type="button"
@@ -175,14 +211,17 @@ export default function InvitationPage({
                   }
                 >
                   {mode === "sign-up"
-                    ? "Already have an account?"
-                    : "Create a new account"}
+                    ? t("auth.haveAccount")
+                    : t("auth.invite.toSignUp")}
                 </button>
               </form>
             )}
             <small>
-              This invitation expires{" "}
-              {new Date(data.expires_at).toLocaleDateString()}.
+              {t("auth.invite.expires", {
+                date: new Date(data.expires_at).toLocaleDateString(
+                  intlLocale(locale),
+                ),
+              })}
             </small>
           </>
         )}

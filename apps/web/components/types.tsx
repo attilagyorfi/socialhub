@@ -1,3 +1,10 @@
+import {
+  currentLocale,
+  intlLocale,
+  translate,
+  useT,
+  type MessageKey,
+} from "../i18n";
 export type Account = {
   id: string;
   name: string;
@@ -67,9 +74,16 @@ export type Client = {
   color: string;
   role: string;
   organization_id: string;
+  locale: "hu" | "en";
 };
 export type HubData = {
-  user: { id: string; name: string; email: string; timezone: string };
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    timezone: string;
+    locale: "hu" | "en" | null;
+  };
   clients: Client[];
   clientId?: string;
   role: string;
@@ -189,18 +203,21 @@ export const formatDate = (
   timeZone = "Europe/Budapest",
 ) =>
   value
-    ? new Intl.DateTimeFormat("en-GB", {
+    ? new Intl.DateTimeFormat(intlLocale(), {
         timeZone,
         month: "short",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
       }).format(new Date(value))
-    : "Not scheduled";
+    : translate(currentLocale(), "common.time.notScheduled");
 export function Badge({ status }: { status: string }) {
+  const { t } = useT();
+  const key = `common.status.${status}` as MessageKey;
+  const label = t(key);
   return (
     <span className={`badge ${status.toLowerCase()}`}>
-      {status.toLowerCase().replaceAll("_", " ")}
+      {label === key ? status.toLowerCase().replaceAll("_", " ") : label}
     </span>
   );
 }

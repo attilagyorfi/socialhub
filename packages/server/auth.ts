@@ -3,6 +3,16 @@ import { magicLink } from "better-auth/plugins";
 import { pool } from "../db";
 import { redis } from "./queue";
 import { sendMail } from "./mail";
+import { authMail, userLocale } from "./mail-templates";
+
+async function sendAuthMail(
+  email: string,
+  kind: "reset" | "verify" | "magic",
+  url: string,
+) {
+  const mail = authMail(await userLocale({ email }), kind, url);
+  await sendMail(email, mail.subject, mail.text);
+}
 export const auth = betterAuth({
   database: pool,
   baseURL: process.env.APP_URL,
@@ -13,11 +23,11 @@ export const auth = betterAuth({
     minPasswordLength: 12,
     requireEmailVerification: process.env.NODE_ENV === "production",
     sendResetPassword: async ({ user, url }) =>
-      sendMail(user.email, "Reset your password", url),
+      sendAuthMail(user.email, "reset", url),
   },
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) =>
-      sendMail(user.email, "Verify your email", url),
+      sendAuthMail(user.email, "verify", url),
     sendOnSignUp: process.env.NODE_ENV === "production",
   },
   socialProviders:
@@ -32,7 +42,7 @@ export const auth = betterAuth({
   plugins: [
     magicLink({
       sendMagicLink: async ({ email, url }) =>
-        sendMail(email, "Sign in to G2A Social Hub", url),
+        sendAuthMail(email, "magic", url),
     }),
   ],
   secondaryStorage: {

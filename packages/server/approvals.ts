@@ -11,6 +11,11 @@ import {
   type ReviewKind,
 } from "./approval-workflows";
 import { sendMail } from "./mail";
+import {
+  escalationMail,
+  reviewReminderMail,
+  userLocale,
+} from "./mail-templates";
 import { checkBrandGuardrails } from "../core/brand-guardrails";
 import { publishabilityErrors } from "./posts";
 import type { Platform } from "../core/domain";
@@ -331,15 +336,22 @@ export async function processApprovalAutomations(limit = 50) {
     if (!delivery) break;
     try {
       const reminder = delivery.kind === "REMINDER";
-      await sendMail(
-        delivery.recipient_email,
-        reminder
-          ? `Review reminder · ${delivery.client_name}`
-          : `Overdue approval · ${delivery.client_name}`,
-        reminder
-          ? `Hello ${delivery.reviewer_name ?? "reviewer"},\n\nA post is still waiting for your internal review in ${delivery.client_name}:\n"${String(delivery.caption).slice(0, 240)}"\n\nOpen Approvals in the G2A Social Hub:\n${process.env.APP_URL}\n\nThis review expires on ${new Date(delivery.expires_at).toLocaleString("en-GB", { timeZone: delivery.timezone })}.`
-          : `An ${String(delivery.step_kind).toLowerCase()} approval in ${delivery.client_name} is overdue:\n"${String(delivery.caption).slice(0, 240)}"\n\nOpen Approvals in the G2A Social Hub:\n${process.env.APP_URL}`,
-      );
+      const locale = await userLocale({ email: delivery.recipient_email });
+      const mail = reminder
+        ? reviewReminderMail(locale, {
+            reviewerName: delivery.reviewer_name,
+            clientName: delivery.client_name,
+            caption: delivery.caption,
+            expiresAt: delivery.expires_at,
+            timeZone: delivery.timezone,
+            automatic: true,
+          })
+        : escalationMail(locale, {
+            stepKind: String(delivery.step_kind),
+            clientName: delivery.client_name,
+            caption: delivery.caption,
+          });
+      await sendMail(delivery.recipient_email, mail.subject, mail.text);
       await transaction(async (tx) => {
         await tx.query(
           `UPDATE approval_automation_deliveries
@@ -389,7 +401,7 @@ export async function processApprovalAutomations(limit = 50) {
 export async function approvalView(secret: string) {
   const result = await pool.query(
     `SELECT ar.id,ar.organization_id,ar.client_id,ar.status,ar.expires_at,
-            p.caption,p.link,p.scheduled_at,c.name AS client_name,o.timezone,v.snapshot
+            p.caption,p.link,p.scheduled_at,c.name AS client_name,c.locale,o.timezone,v.snapshot
      FROM approval_requests ar
      JOIN posts p ON p.id=ar.post_id AND p.revision=ar.revision
      JOIN clients c ON c.id=ar.client_id AND c.deleted_at IS NULL
@@ -454,6 +466,7 @@ export async function approvalView(secret: string) {
     link: request.link,
     scheduled_at: request.scheduled_at,
     client_name: request.client_name,
+    locale: request.locale,
     timezone: request.timezone,
     versions,
     comments,
@@ -795,21 +808,18 @@ export async function sendApprovalReminder(c: Context, postId: string) {
   });
   let emailDelivered = true;
   try {
-    await sendMail(
-      reminder.reviewer_email,
-      `Review requested · ${reminder.client_name}`,
-      `Hello ${reminder.reviewer_name},
-
-A post is waiting for your internal review in ${reminder.client_name}:
-"${String(reminder.caption).slice(0, 240)}"
-
-Sign in to the G2A Social Hub and open Approvals:
-${process.env.APP_URL}
-
-This review expires on ${new Date(reminder.expires_at).toLocaleString("en-GB", {
+    const mail = reviewReminderMail(
+      await userLocale({ id: reminder.assigned_to }),
+      {
+        reviewerName: reminder.reviewer_name,
+        clientName: reminder.client_name,
+        caption: reminder.caption,
+        expiresAt: reminder.expires_at,
         timeZone: reminder.timezone,
-      })}.`,
+        automatic: false,
+      },
     );
+    await sendMail(reminder.reviewer_email, mail.subject, mail.text);
   } catch (error) {
     emailDelivered = false;
     console.error(
