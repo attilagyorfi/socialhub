@@ -3,6 +3,13 @@ import { useCallback, useEffect, useState } from "react";
 import { Sparkles, ImageIcon, Check, Send, ShieldCheck } from "lucide-react";
 import { type HubData, type Mutate, type Post, Network, names } from "./types";
 import { validatePost, type Platform } from "../../../packages/core/domain";
+import {
+  FramedImage,
+  MediaPicker,
+  instagramFrame,
+  signedMedia,
+  useMediaUpload,
+} from "./media";
 
 type GuardrailResult = {
   passed: boolean;
@@ -28,10 +35,14 @@ export function Composer({
   onCreated,
   editing,
   error,
+  reload,
+  onError,
 }: {
   data: HubData;
   mutate: Mutate;
   busy: boolean;
+  reload: () => Promise<void>;
+  onError: (message: string) => void;
   onCreated: (p: Post, reviewUrl?: string) => void;
   editing?: Post;
   error?: string;
@@ -68,6 +79,14 @@ export function Composer({
   const [guardrails, setGuardrails] = useState<GuardrailResult>();
   const [history, setHistory] = useState<Generation[]>([]);
   const [operation, setOperation] = useState("generate");
+  const { upload, uploading } = useMediaUpload({
+    clientId: data.clientId!,
+    mutate,
+    reload,
+    onError,
+  });
+  const toggle = (list: string[], id: string) =>
+    list.includes(id) ? list.filter((item) => item !== id) : [...list, id];
   const internalReview = data.workflow[0] === "INTERNAL";
   // Authors may review their own post only when nobody else can.
   const independentReviewers = data.reviewers.filter(
@@ -351,28 +370,22 @@ export function Composer({
           <h3>
             <ImageIcon size={17} /> 3. Attach media
           </h3>
-          <p className="muted">Upload files in Media, then select them here.</p>
-          <div className="media-picks">
-            {data.media
-              .filter((m) => m.status === "READY")
-              .map((m) => (
-                <label key={m.id}>
-                  <input
-                    type="checkbox"
-                    checked={mediaIds.includes(m.id)}
-                    onChange={() =>
-                      setMediaIds(
-                        mediaIds.includes(m.id)
-                          ? mediaIds.filter((id) => id !== m.id)
-                          : [...mediaIds, m.id],
-                      )
-                    }
-                  />
-                  {m.name}
-                  <small>{m.mime_type}</small>
-                </label>
-              ))}
-          </div>
+          <p className="muted">
+            Upload a new file or pick one from the media library.
+          </p>
+          <MediaPicker
+            clientId={data.clientId!}
+            media={data.media}
+            selected={mediaIds}
+            label="Shared attachments"
+            onToggle={(id) => setMediaIds((current) => toggle(current, id))}
+            uploading={uploading}
+            onUpload={(file) =>
+              void upload(file).then((id) => {
+                if (id) setMediaIds((current) => [...current, id]);
+              })
+            }
+          />
         </div>
         {!!selected.length && (
           <div className="form-section">
@@ -407,30 +420,18 @@ export function Composer({
                 </button>
                 <details>
                   <summary>Customize {names[a.platform]} attachments</summary>
-                  <div className="media-picks">
-                    {data.media
-                      .filter((m) => m.status === "READY")
-                      .map((m) => (
-                        <label key={m.id}>
-                          <input
-                            type="checkbox"
-                            checked={(networkMedia[a.id] ?? mediaIds).includes(
-                              m.id,
-                            )}
-                            onChange={() => {
-                              const current = networkMedia[a.id] ?? mediaIds;
-                              setNetworkMedia({
-                                ...networkMedia,
-                                [a.id]: current.includes(m.id)
-                                  ? current.filter((id) => id !== m.id)
-                                  : [...current, m.id],
-                              });
-                            }}
-                          />
-                          {m.name}
-                        </label>
-                      ))}
-                  </div>
+                  <MediaPicker
+                    clientId={data.clientId!}
+                    media={data.media}
+                    selected={networkMedia[a.id] ?? mediaIds}
+                    label={`${names[a.platform]} attachments`}
+                    onToggle={(id) =>
+                      setNetworkMedia((current) => ({
+                        ...current,
+                        [a.id]: toggle(current[a.id] ?? mediaIds, id),
+                      }))
+                    }
+                  />
                   <button
                     className="text-button"
                     onClick={() =>
@@ -542,18 +543,34 @@ export function Composer({
               : "Select a profile to preview your post."}
           </p>
           {(active ? (networkMedia[active.id] ?? mediaIds) : mediaIds).map(
-            (id) => (
-              <MediaPreview
-                key={id}
-                clientId={data.clientId!}
-                id={id}
-                video={
-                  data.media
-                    .find((m) => m.id === id)
-                    ?.mime_type.startsWith("video/") ?? false
-                }
-              />
-            ),
+            (id) => {
+              const asset = data.media.find((m) => m.id === id);
+              const frame =
+                active?.platform === "instagram" &&
+                asset?.mime_type.startsWith("image/")
+                  ? instagramFrame(asset)
+                  : undefined;
+              return frame && asset ? (
+                <div key={id}>
+                  <FramedImage
+                    clientId={data.clientId!}
+                    asset={asset}
+                    aspectRatio={frame}
+                  />
+                  <small className="preview-frame-note">
+                    Instagram receives a {frame.replace(" / ", ":")} framed
+                    version; nothing is cropped.
+                  </small>
+                </div>
+              ) : (
+                <MediaPreview
+                  key={id}
+                  clientId={data.clientId!}
+                  id={id}
+                  video={asset?.mime_type.startsWith("video/") ?? false}
+                />
+              );
+            },
           )}
           {link && <div className="link-preview">{link}</div>}
           <div className="preview-reactions">
@@ -581,12 +598,11 @@ export function MediaPreview({
   const [poster, setPoster] = useState("");
   useEffect(() => {
     let active = true;
-    fetch(`/api/hub?clientId=${clientId}&mediaId=${id}`)
-      .then((r) => r.json())
+    signedMedia(clientId, id)
       .then((r) => {
         if (active) {
-          setUrl(r.url ?? "");
-          setPoster(r.previewUrl ?? "");
+          setUrl(r.url);
+          setPoster(r.previewUrl);
         }
       })
       .catch(() => {});
