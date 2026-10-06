@@ -4,7 +4,11 @@ import { AppError, decrypt, encrypt, hashToken, token } from "../core/security";
 import { validatePost, type Content, type Platform } from "../core/domain";
 import type { Context } from "./context";
 import { audit, transaction } from "./transaction";
-import { instagramImageObjectKey, signedObjectUrl } from "./media";
+import {
+  assertStoredObject,
+  instagramImageObjectKey,
+  signedObjectUrl,
+} from "./media";
 
 const META_SCOPES = [
   "pages_show_list",
@@ -1164,6 +1168,7 @@ export async function publishMeta(input: {
     input.accountId,
   );
   const media = input.content.media[0];
+  if (media) await assertStoredObject(media.object_key);
   const objectKey =
     media &&
     input.platform === "instagram" &&

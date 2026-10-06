@@ -36,6 +36,7 @@ vi.mock("@aws-sdk/client-s3", async (original) => {
 vi.mock("../packages/db", () => ({ pool: { query: vi.fn() } }));
 
 import {
+  assertStoredObject,
   derivedObjectKeys,
   instagramImageObjectKey,
 } from "../packages/server/media";
@@ -85,6 +86,14 @@ describe("Instagram image renditions", () => {
       format: "jpeg",
       width: 1440,
       height: 900,
+    });
+  });
+
+  it("rejects a missing object permanently before any provider call", async () => {
+    await expect(assertStoredObject(media.object_key)).resolves.toBeUndefined();
+    await expect(assertStoredObject("missing/object")).rejects.toMatchObject({
+      status: 422,
+      code: "MEDIA_MISSING",
     });
   });
 

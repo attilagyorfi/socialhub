@@ -259,6 +259,24 @@ type StoredMedia = {
   width?: number | null;
 };
 
+// Fails permanently before a provider is handed a URL to a missing object,
+// which it could not download and might report ambiguously.
+export async function assertStoredObject(key: string) {
+  try {
+    await storageClient().send(
+      new HeadObjectCommand({ Bucket: mediaBucket(), Key: key }),
+    );
+  } catch (error) {
+    if (["NotFound", "NoSuchKey"].includes((error as Error).name))
+      throw new AppError(
+        422,
+        "MEDIA_MISSING",
+        "The attachment is missing from storage. Upload it again.",
+      );
+    throw error;
+  }
+}
+
 // Renditions derived from an asset; storage cleanup must remove them too.
 export function derivedObjectKeys(media: {
   id: string;
