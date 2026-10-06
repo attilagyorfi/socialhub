@@ -192,6 +192,35 @@ describe("Meta Graph publishing", () => {
     });
   });
 
+  it("records the feed post id for Facebook photo publications", async () => {
+    const graph = new MetaGraphClient(
+      config,
+      fakeFetch((url) => {
+        expect(url.pathname).toBe("/v99.0/page-1/photos");
+        return { id: "photo-1", post_id: "page-1_post-1" };
+      }),
+    );
+    await expect(
+      graph.publishFacebook(
+        "page-1",
+        "token",
+        {
+          caption: "Hello",
+          media: [
+            {
+              id: "m",
+              mime_type: "image/jpeg",
+              size_bytes: 10,
+              status: "READY",
+              object_key: "ready/m",
+            },
+          ],
+        },
+        "https://media.example/photo.jpg",
+      ),
+    ).resolves.toEqual({ id: "page-1_post-1" });
+  });
+
   it("marks a server error during publication as uncertain instead of retryable", async () => {
     const graph = new MetaGraphClient(
       config,

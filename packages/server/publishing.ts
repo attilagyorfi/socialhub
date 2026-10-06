@@ -4,7 +4,7 @@ import { transaction } from "./transaction";
 import { provider } from "../core/providers";
 import { aggregateStatus, type Status, type Platform } from "../core/domain";
 import { AppError } from "../core/security";
-import { publishMeta } from "./meta";
+import { metaProviderError, publishMeta } from "./meta";
 export const receipts = {
   async get(key: string) {
     return (
@@ -152,7 +152,15 @@ export async function executePublish(id: string) {
     )
       return;
     await recordOutcome(tx, { job, target, attempt, trace }, failure, remoteId);
-    return { jobId: id, attempt, status: failure ? "FAILED" : "PUBLISHED" };
+    return {
+      jobId: id,
+      attempt,
+      status: failure ? "FAILED" : "PUBLISHED",
+      // Safe identifiers only: Meta's numeric codes, never messages or tokens.
+      ...(failure
+        ? { errorCode: failure.code, provider: metaProviderError(failure) }
+        : {}),
+    };
   });
 }
 

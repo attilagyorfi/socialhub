@@ -4,7 +4,11 @@ import { AppError, decrypt, encrypt, hashToken, token } from "../core/security";
 import { validatePost, type Content, type Platform } from "../core/domain";
 import type { Context } from "./context";
 import { audit, transaction } from "./transaction";
-import { signedObjectUrl } from "./media";
+import {
+  assertStoredObject,
+  instagramImageObjectKey,
+  signedObjectUrl,
+} from "./media";
 
 const META_SCOPES = [
   "pages_show_list",
@@ -453,16 +457,21 @@ export class MetaGraphClient {
         },
       });
     if (media.mime_type.startsWith("image/"))
-      return this.request<{ id?: string }>(`${pageId}/photos`, {
-        method: "POST",
-        token: accessToken,
-        delivery: true,
-        params: {
-          url: mediaUrl!,
-          caption: content.caption,
-          published: "true",
+      // /photos returns the photo id plus the feed post id; post insights and
+      // reconciliation work with the post id.
+      return this.request<{ id?: string; post_id?: string }>(
+        `${pageId}/photos`,
+        {
+          method: "POST",
+          token: accessToken,
+          delivery: true,
+          params: {
+            url: mediaUrl!,
+            caption: content.caption,
+            published: "true",
+          },
         },
-      });
+      ).then((result) => ({ id: result.post_id ?? result.id }));
     return this.request<{ id?: string }>(`${pageId}/videos`, {
       method: "POST",
       token: accessToken,
@@ -1164,7 +1173,18 @@ export async function publishMeta(input: {
     input.accountId,
   );
   const media = input.content.media[0];
-  const url = media ? await signedObjectUrl(media.object_key, 900) : undefined;
+  if (media) await assertStoredObject(media.object_key);
+  const objectKey =
+    media &&
+    input.platform === "instagram" &&
+    media.mime_type.startsWith("image/")
+      ? await instagramImageObjectKey({
+          ...media,
+          organization_id: input.organizationId,
+          client_id: input.clientId,
+        })
+      : media?.object_key;
+  const url = objectKey ? await signedObjectUrl(objectKey, 900) : undefined;
   if (url) assertPublicMediaUrl(url);
   const graph = new MetaGraphClient(metaConfig());
   if (

@@ -27,6 +27,29 @@ describe("content capabilities", () => {
       }),
     ).toHaveLength(2);
   });
+  it("limits Instagram images to the 4:5 to 1.91:1 aspect ratio range", () => {
+    const image = (width: number, height: number) => ({
+      caption: "Hello",
+      media: [
+        {
+          id: "m",
+          mime_type: "image/png",
+          size_bytes: 10,
+          status: "READY",
+          width,
+          height,
+        },
+      ],
+    });
+    const ratioError =
+      "Instagram images must have an aspect ratio between 4:5 (portrait) and 1.91:1 (landscape).";
+    expect(validatePost("instagram", image(1080, 1350))).toEqual([]);
+    expect(validatePost("instagram", image(1080, 1080))).toEqual([]);
+    expect(validatePost("instagram", image(1910, 1000))).toEqual([]);
+    expect(validatePost("instagram", image(1080, 1920))).toContain(ratioError);
+    expect(validatePost("instagram", image(3000, 1000))).toContain(ratioError);
+    expect(validatePost("facebook", image(1080, 1920))).toEqual([]);
+  });
   it("requires exactly one TikTok video", () => {
     expect(validatePost("tiktok", { caption: "Hello", media: [] })).toContain(
       "TikTok requires one video.",
