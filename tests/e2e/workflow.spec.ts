@@ -83,7 +83,11 @@ test("login → client → mock accounts → media → AI → versions → appro
   await expect(
     page.getByPlaceholder("What would you like to share?"),
   ).toHaveValue(/E2E Creative Studio/);
-  await page.getByRole("checkbox", { name: /e2e-campaign.png/ }).check();
+  const attachment = page
+    .getByRole("group", { name: "Shared attachments" })
+    .getByRole("button", { name: "e2e-campaign.png" });
+  await attachment.click();
+  await expect(attachment).toHaveAttribute("aria-pressed", "true");
   const version = page.locator(".form-section").filter({
     has: page.getByRole("heading", { name: "4. Customize each network" }),
   });

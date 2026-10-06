@@ -10,6 +10,7 @@ import {
   names,
 } from "./types";
 import { MediaPreview } from "./composer";
+import { useMediaUpload } from "./media";
 export function Accounts({
   data,
   mutate,
@@ -327,58 +328,17 @@ export function Library({
 }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
-  const [uploading, setUploading] = useState(false);
+  const { upload, uploading } = useMediaUpload({
+    clientId: data.clientId!,
+    mutate,
+    reload,
+    onError,
+  });
   useEffect(() => {
     if (!data.media.some((asset) => asset.status === "PROCESSING")) return;
     const timer = window.setInterval(() => void reload(), 2000);
     return () => window.clearInterval(timer);
   }, [data.media, reload]);
-  async function upload(file: File) {
-    setUploading(true);
-    try {
-      if (!file.size || file.size > 20 * 1024 * 1024)
-        throw new Error("Choose a file between 1 byte and 20 MB.");
-      if (
-        !["image/png", "image/jpeg", "image/webp", "video/mp4"].includes(
-          file.type,
-        )
-      )
-        throw new Error("Upload a PNG, JPEG, WebP image or MP4 video.");
-      const prepared = await mutate("media.upload.prepare", {
-        name: file.name,
-        mimeType: file.type,
-        sizeBytes: file.size,
-      });
-      const uploadResponse = await fetch(prepared.uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!uploadResponse.ok)
-        throw new Error("The private storage upload failed.");
-      await mutate("media.upload.complete", { id: prepared.id });
-      for (let attempt = 0; attempt < 60; attempt++) {
-        await new Promise((resolve) => window.setTimeout(resolve, 500));
-        const statusResponse = await fetch(
-          `/api/hub?${new URLSearchParams({ clientId: data.clientId! })}`,
-        );
-        const statusData = await statusResponse.json();
-        if (!statusResponse.ok) throw new Error(statusData.error);
-        const asset = statusData.media.find(
-          (candidate: { id: string; status: string }) =>
-            candidate.id === prepared.id,
-        );
-        if (asset?.status === "FAILED")
-          throw new Error("The file could not be processed.");
-        if (asset?.status === "READY") break;
-      }
-      await reload();
-    } catch (e) {
-      onError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setUploading(false);
-    }
-  }
   return (
     <>
       <div

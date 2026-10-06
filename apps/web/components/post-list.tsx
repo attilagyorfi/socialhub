@@ -2,6 +2,7 @@
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { Badge, formatDate, Network, type Post } from "./types";
 import { ChevronRight, Search } from "lucide-react";
+import { MediaThumb } from "./media";
 
 type PostListResult = {
   posts: Post[];
@@ -196,7 +197,17 @@ export function PostList({
                     className="table-caption"
                     onClick={() => onOpen(post)}
                   >
-                    {post.caption.slice(0, 100) || "Media post"}
+                    {post.targets[0]?.mediaIds[0] && (
+                      <MediaThumb
+                        clientId={clientId}
+                        asset={{
+                          id: post.targets[0].mediaIds[0],
+                          name: "",
+                          mime_type: "image/",
+                        }}
+                      />
+                    )}
+                    <span>{post.caption.slice(0, 100) || "Media post"}</span>
                   </button>
                 </td>
                 <td>

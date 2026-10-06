@@ -19,6 +19,7 @@ import {
   LogOut,
   UserRoundCog,
 } from "lucide-react";
+import { MediaThumb } from "./media";
 import { Composer } from "./composer";
 import { PasswordSettings } from "./password-settings";
 import { Calendar } from "./calendar";
@@ -685,6 +686,8 @@ export function Hub() {
                       mutate={mutate}
                       busy={busy}
                       error={error}
+                      reload={load}
+                      onError={setError}
                       onCreated={(p, reviewUrl) => {
                         setEditing(undefined);
                         setView("Posts");
@@ -999,6 +1002,23 @@ export function Hub() {
                     <Badge status={t.status} />
                   </div>
                   <p>{t.caption}</p>
+                  {!!t.mediaIds.length && data?.clientId && (
+                    <div className="target-media">
+                      {t.mediaIds.map((id) => (
+                        <MediaThumb
+                          key={id}
+                          clientId={data.clientId!}
+                          asset={
+                            data.media.find((m) => m.id === id) ?? {
+                              id,
+                              name: "",
+                              mime_type: "image/",
+                            }
+                          }
+                        />
+                      ))}
+                    </div>
+                  )}
                   {t.errorCode && <p className="alert">{t.errorCode}</p>}
                 </div>
               ))}
