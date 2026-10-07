@@ -559,7 +559,13 @@ export async function POST(request: Request) {
           await prepareMediaUpload(c, {
             name: z.string().trim().min(1).max(200).parse(body.name),
             mimeType: z
-              .enum(["image/png", "image/jpeg", "image/webp", "video/mp4"])
+              .enum([
+                "image/png",
+                "image/jpeg",
+                "image/webp",
+                "video/mp4",
+                "video/quicktime",
+              ])
               .parse(body.mimeType),
             sizeBytes: z
               .number()

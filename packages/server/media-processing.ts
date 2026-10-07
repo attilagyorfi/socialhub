@@ -17,12 +17,16 @@ import { transaction } from "./transaction";
 
 const run = promisify(execFile);
 const MAX_VIDEO_SECONDS = 600;
+const MAX_OUTPUT_SIDE = 1920;
+const MAX_PROCESSED_BYTES = 100 * 1024 * 1024;
+const TRANSCODE_TIMEOUT_MS = 10 * 60_000;
 
-type Probe = {
+export type Probe = {
   format?: { format_name?: string; duration?: string };
   streams?: {
     codec_type?: string;
     codec_name?: string;
+    pix_fmt?: string;
     width?: number;
     height?: number;
     duration?: string;
@@ -41,7 +45,10 @@ function detectedMime(data: Buffer) {
     data.toString("ascii", 8, 12) === "WEBP"
   )
     return "image/webp";
-  if (data.toString("ascii", 4, 8) === "ftyp") return "video/mp4";
+  if (data.toString("ascii", 4, 8) === "ftyp")
+    return data.toString("ascii", 8, 12) === "qt  "
+      ? "video/quicktime"
+      : "video/mp4";
 }
 
 async function download(key: string) {
@@ -55,58 +62,146 @@ async function download(key: string) {
   return bytes;
 }
 
-async function inspectVideo(data: Buffer) {
+async function probe(file: string) {
+  try {
+    const { stdout } = await run(
+      process.env.FFPROBE_PATH || "ffprobe",
+      [
+        "-v",
+        "error",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+        file,
+      ],
+      { maxBuffer: 1024 * 1024 },
+    );
+    return JSON.parse(stdout) as Probe;
+  } catch {
+    throw new AppError(
+      422,
+      "INVALID_VIDEO",
+      "The video is damaged or unsupported.",
+    );
+  }
+}
+
+function videoFacts(parsed: Probe) {
+  const video = parsed.streams?.find((stream) => stream.codec_type === "video");
+  const audio = parsed.streams?.find((stream) => stream.codec_type === "audio");
+  return {
+    video,
+    audio,
+    width: Number(video?.width ?? 0),
+    height: Number(video?.height ?? 0),
+    duration: Number(video?.duration ?? parsed.format?.duration ?? 0),
+  };
+}
+
+// Phones record HEVC, 10-bit or 4K video that Meta's Reels pipeline and many
+// browsers handle poorly; such uploads are re-encoded to H.264/AAC MP4.
+export function needsTranscode(parsed: Probe) {
+  const { video, audio, width, height } = videoFacts(parsed);
+  return (
+    !parsed.format?.format_name?.split(",").includes("mp4") ||
+    video?.codec_name !== "h264" ||
+    (video?.pix_fmt !== undefined && video.pix_fmt !== "yuv420p") ||
+    Math.max(width, height) > MAX_OUTPUT_SIDE ||
+    (audio !== undefined && audio.codec_name !== "aac")
+  );
+}
+
+export async function inspectVideo(data: Buffer, forceTranscode = false) {
   const directory = await mkdtemp(join(tmpdir(), "g2a-media-"));
   const input = join(directory, "input.mp4");
+  const output = join(directory, "output.mp4");
   const poster = join(directory, "poster.jpg");
   try {
     await writeFile(input, data);
-    let parsed: Probe;
-    try {
-      const { stdout } = await run(
-        process.env.FFPROBE_PATH || "ffprobe",
-        [
-          "-v",
-          "error",
-          "-print_format",
-          "json",
-          "-show_format",
-          "-show_streams",
-          input,
-        ],
-        { maxBuffer: 1024 * 1024 },
-      );
-      parsed = JSON.parse(stdout) as Probe;
-    } catch {
-      throw new AppError(
-        422,
-        "INVALID_VIDEO",
-        "The video is damaged or unsupported.",
-      );
-    }
-    const video = parsed.streams?.find(
-      (stream) => stream.codec_type === "video",
-    );
-    const width = Number(video?.width ?? 0);
-    const height = Number(video?.height ?? 0);
-    const duration = Number(video?.duration ?? parsed.format?.duration ?? 0);
+    const parsed = await probe(input);
+    const facts = videoFacts(parsed);
     if (
-      !parsed.format?.format_name?.split(",").some((name) => name === "mp4") ||
-      video?.codec_name !== "h264" ||
-      !width ||
-      !height ||
-      width > 4096 ||
-      height > 4096 ||
-      width * height > 25_000_000 ||
-      !Number.isFinite(duration) ||
-      duration <= 0 ||
-      duration > MAX_VIDEO_SECONDS
+      !parsed.format?.format_name
+        ?.split(",")
+        .some((name) => name === "mp4" || name === "mov") ||
+      !facts.video ||
+      !facts.width ||
+      !facts.height ||
+      facts.width > 4096 ||
+      facts.height > 4096 ||
+      facts.width * facts.height > 25_000_000 ||
+      !Number.isFinite(facts.duration) ||
+      facts.duration <= 0 ||
+      facts.duration > MAX_VIDEO_SECONDS
     )
       throw new AppError(
         422,
         "INVALID_VIDEO",
-        "Use an H.264 MP4 up to 10 minutes and 4096 pixels per side.",
+        "Use an MP4 or MOV video up to 10 minutes and 4096 pixels per side.",
       );
+    let file = input;
+    let result = data;
+    let final = facts;
+    if (forceTranscode || needsTranscode(parsed)) {
+      try {
+        await run(
+          process.env.FFMPEG_PATH || "ffmpeg",
+          [
+            "-v",
+            "error",
+            "-i",
+            input,
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a:0?",
+            "-vf",
+            `scale='if(gte(iw,ih),min(${MAX_OUTPUT_SIDE},iw),-2)':'if(gte(iw,ih),-2,min(${MAX_OUTPUT_SIDE},ih))'`,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-maxrate",
+            "10M",
+            "-bufsize",
+            "20M",
+            "-profile:v",
+            "high",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-ar",
+            "48000",
+            "-movflags",
+            "+faststart",
+            "-y",
+            output,
+          ],
+          { maxBuffer: 1024 * 1024, timeout: TRANSCODE_TIMEOUT_MS },
+        );
+      } catch {
+        throw new AppError(
+          422,
+          "INVALID_VIDEO",
+          "The video could not be converted to H.264.",
+        );
+      }
+      file = output;
+      result = await readFile(output);
+      if (result.length > MAX_PROCESSED_BYTES)
+        throw new AppError(
+          422,
+          "FILE_SIZE",
+          "The converted video exceeds 100 MB. Upload a shorter video.",
+        );
+      final = videoFacts(await probe(output));
+    }
     try {
       await run(
         process.env.FFMPEG_PATH || "ffmpeg",
@@ -114,7 +209,7 @@ async function inspectVideo(data: Buffer) {
           "-v",
           "error",
           "-i",
-          input,
+          file,
           "-frames:v",
           "1",
           "-vf",
@@ -134,10 +229,12 @@ async function inspectVideo(data: Buffer) {
       );
     }
     return {
-      width,
-      height,
-      duration,
+      width: final.width,
+      height: final.height,
+      duration: final.duration,
       preview: await readFile(poster),
+      data: result,
+      transcoded: result !== data,
     };
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -218,6 +315,7 @@ export async function processMedia(jobId: string) {
       height: number;
       duration: number | null;
       preview: Buffer;
+      data?: Buffer;
     };
     if (asset.mime_type.startsWith("image/")) {
       const dimensions = await inspectImage(data);
@@ -231,16 +329,23 @@ export async function processMedia(jobId: string) {
           .toBuffer(),
       };
     } else {
-      const video = await inspectVideo(data);
+      // MOV is always rewritten as MP4 so it plays everywhere.
+      const video = await inspectVideo(
+        data,
+        asset.mime_type === "video/quicktime",
+      );
       metadata = { ...video };
     }
 
+    const stored = metadata.data ?? data;
+    const storedMime =
+      asset.mime_type === "video/quicktime" ? "video/mp4" : asset.mime_type;
     await storageClient().send(
       new PutObjectCommand({
         Bucket: mediaBucket(),
         Key: finalKey,
-        Body: data,
-        ContentType: asset.mime_type,
+        Body: stored,
+        ContentType: storedMime,
       }),
     );
     await storageClient().send(
@@ -253,13 +358,15 @@ export async function processMedia(jobId: string) {
     );
     await transaction(async (tx) => {
       await tx.query(
-        "UPDATE media_assets SET object_key=$1,preview_object_key=$2,width=$3,height=$4,duration_seconds=$5,status='READY',processing_error=NULL,updated_at=now() WHERE id=$6 AND status='PROCESSING'",
+        "UPDATE media_assets SET object_key=$1,preview_object_key=$2,width=$3,height=$4,duration_seconds=$5,size_bytes=$6,mime_type=$7,status='READY',processing_error=NULL,updated_at=now() WHERE id=$8 AND status='PROCESSING'",
         [
           finalKey,
           previewKey,
           metadata.width,
           metadata.height,
           metadata.duration,
+          stored.length,
+          storedMime,
           asset.id,
         ],
       );
@@ -278,6 +385,9 @@ export async function processMedia(jobId: string) {
             width: metadata.width,
             height: metadata.height,
             durationSeconds: metadata.duration,
+            ...("transcoded" in metadata && metadata.transcoded
+              ? { transcoded: true }
+              : {}),
           }),
         ],
       );

@@ -19,6 +19,8 @@ export const MEDIA_MIME_TYPES = [
   "image/jpeg",
   "image/webp",
   "video/mp4",
+  // iPhone videos; the worker converts them to MP4.
+  "video/quicktime",
 ] as const;
 
 export function storageClient(publicEndpoint = false) {
@@ -110,7 +112,7 @@ function validateUpload(name: string, mimeType: string, sizeBytes: number) {
     throw new AppError(
       422,
       "FILE_TYPE",
-      "Upload a PNG, JPEG, WebP image or MP4 video.",
+      "Upload a PNG, JPEG, WebP image or an MP4/MOV video.",
     );
 }
 

@@ -9,6 +9,7 @@ export const MEDIA_TYPES = [
   "image/jpeg",
   "image/webp",
   "video/mp4",
+  "video/quicktime",
 ];
 const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
 

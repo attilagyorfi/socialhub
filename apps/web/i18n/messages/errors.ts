@@ -145,7 +145,7 @@ const hu = {
   FILE_SIZE:
     "A fájl mérete nem megfelelő (1 bájt és 20 MB között kell lennie).",
   FILE_TYPE:
-    "A fájltípus nem támogatott. PNG, JPEG, WebP képet vagy MP4 videót tölts fel.",
+    "A fájltípus nem támogatott. PNG, JPEG, WebP képet vagy MP4/MOV videót tölts fel.",
   FORBIDDEN: "Ehhez a művelethez nincs jogosultságod.",
   INVALID_ACCOUNT: "Ennek az ügyfélnek egy csatlakoztatott fiókját válaszd.",
   INVALID_CURSOR: "A posztlista lapozása elavult. Kezdd újra az első oldalról.",
@@ -158,7 +158,7 @@ const hu = {
   INVALID_STATE: "Ez a művelet a poszt jelenlegi állapotában nem végezhető el.",
   INVALID_TIME: "Válassz érvényes, jövőbeli időpontot.",
   INVALID_VIDEO:
-    "A videó sérült vagy nem támogatott. H.264 MP4, legfeljebb 10 perc és oldalanként 4096 pixel.",
+    "A videó sérült vagy nem támogatott. MP4 vagy MOV, legfeljebb 10 perc és oldalanként 4096 pixel.",
   INVALID_WORKFLOW:
     "Válassz belső, ügyféloldali, vagy belső majd ügyféloldali jóváhagyást.",
   INVITATION_INVALID: "Ez a meghívó érvénytelen vagy lejárt.",

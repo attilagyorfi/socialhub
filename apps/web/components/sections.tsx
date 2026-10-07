@@ -410,7 +410,7 @@ export function Library({
           {t("sections.library.choose")}
           <input
             type="file"
-            accept="image/png,image/jpeg,image/webp,video/mp4"
+            accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
             disabled={uploading}
             onChange={(e) => {
               if (e.target.files?.[0]) void upload(e.target.files[0]);
