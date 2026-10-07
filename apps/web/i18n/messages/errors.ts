@@ -55,6 +55,7 @@ const en = {
     "Invalid Facebook Login for Business configuration ID.",
   META_MEDIA_NOT_PUBLIC: "Meta cannot download media from a local storage URL.",
   META_MEDIA_REJECTED: "Instagram could not process the media.",
+  META_MEDIA_PROCESSING: "The media is still being processed.",
   META_MEDIA_TOO_LARGE:
     "The image cannot be reduced below the Instagram 8 MB limit.",
   META_MEDIA_UNSUPPORTED: "One media attachment per post is supported.",
@@ -176,7 +177,9 @@ const hu = {
     "Érvénytelen Facebook Login for Business konfigurációs azonosító (META_LOGIN_CONFIG_ID).",
   META_MEDIA_NOT_PUBLIC:
     "A Meta nem tud letölteni helyi tárhelyről. Állíts be nyilvános S3-végpontot.",
-  META_MEDIA_REJECTED: "Az Instagram nem tudta feldolgozni a médiát.",
+  META_MEDIA_REJECTED: "A Meta nem tudta feldolgozni a médiát.",
+  META_MEDIA_PROCESSING:
+    "A Meta még feldolgozza a videót. A közzétételt automatikusan újrapróbáljuk.",
   META_MEDIA_TOO_LARGE:
     "A képet nem sikerült az Instagram 8 MB-os korlátja alá csökkenteni.",
   META_MEDIA_UNSUPPORTED:

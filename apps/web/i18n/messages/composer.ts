@@ -61,6 +61,7 @@ const en = {
   "validation.mediaNotReady": "Media is not ready.",
   "validation.mediaTooLarge": "Media exceeds the MVP 100 MB upload limit.",
   "validation.video": "Video is not supported on this network.",
+  "validation.reelTooShort": "Instagram Reels must be at least 3 seconds long.",
   "validation.multiMedia": "Multiple media attachments are not supported.",
   "reviewer.label": "Internal reviewer",
   "reviewer.choose": "Choose a reviewer",
@@ -148,6 +149,8 @@ const hu = {
   "validation.mediaTooLarge":
     "A média meghaladja a 100 MB-os feltöltési korlátot.",
   "validation.video": "Ez a hálózat nem támogatja a videót.",
+  "validation.reelTooShort":
+    "Instagram Reelhez legalább 3 másodperces videó kell.",
   "validation.multiMedia": "Több csatolmány nem támogatott.",
   "reviewer.label": "Belső jóváhagyó",
   "reviewer.choose": "Válassz jóváhagyót",

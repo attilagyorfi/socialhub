@@ -62,6 +62,8 @@ const VALIDATION: Record<string, MessageKey> = {
   "Media exceeds the MVP 100 MB upload limit.":
     "composer.validation.mediaTooLarge",
   "Video is not supported on this network.": "composer.validation.video",
+  "Instagram Reels must be at least 3 seconds long.":
+    "composer.validation.reelTooShort",
   "Multiple media attachments are not supported.":
     "composer.validation.multiMedia",
 };

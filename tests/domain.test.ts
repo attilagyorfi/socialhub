@@ -117,3 +117,25 @@ describe("mock provider reliability", () => {
     expect(stored.size).toBe(0);
   });
 });
+
+describe("video rules", () => {
+  const reel = (duration_seconds: number) => ({
+    caption: "Clip",
+    media: [
+      {
+        id: "v",
+        mime_type: "video/mp4",
+        size_bytes: 10,
+        status: "READY",
+        duration_seconds,
+      },
+    ],
+  });
+  it("refuses Instagram Reels shorter than three seconds", () => {
+    expect(validatePost("instagram", reel(2.5))).toContain(
+      "Instagram Reels must be at least 3 seconds long.",
+    );
+    expect(validatePost("instagram", reel(3))).toEqual([]);
+    expect(validatePost("facebook", reel(2.5))).toEqual([]);
+  });
+});
