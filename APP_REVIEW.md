@@ -2,19 +2,18 @@
 
 Ez a dokumentum a G2A Social Hub Meta-alkalmazásának App Review-beadásához készült. A Meta felületének gombjait, menüpontjait és az engedélyek nevét angolul hagytuk, mert a Developer Dashboard és a beadási űrlap is angol.
 
-> A jogi oldalak (`/legal/privacy`, `/legal/terms`, `/legal/deletion`) **tervezetek**; éles indulás előtt jogi ellenőrzés szükséges. Az oldalak tetején látható „Draft / Tervezet” figyelmeztetés a beadáskor is maradhat, de a szögletes zárójeles helykitöltőket előbb ki kell tölteni.
+> A jogi oldalak (`/legal/privacy`, `/legal/terms`, `/legal/deletion`) **tervezetek**; éles indulás előtt jogi ellenőrzés szükséges. Az oldalak tetején látható „Draft / Tervezet” figyelmeztetés a beadáskor is maradhat.
 
 ---
 
-## 1. Kitöltendő adatok
+## 1. Cégadatok
 
-A következő helykitöltők szerepelnek a jogi szövegekben (`apps/web/i18n/messages/legal.ts`, HU és EN változat). Beadás előtt valós adattal kell helyettesíteni:
+A jogi szövegekben (`apps/web/i18n/messages/legal.ts`, HU és EN) szereplő adatok a cégnyilvántartás szerint:
 
-| Helykitöltő (HU) | Helykitöltő (EN) | Hol szerepel |
-|---|---|---|
-| `[székhely]` | `[registered office]` | Adatkezelési tájékoztató 1. pont, Felhasználási feltételek 1. pont |
-| `[cégjegyzékszám]` | `[company registration number]` | ugyanott |
-| `[adószám]` | `[tax number]` | ugyanott |
+- G2A Marketing Szolgáltató Betéti Társaság (G2A Marketing Bt.)
+- Székhely: 7625 Pécs, Péter utca 1. földszint 1.
+- Cégjegyzékszám: Cg. 02-06-075160 (Pécsi Törvényszék Cégbírósága)
+- Adószám: 32070325-1-02
 
 Ebben a dokumentumban még:
 

@@ -12,7 +12,7 @@ const en = {
   // ---------------------------------------------------------------- Privacy
   "privacy.s1.title": "1. Data controller",
   "privacy.s1.body":
-    'This Privacy Policy explains how personal data is processed in G2A Social Hub (the "Service").\n\nThe data controller is:\n• G2A Marketing Bt. (Hungarian limited partnership)\n• Registered office: [registered office]\n• Company registration number: [company registration number]\n• Tax number: [tax number]\n• Email: info@g2amarketing.hu\n• Phone: +36 30 190 2575\n\nFor any question about this policy or your personal data, please contact us at info@g2amarketing.hu.',
+    'This Privacy Policy explains how personal data is processed in G2A Social Hub (the "Service").\n\nThe data controller is:\n• G2A Marketing Szolgáltató Betéti Társaság (G2A Marketing Bt., Hungarian limited partnership)\n• Registered office: 7625 Pécs, Péter utca 1. földszint 1., Hungary\n• Company registration number: 02-06-075160 (Court of Registration of the Pécs Regional Court)\n• Tax number: 32070325-1-02\n• Email: info@g2amarketing.hu\n• Phone: +36 30 190 2575\n\nFor any question about this policy or your personal data, please contact us at info@g2amarketing.hu.',
 
   "privacy.s2.title": "2. About the Service",
   "privacy.s2.body":
@@ -65,7 +65,7 @@ const en = {
   // ------------------------------------------------------------------ Terms
   "terms.s1.title": "1. Provider and scope",
   "terms.s1.body":
-    'G2A Social Hub (the "Service") is operated by G2A Marketing Bt. (registered office: [registered office]; company registration number: [company registration number]; tax number: [tax number]; email: info@g2amarketing.hu; phone: +36 30 190 2575) (the "Provider").\n\nThese Terms of Use govern the use of the Service. The Service is provided to the Provider\'s agency staff and to its clients in connection with a separate service agreement between the Provider and the client. If these Terms conflict with that agreement, the agreement prevails.',
+    'G2A Social Hub (the "Service") is operated by G2A Marketing Bt. (registered office: 7625 Pécs, Péter utca 1. földszint 1., Hungary; company registration number: 02-06-075160 (Court of Registration of the Pécs Regional Court); tax number: 32070325-1-02; email: info@g2amarketing.hu; phone: +36 30 190 2575) (the "Provider").\n\nThese Terms of Use govern the use of the Service. The Service is provided to the Provider\'s agency staff and to its clients in connection with a separate service agreement between the Provider and the client. If these Terms conflict with that agreement, the agreement prevails.',
 
   "terms.s2.title": "2. Accounts and access",
   "terms.s2.body":
@@ -148,7 +148,7 @@ const hu = {
   // ---------------------------------------------------------------- Privacy
   "privacy.s1.title": "1. Az adatkezelő",
   "privacy.s1.body":
-    "Ez a tájékoztató bemutatja, hogyan kezeli a G2A Social Hub szolgáltatás (a továbbiakban: Szolgáltatás) a személyes adatokat.\n\nAz adatkezelő:\n• G2A Marketing Bt.\n• Székhely: [székhely]\n• Cégjegyzékszám: [cégjegyzékszám]\n• Adószám: [adószám]\n• E-mail: info@g2amarketing.hu\n• Telefon: +36 30 190 2575\n\nA tájékoztatóval vagy a személyes adatok kezelésével kapcsolatos kérdések az info@g2amarketing.hu címre küldhetők.",
+    "Ez a tájékoztató bemutatja, hogyan kezeli a G2A Social Hub szolgáltatás (a továbbiakban: Szolgáltatás) a személyes adatokat.\n\nAz adatkezelő:\n• G2A Marketing Szolgáltató Betéti Társaság (G2A Marketing Bt.)\n• Székhely: 7625 Pécs, Péter utca 1. földszint 1.\n• Cégjegyzékszám: Cg. 02-06-075160 (Pécsi Törvényszék Cégbírósága)\n• Adószám: 32070325-1-02\n• E-mail: info@g2amarketing.hu\n• Telefon: +36 30 190 2575\n\nA tájékoztatóval vagy a személyes adatok kezelésével kapcsolatos kérdések az info@g2amarketing.hu címre küldhetők.",
 
   "privacy.s2.title": "2. A Szolgáltatásról",
   "privacy.s2.body":
@@ -201,7 +201,7 @@ const hu = {
   // ------------------------------------------------------------------ Terms
   "terms.s1.title": "1. A Szolgáltató és a feltételek hatálya",
   "terms.s1.body":
-    "A G2A Social Hub szolgáltatást (a továbbiakban: Szolgáltatás) a G2A Marketing Bt. (székhely: [székhely]; cégjegyzékszám: [cégjegyzékszám]; adószám: [adószám]; e-mail: info@g2amarketing.hu; telefon: +36 30 190 2575) (a továbbiakban: Szolgáltató) üzemelteti.\n\nE Felhasználási feltételek a Szolgáltatás használatát szabályozzák. A Szolgáltatást a Szolgáltató az ügynökségi munkatársai és ügyfelei részére, a Szolgáltató és az ügyfél között létrejött külön szolgáltatási szerződéshez kapcsolódóan nyújtja. Ha e feltételek és a szerződés között eltérés van, a szerződés rendelkezései az irányadók.",
+    "A G2A Social Hub szolgáltatást (a továbbiakban: Szolgáltatás) a G2A Marketing Bt. (székhely: 7625 Pécs, Péter utca 1. földszint 1.; cégjegyzékszám: Cg. 02-06-075160 (Pécsi Törvényszék Cégbírósága); adószám: 32070325-1-02; e-mail: info@g2amarketing.hu; telefon: +36 30 190 2575) (a továbbiakban: Szolgáltató) üzemelteti.\n\nE Felhasználási feltételek a Szolgáltatás használatát szabályozzák. A Szolgáltatást a Szolgáltató az ügynökségi munkatársai és ügyfelei részére, a Szolgáltató és az ügyfél között létrejött külön szolgáltatási szerződéshez kapcsolódóan nyújtja. Ha e feltételek és a szerződés között eltérés van, a szerződés rendelkezései az irányadók.",
 
   "terms.s2.title": "2. Fiókok és hozzáférés",
   "terms.s2.body":
