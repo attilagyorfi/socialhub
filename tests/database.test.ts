@@ -23,6 +23,7 @@ beforeAll(async () => {
     "017_social_account_cascade.sql",
     "018_publish_reconciliation.sql",
     "019_locales.sql",
+    "020_meta_compliance.sql",
   ])
     await db.exec(
       await readFile(
