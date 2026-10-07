@@ -858,10 +858,17 @@ async function upsertMetaAccount(
     credentialScope(c.organizationId, c.clientId, account.id),
   );
   await tx.query(
-    `INSERT INTO social_credentials(organization_id,client_id,social_account_id,encrypted_value,expires_at)
-     VALUES($1,$2,$3,$4,$5)
-     ON CONFLICT(social_account_id) DO UPDATE SET encrypted_value=excluded.encrypted_value,expires_at=excluded.expires_at,updated_at=now()`,
-    [c.organizationId, c.clientId, account.id, sealed, input.expiresAt ?? null],
+    `INSERT INTO social_credentials(organization_id,client_id,social_account_id,encrypted_value,expires_at,grant_hash)
+     VALUES($1,$2,$3,$4,$5,$6)
+     ON CONFLICT(social_account_id) DO UPDATE SET encrypted_value=excluded.encrypted_value,expires_at=excluded.expires_at,grant_hash=excluded.grant_hash,updated_at=now()`,
+    [
+      c.organizationId,
+      c.clientId,
+      account.id,
+      sealed,
+      input.expiresAt ?? null,
+      metaGrantHash(input.credential.grantId),
+    ],
   );
   await audit(tx, c, "social_account.connected", account.id, {
     platform: input.platform,
@@ -1328,6 +1335,76 @@ export async function publishMeta(input: {
   return { remoteId: concurrent };
 }
 
+export const metaGrantHash = (grantId: string) =>
+  hashToken(`meta-grant:${grantId}`);
+
+// Marks accounts disconnected and deletes their tokens and pending work.
+// Callers have already checked that the accounts belong to one Meta grant.
+export async function detachMetaAccounts(
+  tx: import("pg").PoolClient,
+  ids: string[],
+) {
+  await tx.query(
+    "UPDATE social_accounts SET status='DISCONNECTED',token_health='REVOKED',updated_at=now() WHERE id=ANY($1::uuid[])",
+    [ids],
+  );
+  await tx.query(
+    `DELETE FROM analytics_sync_jobs
+     WHERE social_account_id=ANY($1::uuid[]) AND status<>'DONE'`,
+    [ids],
+  );
+  await tx.query(
+    `DELETE FROM publish_reconciliation_jobs
+     WHERE status IN ('PENDING','RETRY','RUNNING')
+       AND publish_job_id IN (
+         SELECT j.id FROM publish_jobs j
+         JOIN post_targets t ON t.id=j.target_id
+         WHERE t.social_account_id=ANY($1::uuid[])
+       )`,
+    [ids],
+  );
+  await tx.query(
+    "DELETE FROM social_credentials WHERE social_account_id=ANY($1::uuid[])",
+    [ids],
+  );
+}
+
+// Accounts connected through one Meta user's grant, in any workspace.
+// Credentials stored before grant_hash existed are matched by decryption.
+export async function findMetaGrantAccounts(grantId: string) {
+  const hash = metaGrantHash(grantId);
+  const rows = (
+    await pool.query(
+      `SELECT a.id,a.organization_id,a.client_id,c.encrypted_value,c.grant_hash
+       FROM social_accounts a JOIN social_credentials c ON c.social_account_id=a.id
+       WHERE a.mode='direct' AND a.platform IN ('facebook','instagram')
+         AND a.deleted_at IS NULL AND (c.grant_hash=$1 OR c.grant_hash IS NULL)`,
+      [hash],
+    )
+  ).rows;
+  return rows
+    .filter((row) => {
+      if (row.grant_hash) return true;
+      try {
+        return (
+          decodeCredential(
+            row.encrypted_value,
+            row.organization_id,
+            row.client_id,
+            row.id,
+          ).grantId === grantId
+        );
+      } catch {
+        return false;
+      }
+    })
+    .map((row) => ({
+      id: row.id as string,
+      organizationId: row.organization_id as string,
+      clientId: row.client_id as string,
+    }));
+}
+
 export async function disconnectMeta(c: Context, accountId: string) {
   const selected = await loadMetaCredential(
     c.organizationId,
@@ -1370,29 +1447,7 @@ export async function disconnectMeta(c: Context, accountId: string) {
     })
     .map((row) => row.id);
   await transaction(async (tx) => {
-    await tx.query(
-      "UPDATE social_accounts SET status='DISCONNECTED',token_health='REVOKED',updated_at=now() WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[])",
-      [c.organizationId, c.clientId, ids],
-    );
-    await tx.query(
-      `DELETE FROM analytics_sync_jobs
-       WHERE social_account_id=ANY($1::uuid[]) AND status<>'DONE'`,
-      [ids],
-    );
-    await tx.query(
-      `DELETE FROM publish_reconciliation_jobs
-       WHERE status IN ('PENDING','RETRY','RUNNING')
-         AND publish_job_id IN (
-           SELECT j.id FROM publish_jobs j
-           JOIN post_targets t ON t.id=j.target_id
-           WHERE t.social_account_id=ANY($1::uuid[])
-         )`,
-      [ids],
-    );
-    await tx.query(
-      "DELETE FROM social_credentials WHERE organization_id=$1 AND client_id=$2 AND social_account_id=ANY($3::uuid[])",
-      [c.organizationId, c.clientId, ids],
-    );
+    await detachMetaAccounts(tx, ids);
     for (const id of ids)
       await audit(tx, c, "social_account.disconnected", id, {
         provider: "meta",
