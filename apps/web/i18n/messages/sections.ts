@@ -66,7 +66,7 @@ const en = {
   "brand.save": "Save brand profile",
   "library.uploading": "Uploading…",
   "library.drop": "Drop a file into your media library",
-  "library.formats": "PNG, JPEG, WebP or MP4 · up to 20 MB per file",
+  "library.formats": "PNG, JPEG, WebP, MP4 or MOV · up to 20 MB per file",
   "library.choose": "Choose file",
   "library.search": "Search media",
   "library.searchPlaceholder": "Search your media…",
@@ -148,7 +148,8 @@ const hu = {
   "brand.save": "Márkaprofil mentése",
   "library.uploading": "Feltöltés…",
   "library.drop": "Húzz ide egy fájlt a médiatárba",
-  "library.formats": "PNG, JPEG, WebP vagy MP4 · fájlonként legfeljebb 20 MB",
+  "library.formats":
+    "PNG, JPEG, WebP, MP4 vagy MOV · fájlonként legfeljebb 20 MB",
   "library.choose": "Fájl kiválasztása",
   "library.search": "Keresés a médiában",
   "library.searchPlaceholder": "Keress a médiád között…",
