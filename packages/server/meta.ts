@@ -182,6 +182,11 @@ export type MetaPublishedContent = {
   permalink?: string;
 };
 
+// Video processing waits: about 2 minutes for Facebook, 5 for Instagram.
+const VIDEO_CHECK_INTERVAL_MS = 5000;
+const FACEBOOK_VIDEO_CHECKS = 24;
+const INSTAGRAM_VIDEO_CHECKS = 60;
+
 export class MetaGraphClient {
   private readonly base: string;
 
@@ -477,7 +482,60 @@ export class MetaGraphClient {
       token: accessToken,
       delivery: true,
       params: { file_url: mediaUrl!, description: content.caption },
-    });
+    }).then(async (video) =>
+      video.id
+        ? {
+            id:
+              (await this.facebookVideoPostId(pageId, accessToken, video.id)) ??
+              video.id,
+          }
+        : video,
+    );
+  }
+
+  // A Facebook video only gets its feed post once processing finishes, and
+  // insights work on that post id ("{page}_{post}"), not on the video id.
+  // Returns undefined while the video is still processing.
+  async facebookVideoPostId(
+    pageId: string,
+    accessToken: string,
+    videoId: string,
+    checks = FACEBOOK_VIDEO_CHECKS,
+  ) {
+    for (let check = 0; check < checks; check++) {
+      if (check) await this.wait(VIDEO_CHECK_INTERVAL_MS);
+      let video: {
+        post_id?: string;
+        status?: {
+          video_status?: string;
+          processing_phase?: { status?: string };
+        };
+      };
+      try {
+        video = await this.request(videoId, {
+          token: accessToken,
+          params: { fields: "status,post_id" },
+        });
+      } catch {
+        // The upload already succeeded; a failed status read must not turn
+        // into a retry that would post the video twice.
+        return undefined;
+      }
+      if (video.post_id)
+        return video.post_id.includes("_")
+          ? video.post_id
+          : `${pageId}_${video.post_id}`;
+      if (
+        video.status?.video_status === "error" ||
+        video.status?.processing_phase?.status === "error"
+      )
+        throw new AppError(
+          422,
+          "META_MEDIA_REJECTED",
+          "Facebook could not process the video.",
+        );
+    }
+    return undefined;
   }
 
   async publishInstagram(
@@ -508,7 +566,9 @@ export class MetaGraphClient {
         "META_RESPONSE_INVALID",
         "Meta did not return an Instagram container.",
       );
-    for (let check = 0; check < 10; check++) {
+    // Reels can take minutes to process; images are ready almost at once.
+    const checks = video ? INSTAGRAM_VIDEO_CHECKS : 10;
+    for (let check = 0; check < checks; check++) {
       const status = await this.request<{
         status_code?: string;
         status?: string;
@@ -523,13 +583,15 @@ export class MetaGraphClient {
           "META_MEDIA_REJECTED",
           "Instagram could not process the media.",
         );
-      if (check === 9)
+      // Nothing is published before media_publish, so a slow container is
+      // safe to retry from scratch.
+      if (check === checks - 1)
         throw new AppError(
-          409,
-          "META_DELIVERY_UNCERTAIN",
-          "Instagram media processing did not finish in time. Review the account before retrying.",
+          503,
+          "META_MEDIA_PROCESSING",
+          "Instagram is still processing the media. Publishing will be retried.",
         );
-      await this.wait(1000);
+      await this.wait(video ? VIDEO_CHECK_INTERVAL_MS : 1000);
     }
     return this.request<{ id?: string }>(`${instagramId}/media_publish`, {
       method: "POST",
@@ -942,11 +1004,7 @@ export async function verifyMetaAccountAccess(
       platform === "facebook" ? "id,name" : "id,username,name",
     ),
     graph.getPermissions(credential.userAccessToken),
-    graph.getPublishedContent(
-      platform,
-      objectId,
-      credential.pageAccessToken,
-    ),
+    graph.getPublishedContent(platform, objectId, credential.pageAccessToken),
   ]);
   const granted = new Set(
     permissions
@@ -985,7 +1043,11 @@ function normalizedPublishedCaption(value: string) {
 
 export function matchMetaPublishedContent(
   candidates: MetaPublishedContent[],
-  input: { caption: string; startedAt: Date | string; finishedAt: Date | string },
+  input: {
+    caption: string;
+    startedAt: Date | string;
+    finishedAt: Date | string;
+  },
 ) {
   const start = new Date(input.startedAt).getTime() - 5 * 60_000;
   const end = new Date(input.finishedAt).getTime() + 5 * 60_000;
@@ -1105,6 +1167,23 @@ export async function fetchMetaPostMetrics(
   );
   const platform = account.platform as "facebook" | "instagram";
   const token = credential.pageAccessToken;
+  // Videos published before processing finished carry only the video id.
+  let remoteId = input.remoteId;
+  if (platform === "facebook" && !remoteId.includes("_")) {
+    const postId = await graph.facebookVideoPostId(
+      credential.pageId,
+      token,
+      remoteId,
+      1,
+    );
+    if (!postId)
+      throw new AppError(
+        503,
+        "META_MEDIA_PROCESSING",
+        "Facebook is still processing the video.",
+      );
+    remoteId = postId;
+  }
   const fieldsQuery =
     platform === "facebook"
       ? "likes.limit(0).summary(true),comments.limit(0).summary(true),shares"
@@ -1114,10 +1193,11 @@ export async function fetchMetaPostMetrics(
       ? ["post_media_view", "post_total_media_view_unique"]
       : ["views", "reach", "likes", "comments", "shares", "saved"];
   const [fields, insights] = await Promise.all([
-    graph.getFields<MetaPostFields>(input.remoteId, token, fieldsQuery),
-    graph.getInsights(input.remoteId, token, metrics),
+    graph.getFields<MetaPostFields>(remoteId, token, fieldsQuery),
+    graph.getInsights(remoteId, token, metrics),
   ]);
   return {
+    remoteId,
     raw: { fields, insights, mapping: "meta-media-views-2026-06" },
     normalized: normalizeMetaPostMetrics(platform, fields, insights),
   };

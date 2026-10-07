@@ -221,6 +221,148 @@ describe("Meta Graph publishing", () => {
     ).resolves.toEqual({ id: "page-1_post-1" });
   });
 
+  const videoContent = {
+    caption: "Clip",
+    media: [
+      {
+        id: "v",
+        mime_type: "video/mp4",
+        size_bytes: 10,
+        status: "READY" as const,
+        object_key: "ready/v",
+      },
+    ],
+  };
+
+  it("waits for a Facebook video to become a feed post and records the post id", async () => {
+    const paths: string[] = [];
+    let checks = 0;
+    const graph = new MetaGraphClient(
+      config,
+      fakeFetch((url) => {
+        paths.push(url.pathname);
+        if (url.pathname.endsWith("/page-1/videos")) return { id: "video-1" };
+        expect(url.searchParams.get("fields")).toBe("status,post_id");
+        return ++checks < 3
+          ? { status: { video_status: "processing" } }
+          : { post_id: "post-9", status: { video_status: "ready" } };
+      }),
+      async () => {},
+    );
+    await expect(
+      graph.publishFacebook(
+        "page-1",
+        "token",
+        videoContent,
+        "https://media.example/clip.mp4",
+      ),
+    ).resolves.toEqual({ id: "page-1_post-9" });
+    expect(paths).toEqual([
+      "/v99.0/page-1/videos",
+      "/v99.0/video-1",
+      "/v99.0/video-1",
+      "/v99.0/video-1",
+    ]);
+  });
+
+  it("keeps the video id when Facebook is still processing so delivery is not repeated", async () => {
+    const graph = new MetaGraphClient(
+      config,
+      fakeFetch((url) =>
+        url.pathname.endsWith("/videos")
+          ? { id: "video-1" }
+          : { status: { video_status: "processing" } },
+      ),
+      async () => {},
+    );
+    await expect(
+      graph.publishFacebook(
+        "page-1",
+        "token",
+        videoContent,
+        "https://media.example/clip.mp4",
+      ),
+    ).resolves.toEqual({ id: "video-1" });
+  });
+
+  it("does not repeat a Facebook video upload when the status read fails", async () => {
+    const graph = new MetaGraphClient(
+      config,
+      fakeFetch((url) =>
+        url.pathname.endsWith("/videos")
+          ? { id: "video-1" }
+          : Response.json({ error: { message: "down" } }, { status: 500 }),
+      ),
+      async () => {},
+    );
+    await expect(
+      graph.publishFacebook(
+        "page-1",
+        "token",
+        videoContent,
+        "https://media.example/clip.mp4",
+      ),
+    ).resolves.toEqual({ id: "video-1" });
+  });
+
+  it("rejects a Facebook video that fails processing", async () => {
+    const graph = new MetaGraphClient(
+      config,
+      fakeFetch((url) =>
+        url.pathname.endsWith("/videos")
+          ? { id: "video-1" }
+          : { status: { video_status: "error" } },
+      ),
+      async () => {},
+    );
+    await expect(
+      graph.publishFacebook(
+        "page-1",
+        "token",
+        videoContent,
+        "https://media.example/clip.mp4",
+      ),
+    ).rejects.toMatchObject({ status: 422, code: "META_MEDIA_REJECTED" });
+  });
+
+  it("resolves an already full post id from the video node as is", async () => {
+    const graph = new MetaGraphClient(
+      config,
+      fakeFetch(() => ({ post_id: "page-1_post-9" })),
+      async () => {},
+    );
+    await expect(
+      graph.facebookVideoPostId("page-1", "token", "video-1", 1),
+    ).resolves.toBe("page-1_post-9");
+  });
+
+  it("retries a Reel that is still processing instead of marking it uncertain", async () => {
+    const waits: number[] = [];
+    const paths: string[] = [];
+    const graph = new MetaGraphClient(
+      config,
+      fakeFetch((url) => {
+        paths.push(url.pathname);
+        if (url.pathname.endsWith("/media")) return { id: "container-1" };
+        return { status_code: "IN_PROGRESS" };
+      }),
+      async (ms) => {
+        waits.push(ms);
+      },
+    );
+    await expect(
+      graph.publishInstagram(
+        "ig-1",
+        "token",
+        videoContent,
+        "https://media.example/clip.mp4",
+      ),
+    ).rejects.toMatchObject({ status: 503, code: "META_MEDIA_PROCESSING" });
+    expect(waits.length).toBe(59);
+    expect(waits.every((ms) => ms === 5000)).toBe(true);
+    expect(paths).not.toContain("/v99.0/ig-1/media_publish");
+  });
+
   it("marks a server error during publication as uncertain instead of retryable", async () => {
     const graph = new MetaGraphClient(
       config,
@@ -245,9 +387,7 @@ describe("Meta Graph publishing", () => {
   it("keeps rate limits on publication retryable", async () => {
     const graph = new MetaGraphClient(
       config,
-      fakeFetch(() =>
-        Response.json({ error: { code: 4 } }, { status: 400 }),
-      ),
+      fakeFetch(() => Response.json({ error: { code: 4 } }, { status: 400 })),
     );
     await expect(
       graph.publishFacebook("page-1", "token", {
@@ -301,9 +441,9 @@ describe("Meta Graph publishing", () => {
       "/v99.0/page-1/published_posts",
       "/v99.0/ig-1/media",
     ]);
-    expect(calls.every((call) => !call.url.toString().includes("secret-token"))).toBe(
-      true,
-    );
+    expect(
+      calls.every((call) => !call.url.toString().includes("secret-token")),
+    ).toBe(true);
     expect(calls[0].init.headers).toMatchObject({
       Authorization: "Bearer secret-token",
     });

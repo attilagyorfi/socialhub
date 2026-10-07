@@ -92,6 +92,7 @@ export type Media = {
   mime_type: string;
   size_bytes: number;
   status: string;
+  duration_seconds?: number | null;
 };
 export type Content = { caption: string; link?: string | null; media: Media[] };
 export function validatePost(platform: Platform, content: Content) {
@@ -128,6 +129,14 @@ export function validatePost(platform: Platform, content: Content) {
       !capabilities[platform].includes("VIDEO")
     )
       errors.push("Video is not supported on this network.");
+    // Instagram publishes videos as Reels, which Meta rejects under 3 s.
+    if (
+      platform === "instagram" &&
+      m.mime_type.startsWith("video/") &&
+      m.duration_seconds != null &&
+      m.duration_seconds < 3
+    )
+      errors.push("Instagram Reels must be at least 3 seconds long.");
   }
   if (
     content.media.length > 1 &&

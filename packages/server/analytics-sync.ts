@@ -204,7 +204,17 @@ async function fetchMetrics(job: SyncJob) {
             accountId: input.social_account_id,
             remoteId: input.target_remote_id,
           });
-    return { provider: `meta:${input.platform}`, ...metrics };
+    if ("remoteId" in metrics && metrics.remoteId !== input.target_remote_id)
+      // A Facebook video id resolved to its feed post id; keep the post id.
+      await pool.query(
+        "UPDATE post_targets SET remote_id=$1,updated_at=now() WHERE id=$2 AND remote_id=$3",
+        [metrics.remoteId, job.target_id, input.target_remote_id],
+      );
+    return {
+      provider: `meta:${input.platform}`,
+      raw: metrics.raw,
+      normalized: metrics.normalized,
+    };
   }
   throw new AppError(
     503,
