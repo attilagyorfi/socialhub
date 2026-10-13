@@ -7,6 +7,7 @@ const en = {
   "nav.Media": "Media",
   "nav.Analytics": "Analytics",
   "nav.Approvals": "Approvals",
+  "nav.Comments": "Comments",
   "nav.Clients": "Clients",
   "nav.Team": "Team",
   "nav.Connected accounts": "Connected accounts",
@@ -42,6 +43,7 @@ const en = {
   "subtitle.Calendar":
     "Plan your content with confidence. Times shown in {timeZone}.",
   "subtitle.Approvals": "Keep feedback and decisions moving.",
+  "subtitle.Comments": "Reply to your audience on every network in one place.",
   "subtitle.AnalyticsMock":
     "Mock metrics are labeled and kept separate by network.",
   "subtitle.Analytics": "Performance of your published posts, by network.",
@@ -169,6 +171,7 @@ const hu = {
   "nav.Media": "Médiatár",
   "nav.Analytics": "Analitika",
   "nav.Approvals": "Jóváhagyások",
+  "nav.Comments": "Kommentek",
   "nav.Clients": "Ügyfelek",
   "nav.Team": "Csapat",
   "nav.Connected accounts": "Csatlakoztatott fiókok",
@@ -204,6 +207,8 @@ const hu = {
   "subtitle.Calendar":
     "Tervezd meg magabiztosan a tartalmakat. Időpontok {timeZone} időzóna szerint.",
   "subtitle.Approvals": "Tartsd mozgásban a visszajelzéseket és a döntéseket.",
+  "subtitle.Comments":
+    "Válaszolj a közönségednek minden csatornán, egy helyen.",
   "subtitle.AnalyticsMock":
     "A szimulált adatok jelölve vannak, és csatornánként külön látszanak.",
   "subtitle.Analytics": "A közzétett posztjaid teljesítménye csatornánként.",

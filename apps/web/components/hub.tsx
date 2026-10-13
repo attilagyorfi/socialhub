@@ -18,6 +18,7 @@ import {
   RefreshCw,
   LogOut,
   UserRoundCog,
+  MessageSquare,
 } from "lucide-react";
 import { MediaThumb } from "./media";
 import { Composer } from "./composer";
@@ -27,6 +28,7 @@ import { Library, Accounts, Clients } from "./sections";
 import { Analytics } from "./analytics";
 import { Team } from "./team";
 import { PostList } from "./post-list";
+import { Comments } from "./comments";
 import { TimeZoneSettings } from "./timezone-settings";
 import { PrivacySettings } from "./privacy-settings";
 import { LanguageSettings } from "./language-settings";
@@ -47,6 +49,7 @@ const navigation = [
   ["Media", ImageIcon],
   ["Analytics", ChartNoAxesCombined],
   ["Approvals", CheckCheck],
+  ["Comments", MessageSquare],
   ["Clients", Users],
   ["Team", UserRoundCog],
   ["Connected accounts", Link2],
@@ -75,6 +78,7 @@ export function Hub() {
   const [reviewerId, setReviewerId] = useState("");
   const [filter, setFilter] = useState("ALL");
   const [calendarRefresh, setCalendarRefresh] = useState(0);
+  const [commentsOpen, setCommentsOpen] = useState(0);
   const loadSequence = useRef(0);
   const dialogRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -95,6 +99,11 @@ export function Hub() {
   useEffect(() => {
     if (savedLocale && savedLocale !== locale) setLocale(savedLocale);
   }, [savedLocale, locale, setLocale]);
+  // The hub payload carries the open-comment count; the inbox refines it.
+  const hubCommentsOpen = data?.commentsOpen ?? 0;
+  useEffect(() => {
+    setCommentsOpen(hubCommentsOpen);
+  }, [data, hubCommentsOpen]);
   useEffect(() => {
     if (!selected) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -311,6 +320,9 @@ export function Hub() {
                       }
                     </span>
                   )}
+                {label === "Comments" && commentsOpen > 0 && (
+                  <span className="nav-count">{commentsOpen}</span>
+                )}
               </button>
             ))}
         </nav>
@@ -459,13 +471,15 @@ export function Hub() {
                           ? t("hub.subtitle.Calendar", { timeZone })
                           : view === "Approvals"
                             ? t("hub.subtitle.Approvals")
-                            : view === "Analytics"
-                              ? data.mode === "mock"
-                                ? t("hub.subtitle.AnalyticsMock")
-                                : t("hub.subtitle.Analytics")
-                              : view === "Team"
-                                ? t("hub.subtitle.Team")
-                                : ""}
+                            : view === "Comments"
+                              ? t("hub.subtitle.Comments")
+                              : view === "Analytics"
+                                ? data.mode === "mock"
+                                  ? t("hub.subtitle.AnalyticsMock")
+                                  : t("hub.subtitle.Analytics")
+                                : view === "Team"
+                                  ? t("hub.subtitle.Team")
+                                  : ""}
                   </p>
                 </div>
                 {view !== "Create" && (
@@ -772,6 +786,16 @@ export function Hub() {
                       refreshKey={calendarRefresh}
                       onOpen={openPost}
                       onError={setError}
+                    />
+                  )}
+                  {view === "Comments" && (
+                    <Comments
+                      key={data.clientId}
+                      clientId={data.clientId!}
+                      timeZone={timeZone}
+                      refreshKey={calendarRefresh}
+                      onOpenPost={(id) => void openPostById(id)}
+                      onCountChange={setCommentsOpen}
                     />
                   )}
                   {view === "Media" && (

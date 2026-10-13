@@ -33,14 +33,20 @@ Ebben a dokumentumban még:
    - **Valid OAuth Redirect URIs**: `https://<domain>/api/oauth/meta/callback` (a staging domainnel is).
    - **Deauthorize callback URL**: `https://<domain>/api/meta/deauthorize`.
    - **Data Deletion Request URL** (ha itt is kéri): `https://<domain>/api/meta/data-deletion`.
-4. **Facebook Login for Business → Configurations** – a konfiguráció (`META_LOGIN_CONFIG_ID`) pontosan a 3. pontban felsorolt nyolc engedélyt tartalmazza, ne többet.
+4. **Facebook Login for Business → Configurations** – a konfiguráció (`META_LOGIN_CONFIG_ID`) pontosan a 3. pontban felsorolt tizenkét engedélyt tartalmazza, ne többet. A meglévő kapcsolatokat az új engedélyek miatt újra kell csatlakoztatni (Connected accounts → Connect Facebook & Instagram).
+4/b. **Webhooks** (App Dashboard → Webhooks, vagy a Használati esetek alatt):
+   - **Callback URL**: `https://<domain>/api/webhooks/meta`, **Verify token**: a `META_WEBHOOK_VERIFY_TOKEN` környezeti változó értéke (a Vercel env-ben; ne írd ide).
+   - **Page** objektum: iratkozz fel a `feed` mezőre.
+   - **Instagram** objektum: iratkozz fel a `comments` mezőre.
+   - Az oldalak feliratkozását (`/{page-id}/subscribed_apps`) az alkalmazás magától elvégzi az első kommentszinkronnál, ha a kapcsolat már tartalmazza a `pages_manage_metadata` engedélyt.
+   - Fejlesztői módban a Meta csak az app szerepkörrel rendelkező felhasználók eseményeit küldi; addig a kommentek a 10 percenkénti lekérdezéssel érkeznek.
 5. **Data Use Checkup** – évente kötelező; a beadás előtt erősítsd meg, hogy az adatokat csak a leírt célra használjuk.
 6. **App Review → Permissions and features** – minden kért engedélyhez: leírás (lásd 3. pont), screencast (lásd 4. pont), és a „Request advanced access” gomb.
 7. Ellenőrizd, hogy a fenti URL-ek bejelentkezés nélkül, 200-as válasszal betöltenek (a Meta botja ellenőrzi).
 
 ## 3. Kért engedélyek
 
-A beadásban **szándékosan nem** kérjük: webhooks és `pages_manage_metadata`. A webhook-végpont (`/api/webhooks/meta`) a kódban létezik, de eseményfeldolgozást még nem végez, ezért ebben a körben nem kérünk hozzá jogosultságot. Szintén nem kérünk üzenetkezelési (`pages_messaging`, `instagram_manage_messages`) vagy hozzászólás-kezelési engedélyt.
+A beadás a közzététel és az analitika nyolc engedélye mellett a **Kommentek** funkcióhoz szükséges négy engedélyt is tartalmazza (`pages_read_user_content`, `pages_manage_engagement`, `pages_manage_metadata`, `instagram_manage_comments`). Üzenetkezelési engedélyt (`pages_messaging`, `instagram_manage_messages`) **nem** kérünk: privát üzeneteket az alkalmazás nem kezel.
 
 ### Áttekintő táblázat
 
@@ -54,6 +60,10 @@ A beadásban **szándékosan nem** kérjük: webhooks és `pages_manage_metadata
 | `instagram_basic` | A kapcsolt Instagram szakmai fiók azonosítója, felhasználóneve, profilképe | Connected accounts |
 | `instagram_content_publish` | Jóváhagyott bejegyzések közzététele az Instagram szakmai fiókon | Create → Publish now / ütemezés, Posts |
 | `instagram_manage_insights` | Instagram fiók- és bejegyzés-statisztikák olvasása | Analytics |
+| `pages_read_user_content` | A közzétett bejegyzések alatti hozzászólások (szöveg, szerző neve) olvasása | Comments |
+| `pages_manage_engagement` | Válasz a Facebook-hozzászólásokra az oldal nevében, nem megfelelő hozzászólás elrejtése | Comments → Reply / Hide |
+| `pages_manage_metadata` | Az oldal feliratkoztatása az alkalmazás webhookjaira, hogy az új hozzászólások azonnal megérkezzenek | Comments (háttérben) |
+| `instagram_manage_comments` | Instagram-hozzászólások olvasása, megválaszolása és elrejtése | Comments → Reply / Hide |
 
 ### Beillesztendő angol szövegek („How will your app use this permission?”) + magyar magyarázat
 
@@ -105,6 +115,30 @@ HU: A jóváhagyott bejegyzés közzétételéhez kell az Instagram szakmai fió
 
 HU: Az Instagram-statisztikák (elérés, megtekintés, interakció) Analytics oldalon való megjelenítéséhez kell.
 
+**pages_read_user_content**
+
+> G2A Social Hub has a "Comments" inbox where the agency's community managers see the comments left under the posts of the client's Facebook Page. We use pages_read_user_content to read these comments (text, time and the commenter's name as returned by the API) so they can be answered from one place. Comments are shown only to members of that client's workspace, are not combined with other data, are not used for advertising or profiling, and are deleted according to the workspace's data retention setting.
+
+HU: A Kommentek oldalhoz kell: a Facebook-oldal bejegyzései alatti hozzászólások olvasása. Csak az ügyfél-munkaterület tagjai látják, hirdetésre/profilozásra nem használjuk.
+
+**pages_manage_engagement**
+
+> In the "Comments" inbox an authorized community manager can reply to a comment on behalf of the client's Page, or hide an abusive or spam comment. We use pages_manage_engagement only to post these replies and to hide/unhide comments, and only when a user explicitly clicks "Reply" or "Hide". Nothing is posted automatically.
+
+HU: A Kommentek oldalon a válaszadáshoz (az oldal nevében) és a nem megfelelő hozzászólás elrejtéséhez kell; csak felhasználói kattintásra történik.
+
+**pages_manage_metadata**
+
+> We use pages_manage_metadata to subscribe the connected Page to our app's webhooks (feed field), so that new comments appear in the "Comments" inbox within seconds instead of waiting for periodic polling. We do not change any other Page settings.
+
+HU: Az oldal webhook-feliratkozásához kell (feed mező), hogy az új hozzászólások azonnal megjelenjenek. Más oldalbeállítást nem módosítunk.
+
+**instagram_manage_comments**
+
+> We use instagram_manage_comments to read the comments on media published by the client's Instagram professional account, to post replies on behalf of the account, and to hide inappropriate comments, all from the "Comments" inbox and only on explicit user action. We also receive the account's comment webhooks for this inbox.
+
+HU: Az Instagram-hozzászólások olvasásához, megválaszolásához és elrejtéséhez kell a Kommentek oldalon, csak felhasználói műveletre.
+
 ## 4. Screencast-forgatókönyv
 
 Általános szabályok:
@@ -127,6 +161,8 @@ HU: Az Instagram-statisztikák (elérés, megtekintés, interakció) Analytics o
 9. Kattints a **Publish now** gombra; várd meg, amíg a státusz „published” lesz. *(pages_manage_posts, instagram_content_publish)*
 10. Nyisd meg új fülön a Facebook-oldalt és az Instagram-profilt, mutasd meg a megjelent bejegyzést.
 11. Vissza az alkalmazásba: **Analytics** – mutasd meg az oldal-, bejegyzés- és Instagram-statisztikákat (elérés, megtekintés, interakciók). *(read_insights, instagram_manage_insights, pages_read_engagement)*
+11/b. Írj egy hozzászólást (egy másik, app szerepkörrel rendelkező Facebook-/Instagram-fiókból) a most közzétett bejegyzés alá. Az alkalmazásban nyisd meg a **Comments** menüpontot: mutasd meg, hogy a hozzászólás megjelent (szükség esetén **Refresh**). *(pages_read_user_content, instagram_manage_comments, pages_manage_metadata)*
+11/c. Írj választ, és kattints a **Reply** gombra; nyisd meg a Facebook-bejegyzést és az Instagram-tartalmat, és mutasd meg, hogy a válasz megjelent az oldal/fiók nevében. Ezután egy hozzászólásnál kattints a **Hide** gombra, és mutasd meg, hogy a Facebookon/Instagramon elrejtett állapotba került. *(pages_manage_engagement, instagram_manage_comments)*
 12. **Connected accounts → Disconnect** (vagy Disconnect Meta grant) – mutasd meg, hogy a fiók leválasztásra került (ez visszavonja az engedélyeket és törli a tárolt tokeneket).
 13. Opcionálisan: nyisd meg a `/legal/privacy` és `/legal/deletion` oldalt.
 
@@ -136,6 +172,8 @@ HU: Az Instagram-statisztikák (elérés, megtekintés, interakció) Analytics o
 - **pages_manage_posts + instagram_content_publish**: 7–10. lépés.
 - **read_insights + instagram_manage_insights + pages_read_engagement**: 6. és 11. lépés.
 - **instagram_basic**: 6. lépés (IG felhasználónév és profilkép).
+- **pages_read_user_content + pages_manage_metadata**: 11/b. lépés.
+- **pages_manage_engagement + instagram_manage_comments**: 11/b–11/c. lépés.
 
 ## 5. Teszt-hozzáférés a reviewer számára
 
@@ -146,13 +184,13 @@ HU: Az Instagram-statisztikák (elérés, megtekintés, interakció) Analytics o
 
 ## 6. Ellenőrzőlista beadás előtt
 
-- [ ] Helykitöltők kitöltve a `legal.ts`-ben (HU + EN).
 - [ ] Jogi szövegek jogi ellenőrzése megtörtént (vagy tudatosan tervezetként adjuk be).
 - [ ] `/legal/privacy`, `/legal/terms`, `/legal/deletion` publikusan, bejelentkezés nélkül elérhető.
 - [ ] `/api/meta/data-deletion` és `/api/meta/deauthorize` élesítve, a Meta „Test” funkciójával kipróbálva; a `/meta/deletion/<code>` állapotoldal működik.
 - [ ] Business verification kész.
 - [ ] App icon, kategória, kapcsolattartó e-mail beállítva.
-- [ ] Login for Business konfiguráció pontosan a 8 engedéllyel.
+- [ ] Login for Business konfiguráció pontosan a 12 engedéllyel; a teszt-oldal újracsatlakoztatva az új engedélyekkel.
+- [ ] Webhooks beállítva (Page: `feed`, Instagram: `comments`), a callback ellenőrzése sikeres.
 - [ ] Screencast angol felülettel elkészült.
 - [ ] Reviewer teszt-felhasználó létrehozva, adatai csak a beadási űrlapon.
 - [ ] Data Use Checkup elvégezve.

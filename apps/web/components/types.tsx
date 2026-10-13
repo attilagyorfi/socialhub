@@ -151,6 +151,8 @@ export type HubData = {
     } | null;
   };
   canManageTeam: boolean;
+  // Open (unhandled) social comments for the active client.
+  commentsOpen: number;
   team: TeamMember[];
   invitations: TeamInvitation[];
 };
