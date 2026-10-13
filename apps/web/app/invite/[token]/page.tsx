@@ -71,13 +71,16 @@ export default function InvitationPage({
   return (
     <main className="approval-page invitation-page">
       <div className="wordmark dark">
+        <img
+          className="wordmark-mark"
+          src="/brand/socialhub-mark-on-light.png"
+          alt=""
+        />
         g2a<span>{t("auth.invite.wordmark")}</span>
       </div>
       <section className="panel invitation-card">
         <p className="eyebrow">{t("auth.invite.eyebrow")}</p>
-        <h1>
-          {data?.organization_name ?? t("auth.invite.fallbackTitle")}
-        </h1>
+        <h1>{data?.organization_name ?? t("auth.invite.fallbackTitle")}</h1>
         {error && (
           <p className="alert" role="alert">
             {error}
@@ -112,9 +115,7 @@ export default function InvitationPage({
                     });
                   }}
                 >
-                  {busy
-                    ? t("auth.invite.joining")
-                    : t("auth.invite.accept")}
+                  {busy ? t("auth.invite.joining") : t("auth.invite.accept")}
                 </button>
               ) : (
                 <div className="notice">

@@ -26,6 +26,11 @@ export default function Login() {
     <main className="login">
       <section className="login-story">
         <div className="wordmark">
+          <img
+            className="wordmark-mark"
+            src="/brand/socialhub-mark-on-dark.png"
+            alt=""
+          />
           g2a<span>{t("auth.login.wordmark")}</span>
         </div>
         <div>
@@ -64,8 +69,7 @@ export default function Login() {
                 throw new Error(
                   authErrorMessage(locale, t, data, "auth.login.signInFailed"),
                 );
-              if (mode === "magic-link")
-                setError(t("auth.login.checkEmail"));
+              if (mode === "magic-link") setError(t("auth.login.checkEmail"));
               else window.location.href = "/";
             } catch (e) {
               setError(
@@ -165,7 +169,11 @@ export default function Login() {
           >
             {LOCALES.map((option, index) => (
               <span key={option}>
-                {index > 0 && " · "}
+                {index > 0 && (
+                  <span aria-hidden="true" className="language-sep">
+                    ·
+                  </span>
+                )}
                 <button
                   type="button"
                   className="text-button"
