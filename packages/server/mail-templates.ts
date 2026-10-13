@@ -141,5 +141,39 @@ export function authMail(
       magic: "Sign in to G2A Social Hub",
     },
   };
-  return { subject: subjects[locale][kind], text: url };
+  const bodies = {
+    hu: {
+      reset: `Jelszó-visszaállítást kértél a G2A Social Hubban.
+
+Új jelszót itt állíthatsz be (a link 1 óráig érvényes):
+${url}
+
+A jelszócsere után minden eszközön újra be kell jelentkezned. Ha nem te kérted, hagyd figyelmen kívül ezt a levelet – a jelszavad nem változik.`,
+      verify: `Erősítsd meg az e-mail-címed a G2A Social Hubban:
+${url}
+
+Ha nem te regisztráltál, hagyd figyelmen kívül ezt a levelet.`,
+      magic: `Bejelentkezés a G2A Social Hubba ezzel a linkkel:
+${url}
+
+Ha nem te kérted, hagyd figyelmen kívül ezt a levelet.`,
+    },
+    en: {
+      reset: `You asked to reset your G2A Social Hub password.
+
+Set a new password here (the link is valid for 1 hour):
+${url}
+
+After the change you will be signed out on every device. If you did not ask for this, ignore this email – your password stays the same.`,
+      verify: `Confirm your email address for G2A Social Hub:
+${url}
+
+If you did not sign up, ignore this email.`,
+      magic: `Sign in to G2A Social Hub with this link:
+${url}
+
+If you did not ask for it, ignore this email.`,
+    },
+  };
+  return { subject: subjects[locale][kind], text: bodies[locale][kind] };
 }

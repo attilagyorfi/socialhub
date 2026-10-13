@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LOCALES, useT, type Locale, type MessageKey } from "../../i18n";
 
 // English keeps Better Auth's own message; other locales map its error code.
@@ -17,9 +17,14 @@ function authErrorMessage(
 
 export default function Login() {
   const { t, locale, setLocale } = useT();
-  const [mode, setMode] = useState<"sign-in" | "sign-up" | "magic-link">(
-    "sign-in",
-  );
+  const [mode, setMode] = useState<
+    "sign-in" | "sign-up" | "magic-link" | "forgot"
+  >("sign-in");
+  // The reset page links back here with ?forgot=1 to request a new link.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("forgot"))
+      setMode("forgot");
+  }, []);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -53,6 +58,23 @@ export default function Login() {
             setError("");
             setNotice("");
             const f = new FormData(e.currentTarget);
+            if (mode === "forgot") {
+              try {
+                await fetch("/api/auth/request-password-reset", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    email: f.get("email"),
+                    redirectTo: "/reset-password",
+                  }),
+                });
+              } finally {
+                // Same answer whether or not the account exists.
+                setNotice(t("auth.forgot.sent"));
+                setBusy(false);
+              }
+              return;
+            }
             try {
               const endpoint =
                 mode === "magic-link" ? "sign-in/magic-link" : `${mode}/email`;
@@ -89,9 +111,15 @@ export default function Login() {
           <h2>
             {mode === "sign-up"
               ? t("auth.login.createTitle")
-              : t("auth.login.welcomeBack")}
+              : mode === "forgot"
+                ? t("auth.forgot.title")
+                : t("auth.login.welcomeBack")}
           </h2>
-          <p className="muted">{t("auth.login.subtitle")}</p>
+          <p className="muted">
+            {mode === "forgot"
+              ? t("auth.forgot.subtitle")
+              : t("auth.login.subtitle")}
+          </p>
           {mode === "sign-up" && (
             <label>
               {t("auth.field.name")}
@@ -108,7 +136,7 @@ export default function Login() {
               placeholder={t("auth.login.emailPlaceholder")}
             />
           </label>
-          {mode !== "magic-link" && (
+          {mode !== "magic-link" && mode !== "forgot" && (
             <label>
               {t("auth.field.password")}
               <input
@@ -121,6 +149,19 @@ export default function Login() {
                 required
               />
             </label>
+          )}
+          {mode === "sign-in" && (
+            <button
+              type="button"
+              className="text-button forgot-link"
+              onClick={() => {
+                setMode("forgot");
+                setError("");
+                setNotice("");
+              }}
+            >
+              {t("auth.forgot.link")}
+            </button>
           )}
           {error && (
             <p role="alert" className="alert">
@@ -135,36 +176,53 @@ export default function Login() {
           <button className="primary" disabled={busy}>
             {busy
               ? t("auth.pleaseWait")
-              : mode === "magic-link"
-                ? t("auth.login.sendMagicLink")
-                : mode === "sign-up"
-                  ? t("auth.login.createAccount")
-                  : t("auth.login.signIn")}
+              : mode === "forgot"
+                ? t("auth.forgot.submit")
+                : mode === "magic-link"
+                  ? t("auth.login.sendMagicLink")
+                  : mode === "sign-up"
+                    ? t("auth.login.createAccount")
+                    : t("auth.login.signIn")}
           </button>
-          <div className="login-options">
-            <button
-              type="button"
-              className="text-button"
-              onClick={() =>
-                setMode(mode === "sign-up" ? "sign-in" : "sign-up")
-              }
-            >
-              {mode === "sign-up"
-                ? t("auth.haveAccount")
-                : t("auth.login.toSignUp")}
-            </button>
-            <button
-              type="button"
-              className="text-button"
-              onClick={() =>
-                setMode(mode === "magic-link" ? "sign-in" : "magic-link")
-              }
-            >
-              {mode === "magic-link"
-                ? t("auth.login.usePassword")
-                : t("auth.login.useMagicLink")}
-            </button>
-          </div>
+          {mode === "forgot" ? (
+            <div className="login-options">
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  setMode("sign-in");
+                  setNotice("");
+                }}
+              >
+                {t("auth.forgot.back")}
+              </button>
+            </div>
+          ) : (
+            <div className="login-options">
+              <button
+                type="button"
+                className="text-button"
+                onClick={() =>
+                  setMode(mode === "sign-up" ? "sign-in" : "sign-up")
+                }
+              >
+                {mode === "sign-up"
+                  ? t("auth.haveAccount")
+                  : t("auth.login.toSignUp")}
+              </button>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() =>
+                  setMode(mode === "magic-link" ? "sign-in" : "magic-link")
+                }
+              >
+                {mode === "magic-link"
+                  ? t("auth.login.usePassword")
+                  : t("auth.login.useMagicLink")}
+              </button>
+            </div>
+          )}
           <small>
             {t("auth.login.consent.before")}{" "}
             <a href="/legal/privacy">{t("auth.login.consent.privacy")}</a>{" "}
