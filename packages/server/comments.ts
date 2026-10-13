@@ -5,6 +5,7 @@ import { AppError } from "../core/security";
 import type { Context } from "./context";
 import {
   fetchMetaComments,
+  fetchMetaRecentContent,
   hideMetaComment,
   metaIntegrationStatus,
   replyMetaComment,
@@ -16,6 +17,8 @@ import { audit, transaction } from "./transaction";
 // everything else (and arrive faster) once the app is approved.
 const SYNC_WINDOW_DAYS = 30;
 const SYNC_INTERVAL_MINUTES = 10;
+// Posts published outside the hub are read from the network itself.
+const RECENT_POSTS_PER_SYNC = 25;
 const PAGE_SIZE = 25;
 
 type Queryable = Pick<PoolClient, "query">;
@@ -123,17 +126,32 @@ export async function syncAccountComments(account: AccountRow) {
       [account.id, SYNC_WINDOW_DAYS],
     )
   ).rows as { id: string; remote_id: string }[];
+  const since = Date.now() - SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const known = new Set(targets.map((target) => target.remote_id));
+  const recent = (await fetchMetaRecentContent(accountRef(account)))
+    .filter(
+      (item) =>
+        !known.has(item.id) && new Date(item.createdAt).getTime() >= since,
+    )
+    .slice(0, RECENT_POSTS_PER_SYNC);
+  const objects = [
+    ...targets.map((target) => ({
+      remoteId: target.remote_id,
+      targetId: target.id as string | null,
+    })),
+    ...recent.map((item) => ({ remoteId: item.id, targetId: null })),
+  ];
   let inserted = 0;
   if (account.platform === "facebook") await ensureWebhooks(account);
-  for (const target of targets) {
+  for (const target of objects) {
     // Facebook videos still processing only have a video id, not a post.
-    if (account.platform === "facebook" && !target.remote_id.includes("_"))
+    if (account.platform === "facebook" && !target.remoteId.includes("_"))
       continue;
     let comments;
     try {
       comments = await fetchMetaComments({
         ...accountRef(account),
-        objectId: target.remote_id,
+        objectId: target.remoteId,
       });
     } catch (error) {
       // A post deleted on Facebook/Instagram must not stop the others;
@@ -148,7 +166,8 @@ export async function syncAccountComments(account: AccountRow) {
       throw error;
     }
     for (const comment of comments)
-      if (await storeComment(pool, account, comment, target.id)) inserted++;
+      if (await storeComment(pool, account, comment, target.targetId))
+        inserted++;
   }
   await pool.query(
     "UPDATE social_accounts SET comments_synced_at=now() WHERE id=$1",

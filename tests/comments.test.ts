@@ -16,6 +16,7 @@ const meta = vi.hoisted(() => ({
   hideMetaComment: vi.fn(),
   fetchMetaComments: vi.fn(),
   subscribeMetaWebhooks: vi.fn(),
+  fetchMetaRecentContent: vi.fn(async () => [] as unknown[]),
 }));
 vi.mock("../packages/server/meta", () => ({
   ...meta,
@@ -293,5 +294,58 @@ describe("comment inbox", () => {
     await expect(syncAccountComments(account)).rejects.toMatchObject({
       code: "META_UNAVAILABLE",
     });
+  });
+
+  it("also reads comments on recent posts published outside the hub", async () => {
+    const w = await workspace();
+    const day = 24 * 60 * 60 * 1000;
+    meta.fetchMetaRecentContent.mockResolvedValueOnce([
+      {
+        id: "page-1_native",
+        caption: "Posted on Facebook",
+        createdAt: new Date(Date.now() - day).toISOString(),
+      },
+      {
+        id: "page-1_old",
+        caption: "Too old",
+        createdAt: new Date(Date.now() - 40 * day).toISOString(),
+      },
+    ]);
+    meta.subscribeMetaWebhooks.mockResolvedValueOnce(true);
+    meta.fetchMetaComments.mockImplementation(async ({ objectId }) =>
+      objectId === "page-1_native"
+        ? [
+            {
+              remoteId: "native-c1",
+              parentRemoteId: null,
+              objectRemoteId: objectId,
+              authorName: "Dóra",
+              authorRemoteId: "fan-4",
+              message: "teszt",
+              createdAt: new Date().toISOString(),
+              hidden: false,
+              likeCount: 0,
+              fromPage: false,
+            },
+          ]
+        : [],
+    );
+    await expect(
+      syncAccountComments({
+        id: w.account,
+        organization_id: w.c.organizationId,
+        client_id: w.c.clientId,
+        platform: "facebook",
+        remote_id: "page-1",
+      }),
+    ).resolves.toBe(1);
+    const requested = meta.fetchMetaComments.mock.calls.map(
+      ([input]) => input.objectId,
+    );
+    expect(requested).toContain("page-1_native");
+    expect(requested).not.toContain("page-1_old");
+    const { threads } = await listComments(w.c, { status: "OPEN" });
+    expect(threads[0]).toMatchObject({ message: "teszt", post: null });
+    meta.fetchMetaComments.mockReset();
   });
 });
