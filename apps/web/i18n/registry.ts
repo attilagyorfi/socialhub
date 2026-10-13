@@ -2,6 +2,7 @@ import analytics from "./messages/analytics";
 import approve from "./messages/approve";
 import auth from "./messages/auth";
 import calendar from "./messages/calendar";
+import comments from "./messages/comments";
 import common from "./messages/common";
 import compliance from "./messages/compliance";
 import composer from "./messages/composer";
@@ -21,6 +22,7 @@ export const namespaces = {
   approve,
   auth,
   calendar,
+  comments,
   common,
   compliance,
   composer,

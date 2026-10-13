@@ -709,6 +709,11 @@ export async function processRetentionPolicies(
            AND created_at<now()-make_interval(days => $2)`,
         );
         await remove(
+          "comments",
+          `DELETE FROM social_comments WHERE organization_id=$1
+           AND remote_created_at<now()-make_interval(days => $2)`,
+        );
+        await remove(
           "notifications",
           `DELETE FROM notifications WHERE organization_id=$1
            AND created_at<now()-make_interval(days => $2)`,

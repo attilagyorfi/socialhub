@@ -17,6 +17,10 @@ import {
 } from "../../../packages/server/media-processing";
 import { refreshDueMetaCredentials } from "../../../packages/server/meta";
 import {
+  processCommentWebhooks,
+  syncDueComments,
+} from "../../../packages/server/comments";
+import {
   cleanupServiceHeartbeats,
   recordServiceHeartbeat,
   removeServiceHeartbeat,
@@ -189,6 +193,16 @@ async function dispatch() {
         console.log(
           JSON.stringify({ event: "privacy_maintenance", ...privacy }),
         );
+    });
+    await periodic("commentWebhooks", 15_000, async () => {
+      const webhooks = await processCommentWebhooks();
+      if (webhooks.events)
+        console.log(JSON.stringify({ event: "comment_webhooks", ...webhooks }));
+    });
+    await periodic("commentSync", 60_000, async () => {
+      const sync = await syncDueComments();
+      if (sync.inserted)
+        console.log(JSON.stringify({ event: "comment_sync", ...sync }));
     });
     await periodic("metaCredentials", 60 * 60 * 1000, async () => {
       await refreshDueMetaCredentials();

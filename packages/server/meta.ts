@@ -20,6 +20,11 @@ const META_SCOPES = [
   "instagram_basic",
   "instagram_content_publish",
   "instagram_manage_insights",
+  // Comment inbox: read and answer comments, receive them via webhooks.
+  "pages_read_user_content",
+  "pages_manage_engagement",
+  "pages_manage_metadata",
+  "instagram_manage_comments",
 ] as const;
 
 export type MetaConfig = {
@@ -601,6 +606,132 @@ export class MetaGraphClient {
     });
   }
 
+  async getComments(
+    platform: "facebook" | "instagram",
+    objectId: string,
+    accessToken: string,
+  ): Promise<MetaComment[]> {
+    if (platform === "facebook") {
+      const result = await this.request<{ data?: FacebookComment[] }>(
+        `${objectId}/comments`,
+        {
+          token: accessToken,
+          params: {
+            fields:
+              "id,message,from{id,name},created_time,parent{id},is_hidden,like_count",
+            filter: "stream",
+            order: "reverse_chronological",
+            limit: "100",
+          },
+        },
+      );
+      if (!Array.isArray(result.data))
+        throw new AppError(
+          502,
+          "META_RESPONSE_INVALID",
+          "Meta returned an invalid comment list.",
+        );
+      return result.data.flatMap((comment) =>
+        comment.id
+          ? [
+              {
+                remoteId: comment.id,
+                parentRemoteId: comment.parent?.id ?? null,
+                objectRemoteId: objectId,
+                authorName: comment.from?.name ?? null,
+                authorRemoteId: comment.from?.id ?? null,
+                message: comment.message ?? "",
+                createdAt: comment.created_time ?? new Date().toISOString(),
+                hidden: comment.is_hidden === true,
+                likeCount: Number(comment.like_count ?? 0) || 0,
+              },
+            ]
+          : [],
+      );
+    }
+    const result = await this.request<{ data?: InstagramComment[] }>(
+      `${objectId}/comments`,
+      {
+        token: accessToken,
+        params: {
+          fields:
+            "id,text,username,from{id,username},timestamp,like_count,hidden,replies.limit(50){id,text,username,from{id,username},timestamp,like_count,hidden}",
+          limit: "50",
+        },
+      },
+    );
+    if (!Array.isArray(result.data))
+      throw new AppError(
+        502,
+        "META_RESPONSE_INVALID",
+        "Meta returned an invalid comment list.",
+      );
+    const toComment = (
+      comment: InstagramComment,
+      parentRemoteId: string | null,
+    ): MetaComment => ({
+      remoteId: comment.id!,
+      parentRemoteId,
+      objectRemoteId: objectId,
+      authorName: comment.from?.username ?? comment.username ?? null,
+      authorRemoteId: comment.from?.id ?? null,
+      message: comment.text ?? "",
+      createdAt: comment.timestamp ?? new Date().toISOString(),
+      hidden: comment.hidden === true,
+      likeCount: Number(comment.like_count ?? 0) || 0,
+    });
+    return result.data.flatMap((comment) =>
+      comment.id
+        ? [
+            toComment(comment, null),
+            ...(comment.replies?.data ?? [])
+              .filter((reply) => reply.id)
+              .map((reply) => toComment(reply, comment.id!)),
+          ]
+        : [],
+    );
+  }
+
+  replyToComment(
+    platform: "facebook" | "instagram",
+    commentId: string,
+    accessToken: string,
+    message: string,
+  ) {
+    return this.request<{ id?: string }>(
+      platform === "facebook"
+        ? `${commentId}/comments`
+        : `${commentId}/replies`,
+      { method: "POST", token: accessToken, params: { message } },
+    );
+  }
+
+  setCommentHidden(
+    platform: "facebook" | "instagram",
+    commentId: string,
+    accessToken: string,
+    hidden: boolean,
+  ) {
+    return this.request<{ success?: boolean }>(commentId, {
+      method: "POST",
+      token: accessToken,
+      params:
+        platform === "facebook"
+          ? { is_hidden: String(hidden) }
+          : { hide: String(hidden) },
+    });
+  }
+
+  // Page-level webhook subscription; Instagram comment webhooks also need
+  // the Page to have the app installed.
+  subscribePageWebhooks(pageId: string, accessToken: string) {
+    return this.request<{ success?: boolean }>(`${pageId}/subscribed_apps`, {
+      method: "POST",
+      token: accessToken,
+      params: { subscribed_fields: "feed" },
+    });
+  }
+
   revokeUserGrant(userAccessToken: string) {
     return this.request<{ success?: boolean }>("me/permissions", {
       method: "DELETE",
@@ -608,6 +739,39 @@ export class MetaGraphClient {
     });
   }
 }
+
+export type MetaComment = {
+  remoteId: string;
+  parentRemoteId: string | null;
+  objectRemoteId: string;
+  authorName: string | null;
+  authorRemoteId: string | null;
+  message: string;
+  createdAt: string;
+  hidden: boolean;
+  likeCount: number;
+};
+
+type FacebookComment = {
+  id?: string;
+  message?: string;
+  from?: { id?: string; name?: string };
+  created_time?: string;
+  parent?: { id?: string };
+  is_hidden?: boolean;
+  like_count?: number;
+};
+
+type InstagramComment = {
+  id?: string;
+  text?: string;
+  username?: string;
+  from?: { id?: string; username?: string };
+  timestamp?: string;
+  like_count?: number;
+  hidden?: boolean;
+  replies?: { data?: InstagramComment[] };
+};
 
 type MetaPage = {
   id: string;
@@ -1156,6 +1320,98 @@ export async function fetchMetaProfileMetrics(
     raw: { fields, insights, mapping: "meta-media-views-2026-06" },
     normalized: normalizeMetaProfileMetrics(platform, fields, insights),
   };
+}
+
+type MetaAccountRef = {
+  organizationId: string;
+  clientId: string;
+  accountId: string;
+};
+
+// The id comments are attributed to when the connected account wrote them.
+async function metaAccountIdentity(input: MetaAccountRef) {
+  const { account, credential } = await loadMetaCredential(
+    input.organizationId,
+    input.clientId,
+    input.accountId,
+  );
+  const platform = account.platform as "facebook" | "instagram";
+  return {
+    platform,
+    credential,
+    selfId:
+      platform === "facebook"
+        ? credential.pageId
+        : (credential.instagramBusinessId ?? ""),
+  };
+}
+
+export async function fetchMetaComments(
+  input: MetaAccountRef & { objectId: string },
+  graph = new MetaGraphClient(metaConfig()),
+) {
+  const { platform, credential, selfId } = await metaAccountIdentity(input);
+  const comments = await graph.getComments(
+    platform,
+    input.objectId,
+    credential.pageAccessToken,
+  );
+  return comments.map((comment) => ({
+    ...comment,
+    fromPage: !!selfId && comment.authorRemoteId === selfId,
+  }));
+}
+
+export async function replyMetaComment(
+  input: MetaAccountRef & { commentId: string; message: string },
+  graph = new MetaGraphClient(metaConfig()),
+) {
+  const { platform, credential, selfId } = await metaAccountIdentity(input);
+  const result = await graph.replyToComment(
+    platform,
+    input.commentId,
+    credential.pageAccessToken,
+    input.message,
+  );
+  if (!result.id)
+    throw new AppError(
+      502,
+      "META_RESPONSE_INVALID",
+      "Meta did not return the reply.",
+    );
+  return { remoteId: result.id, authorRemoteId: selfId };
+}
+
+export async function hideMetaComment(
+  input: MetaAccountRef & { commentId: string; hidden: boolean },
+  graph = new MetaGraphClient(metaConfig()),
+) {
+  const { platform, credential } = await metaAccountIdentity(input);
+  const result = await graph.setCommentHidden(
+    platform,
+    input.commentId,
+    credential.pageAccessToken,
+    input.hidden,
+  );
+  if (!result.success)
+    throw new AppError(
+      502,
+      "META_REJECTED",
+      "Meta did not confirm the change.",
+    );
+}
+
+export async function subscribeMetaWebhooks(
+  input: MetaAccountRef,
+  graph = new MetaGraphClient(metaConfig()),
+) {
+  const { platform, credential } = await metaAccountIdentity(input);
+  if (platform !== "facebook") return false;
+  const result = await graph.subscribePageWebhooks(
+    credential.pageId,
+    credential.pageAccessToken,
+  );
+  return result.success === true;
 }
 
 export async function fetchMetaPostMetrics(

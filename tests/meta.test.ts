@@ -604,3 +604,86 @@ describe("Meta analytics mapping", () => {
     });
   });
 });
+
+describe("Meta comments", () => {
+  it("normalizes Facebook comments with their thread parent", async () => {
+    const graph = new MetaGraphClient(
+      config,
+      fakeFetch((url) => {
+        expect(url.pathname).toBe("/v99.0/page-1_post-1/comments");
+        expect(url.searchParams.get("filter")).toBe("stream");
+        return {
+          data: [
+            {
+              id: "c1",
+              message: "Hi",
+              from: { id: "fan", name: "Anna" },
+              created_time: "2026-10-01T10:00:00+0000",
+              like_count: 3,
+            },
+            { id: "c2", message: "Re", parent: { id: "c1" }, is_hidden: true },
+          ],
+        };
+      }),
+    );
+    const comments = await graph.getComments("facebook", "page-1_post-1", "t");
+    expect(comments[0]).toMatchObject({
+      remoteId: "c1",
+      parentRemoteId: null,
+      authorName: "Anna",
+      likeCount: 3,
+    });
+    expect(comments[1]).toMatchObject({
+      parentRemoteId: "c1",
+      authorName: null,
+      hidden: true,
+    });
+  });
+
+  it("flattens Instagram replies under their comment", async () => {
+    const graph = new MetaGraphClient(
+      config,
+      fakeFetch(() => ({
+        data: [
+          {
+            id: "ig1",
+            text: "Nice",
+            username: "fan",
+            timestamp: "2026-10-01T10:00:00+0000",
+            replies: {
+              data: [{ id: "ig2", text: "Thanks", username: "brand" }],
+            },
+          },
+        ],
+      })),
+    );
+    const comments = await graph.getComments("instagram", "media-1", "t");
+    expect(comments.map((c) => [c.remoteId, c.parentRemoteId])).toEqual([
+      ["ig1", null],
+      ["ig2", "ig1"],
+    ]);
+  });
+
+  it("uses each network's reply and hide endpoints", async () => {
+    const calls: { path: string; body: string }[] = [];
+    const graph = new MetaGraphClient(
+      config,
+      fakeFetch((url, init) => {
+        calls.push({ path: url.pathname, body: String(init.body) });
+        return { id: "r1", success: true };
+      }),
+    );
+    await graph.replyToComment("facebook", "c1", "t", "Hello");
+    await graph.replyToComment("instagram", "ig1", "t", "Hello");
+    await graph.setCommentHidden("facebook", "c1", "t", true);
+    await graph.setCommentHidden("instagram", "ig1", "t", false);
+    await graph.subscribePageWebhooks("page-1", "t");
+    expect(calls).toEqual([
+      { path: "/v99.0/c1/comments", body: "message=Hello" },
+      { path: "/v99.0/ig1/replies", body: "message=Hello" },
+      { path: "/v99.0/c1", body: "is_hidden=true" },
+      { path: "/v99.0/ig1", body: "hide=false" },
+      { path: "/v99.0/page-1/subscribed_apps", body: "subscribed_fields=feed" },
+    ]);
+  });
+});

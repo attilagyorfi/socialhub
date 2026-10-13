@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { openCommentCount } from "../../../../../packages/server/comments";
 import { pool } from "../../../../../packages/db";
 import { context, user } from "../../../../../packages/server/context";
 import { sameOrigin, AppError } from "../../../../../packages/core/security";
@@ -152,6 +153,7 @@ export async function GET(request: Request) {
           team: [],
           invitations: [],
           canManageTeam: false,
+          commentsOpen: 0,
           operations: null,
           privacy: personalPrivacy,
           role: "",
@@ -259,14 +261,16 @@ export async function GET(request: Request) {
       ),
     ]);
     const canManageTeam = ["OWNER", "ADMIN"].includes(c.role);
-    const [team, operations, reviewers, privacy] = await Promise.all([
-      canManageTeam
-        ? listTeam(c)
-        : Promise.resolve({ members: [], invitations: [] }),
-      canManageTeam ? operationalSummary(c) : Promise.resolve(null),
-      c.role === "VIEWER" ? Promise.resolve([]) : reviewerCandidates(c),
-      privacyStatus(actor.id, c.organizationId),
-    ]);
+    const [team, operations, reviewers, privacy, commentsOpen] =
+      await Promise.all([
+        canManageTeam
+          ? listTeam(c)
+          : Promise.resolve({ members: [], invitations: [] }),
+        canManageTeam ? operationalSummary(c) : Promise.resolve(null),
+        c.role === "VIEWER" ? Promise.resolve([]) : reviewerCandidates(c),
+        privacyStatus(actor.id, c.organizationId),
+        openCommentCount(c),
+      ]);
     return Response.json(
       {
         user: {
@@ -307,6 +311,7 @@ export async function GET(request: Request) {
         team: team.members,
         invitations: team.invitations,
         canManageTeam,
+        commentsOpen,
         operations,
         privacy,
         page,
