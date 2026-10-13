@@ -279,6 +279,11 @@ export function Hub() {
     <div className="app-shell">
       <aside className="sidebar">
         <a className="wordmark" href="/">
+          <img
+            className="wordmark-mark"
+            src="/brand/socialhub-mark-on-dark.png"
+            alt=""
+          />
           g2a<span> / social hub</span>
         </a>
         <div className="agency">

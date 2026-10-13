@@ -2376,6 +2376,10 @@ td {
 .language-switch {
   justify-content: center;
 }
+.language-sep {
+  margin: 0 8px;
+  color: var(--muted);
+}
 
 /* Legal pages (privacy, terms, data deletion) */
 .legal {
@@ -2569,4 +2573,10 @@ td {
   .comment-hint {
     display: none;
   }
+}
+.wordmark-mark {
+  width: 34px;
+  height: 34px;
+  margin-right: 10px;
+  flex: none;
 }
