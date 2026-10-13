@@ -1362,6 +1362,20 @@ export async function fetchMetaComments(
   }));
 }
 
+// Recent posts on the Page / Instagram account, whoever published them.
+export async function fetchMetaRecentContent(
+  input: MetaAccountRef,
+  graph = new MetaGraphClient(metaConfig()),
+) {
+  const { platform, credential, selfId } = await metaAccountIdentity(input);
+  if (!selfId) return [];
+  return graph.getPublishedContent(
+    platform,
+    selfId,
+    credential.pageAccessToken,
+  );
+}
+
 export async function replyMetaComment(
   input: MetaAccountRef & { commentId: string; message: string },
   graph = new MetaGraphClient(metaConfig()),
