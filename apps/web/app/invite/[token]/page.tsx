@@ -14,6 +14,7 @@ type Invitation = {
   organization_name: string;
   expires_at: string;
   clients: { id: string; name: string }[];
+  account_exists?: boolean;
 };
 
 // English keeps Better Auth's own message; other locales map its error code.
@@ -69,6 +70,8 @@ export default function InvitationPage({
     ])
       .then(([invitation, session]) => {
         setData(invitation);
+        // Someone who already has an account must sign in, not sign up.
+        if (invitation.account_exists) setMode("sign-in");
         setSessionEmail(session?.user?.email);
       })
       .catch((reason) => setError(reason.message));
@@ -134,6 +137,18 @@ export default function InvitationPage({
                       { email: data.email },
                     )}
                   </p>
+                  {verification === "sent" && (
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => {
+                        setVerification(undefined);
+                        setMode("sign-in");
+                      }}
+                    >
+                      {t("auth.invite.verifySent.signIn")}
+                    </button>
+                  )}{" "}
                   {resent ? (
                     <small>{t("auth.invite.verifySent.resent")}</small>
                   ) : (
