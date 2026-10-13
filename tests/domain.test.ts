@@ -139,3 +139,15 @@ describe("video rules", () => {
     expect(validatePost("facebook", reel(2.5))).toEqual([]);
   });
 });
+
+describe("auth emails", () => {
+  it("explains the reset link in the recipient's language", async () => {
+    const { authMail } = await import("../packages/server/mail-templates");
+    const hu = authMail("hu", "reset", "https://hub.example/r/abc");
+    expect(hu.subject).toBe("Jelszó visszaállítása");
+    expect(hu.text).toContain("https://hub.example/r/abc");
+    expect(hu.text).toContain("1 óráig");
+    const en = authMail("en", "reset", "https://hub.example/r/abc");
+    expect(en.text).toContain("valid for 1 hour");
+  });
+});

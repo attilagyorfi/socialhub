@@ -22,6 +22,8 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 12,
     requireEmailVerification: process.env.NODE_ENV === "production",
+    // A reset signs out every device, so a leaked password stops working.
+    revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) =>
       sendAuthMail(user.email, "reset", url),
   },
