@@ -239,4 +239,59 @@ describe("comment inbox", () => {
     ).rows[0];
     expect(subscribed.webhooks_subscribed_at).not.toBeNull();
   });
+
+  it("skips posts deleted on the network and keeps syncing the rest", async () => {
+    const w = await workspace();
+    for (const [remote, minutes] of [
+      ["page-1_gone", 1],
+      ["page-1_live", 2],
+    ] as const) {
+      const post = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO posts(id,organization_id,client_id,caption,status) VALUES($1,$2,$3,'Post','PUBLISHED')`,
+        [post, w.c.organizationId, w.c.clientId],
+      );
+      await db.query(
+        `INSERT INTO post_targets(organization_id,client_id,post_id,social_account_id,caption,status,remote_id,published_at)
+         VALUES($1,$2,$3,$4,'x','PUBLISHED',$5,now()-make_interval(mins => $6))`,
+        [w.c.organizationId, w.c.clientId, post, w.account, remote, minutes],
+      );
+    }
+    const { AppError } = await import("../packages/core/security");
+    meta.subscribeMetaWebhooks.mockResolvedValueOnce(true);
+    meta.fetchMetaComments
+      .mockRejectedValueOnce(
+        new AppError(422, "META_REJECTED", "Object does not exist."),
+      )
+      .mockResolvedValueOnce([
+        {
+          remoteId: "c-live",
+          parentRemoteId: null,
+          objectRemoteId: "page-1_live",
+          authorName: "Cili",
+          authorRemoteId: "fan-3",
+          message: "Szia",
+          createdAt: new Date().toISOString(),
+          hidden: false,
+          likeCount: 0,
+          fromPage: false,
+        },
+      ]);
+    const account = {
+      id: w.account,
+      organization_id: w.c.organizationId,
+      client_id: w.c.clientId,
+      platform: "facebook" as const,
+      remote_id: "page-1",
+    };
+    await expect(syncAccountComments(account)).resolves.toBe(1);
+    expect(meta.subscribeMetaWebhooks).toHaveBeenCalled();
+
+    meta.fetchMetaComments.mockRejectedValueOnce(
+      new AppError(503, "META_UNAVAILABLE", "Meta is temporarily unavailable."),
+    );
+    await expect(syncAccountComments(account)).rejects.toMatchObject({
+      code: "META_UNAVAILABLE",
+    });
+  });
 });

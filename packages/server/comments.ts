@@ -124,18 +124,32 @@ export async function syncAccountComments(account: AccountRow) {
     )
   ).rows as { id: string; remote_id: string }[];
   let inserted = 0;
+  if (account.platform === "facebook") await ensureWebhooks(account);
   for (const target of targets) {
     // Facebook videos still processing only have a video id, not a post.
     if (account.platform === "facebook" && !target.remote_id.includes("_"))
       continue;
-    const comments = await fetchMetaComments({
-      ...accountRef(account),
-      objectId: target.remote_id,
-    });
+    let comments;
+    try {
+      comments = await fetchMetaComments({
+        ...accountRef(account),
+        objectId: target.remote_id,
+      });
+    } catch (error) {
+      // A post deleted on Facebook/Instagram must not stop the others;
+      // outages, rate limits and broken credentials still do.
+      if (
+        error instanceof AppError &&
+        error.status < 500 &&
+        error.status !== 429 &&
+        error.code === "META_REJECTED"
+      )
+        continue;
+      throw error;
+    }
     for (const comment of comments)
       if (await storeComment(pool, account, comment, target.id)) inserted++;
   }
-  if (account.platform === "facebook") await ensureWebhooks(account);
   await pool.query(
     "UPDATE social_accounts SET comments_synced_at=now() WHERE id=$1",
     [account.id],
