@@ -14,6 +14,8 @@ const en = {
   "login.signInFailed": "Sign-in failed",
   "login.unableToSignIn": "Unable to sign in",
   "login.checkEmail": "Check your email for a sign-in link.",
+  "login.verifySent":
+    "Account created. We sent a confirmation link to your email address – open it to sign in.",
   "login.emailPlaceholder": "you@agency.com",
   "login.sendMagicLink": "Email me a sign-in link",
   "login.createAccount": "Create account",
@@ -49,6 +51,14 @@ const en = {
   "invite.signInAndJoin": "Sign in and join",
   "invite.toSignUp": "Create a new account",
   "invite.expires": "This invitation expires {date}.",
+  "invite.verifySent.title": "Account created – confirm your email address",
+  "invite.verifySent.body":
+    "We sent a confirmation link to {email}. Open it: it signs you in and brings you back here, where you can join with one click.",
+  "invite.verifySent.resend": "Send the confirmation email again",
+  "invite.verifySent.resent": "Sent again – check your inbox and spam folder.",
+  "invite.notVerified.title": "Confirm your email address first",
+  "invite.notVerified.body":
+    "Your account exists, but {email} is not confirmed yet. Open the link in the confirmation email, or send it again below.",
   "invite.role.OWNER": "owner",
   "invite.role.ADMIN": "admin",
   "invite.role.SOCIAL_MANAGER": "social manager",
@@ -82,6 +92,8 @@ const hu = {
   "login.signInFailed": "Nem sikerült bejelentkezni",
   "login.unableToSignIn": "Nem sikerült bejelentkezni",
   "login.checkEmail": "Elküldtük a belépési linket – nézd meg a postafiókodat.",
+  "login.verifySent":
+    "A fiókod elkészült. Megerősítő linket küldtünk az e-mail-címedre – nyisd meg a belépéshez.",
   "login.emailPlaceholder": "te@ugynokseg.hu",
   "login.sendMagicLink": "Küldj belépési linket e-mailben",
   "login.createAccount": "Fiók létrehozása",
@@ -117,7 +129,17 @@ const hu = {
   "invite.createAndJoin": "Fiók létrehozása és csatlakozás",
   "invite.signInAndJoin": "Bejelentkezés és csatlakozás",
   "invite.toSignUp": "Új fiók létrehozása",
-  "invite.expires": "A meghívó lejár: {date}.",
+  "invite.expires": "A meghívó lejár: {date}",
+  "invite.verifySent.title":
+    "A fiókod elkészült – erősítsd meg az e-mail-címed",
+  "invite.verifySent.body":
+    "Megerősítő linket küldtünk ide: {email}. Nyisd meg: bejelentkeztet, és visszahoz erre az oldalra, ahol egy kattintással csatlakozhatsz.",
+  "invite.verifySent.resend": "Megerősítő e-mail újraküldése",
+  "invite.verifySent.resent":
+    "Újraküldtük – nézd meg a beérkező leveleket és a spam mappát is.",
+  "invite.notVerified.title": "Előbb erősítsd meg az e-mail-címed",
+  "invite.notVerified.body":
+    "A fiókod már létezik, de a(z) {email} cím még nincs megerősítve. Nyisd meg a megerősítő e-mailben lévő linket, vagy küldd újra lent.",
   "invite.role.OWNER": "tulajdonos",
   "invite.role.ADMIN": "adminisztrátor",
   "invite.role.SOCIAL_MANAGER": "social media menedzser",

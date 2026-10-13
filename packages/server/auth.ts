@@ -29,6 +29,9 @@ export const auth = betterAuth({
     sendVerificationEmail: async ({ user, url }) =>
       sendAuthMail(user.email, "verify", url),
     sendOnSignUp: process.env.NODE_ENV === "production",
+    // The confirmation link signs the person in and returns them to the
+    // page they signed up from (e.g. a pending invitation).
+    autoSignInAfterVerification: true,
   },
   socialProviders:
     process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET

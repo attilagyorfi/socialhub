@@ -41,6 +41,23 @@ export default function InvitationPage({
   const [mode, setMode] = useState<"sign-up" | "sign-in">("sign-up");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Set when the account exists but its email address is not confirmed yet.
+  const [verification, setVerification] = useState<"sent" | "needed">();
+  const [resent, setResent] = useState(false);
+
+  async function resendVerification() {
+    setResent(false);
+    const response = await fetch("/api/auth/send-verification-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: data?.email,
+        callbackURL: `/invite/${token}`,
+      }),
+    });
+    if (!response.ok) throw new Error(t("auth.invite.unableToJoin"));
+    setResent(true);
+  }
   useEffect(() => {
     Promise.all([
       fetch(`/api/invitation/${token}`).then(async (response) => {
@@ -101,7 +118,40 @@ export default function InvitationPage({
                   })
                 : t("auth.invite.accessAll")}
             </p>
-            {sessionEmail ? (
+            {verification ? (
+              <div className="success-notice invite-verify" role="status">
+                <div>
+                  <strong>
+                    {verification === "sent"
+                      ? t("auth.invite.verifySent.title")
+                      : t("auth.invite.notVerified.title")}
+                  </strong>
+                  <p>
+                    {t(
+                      verification === "sent"
+                        ? "auth.invite.verifySent.body"
+                        : "auth.invite.notVerified.body",
+                      { email: data.email },
+                    )}
+                  </p>
+                  {resent ? (
+                    <small>{t("auth.invite.verifySent.resent")}</small>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() =>
+                        resendVerification().catch((reason) =>
+                          setError(reason.message),
+                        )
+                      }
+                    >
+                      {t("auth.invite.verifySent.resend")}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : sessionEmail ? (
               sessionEmail.toLowerCase() === data.email ? (
                 <button
                   className="primary"
@@ -152,9 +202,15 @@ export default function InvitationPage({
                         email: data.email,
                         password: values.get("password"),
                         name: values.get("name"),
+                        callbackURL: `/invite/${token}`,
                       }),
                     });
                     const result = await response.json();
+                    if (!response.ok && result?.code === "EMAIL_NOT_VERIFIED") {
+                      setVerification("needed");
+                      setBusy(false);
+                      return;
+                    }
                     if (!response.ok)
                       throw new Error(
                         authErrorMessage(
@@ -164,6 +220,13 @@ export default function InvitationPage({
                           "auth.invite.authFailed",
                         ),
                       );
+                    // Without a session the address must be confirmed first;
+                    // the emailed link brings the person back here.
+                    if (!result?.token) {
+                      setVerification("sent");
+                      setBusy(false);
+                      return;
+                    }
                     await accept();
                   } catch (reason) {
                     setError(

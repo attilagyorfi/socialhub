@@ -21,6 +21,7 @@ export default function Login() {
     "sign-in",
   );
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   return (
     <main className="login">
@@ -50,6 +51,7 @@ export default function Login() {
             e.preventDefault();
             setBusy(true);
             setError("");
+            setNotice("");
             const f = new FormData(e.currentTarget);
             try {
               const endpoint =
@@ -69,7 +71,10 @@ export default function Login() {
                 throw new Error(
                   authErrorMessage(locale, t, data, "auth.login.signInFailed"),
                 );
-              if (mode === "magic-link") setError(t("auth.login.checkEmail"));
+              if (mode === "magic-link") setNotice(t("auth.login.checkEmail"));
+              // Sign-up without a session means the address must be confirmed.
+              else if (mode === "sign-up" && !data?.token)
+                setNotice(t("auth.login.verifySent"));
               else window.location.href = "/";
             } catch (e) {
               setError(
@@ -118,8 +123,13 @@ export default function Login() {
             </label>
           )}
           {error && (
-            <p role="status" className="notice">
+            <p role="alert" className="alert">
               {error}
+            </p>
+          )}
+          {notice && (
+            <p role="status" className="success-notice">
+              {notice}
             </p>
           )}
           <button className="primary" disabled={busy}>
