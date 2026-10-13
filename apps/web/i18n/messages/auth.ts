@@ -55,6 +55,7 @@ const en = {
   "invite.verifySent.body":
     "We sent a confirmation link to {email}. Open it: it signs you in and brings you back here, where you can join with one click.",
   "invite.verifySent.resend": "Send the confirmation email again",
+  "invite.verifySent.signIn": "Already confirmed? Sign in",
   "invite.verifySent.resent": "Sent again – check your inbox and spam folder.",
   "invite.notVerified.title": "Confirm your email address first",
   "invite.notVerified.body":
@@ -135,6 +136,7 @@ const hu = {
   "invite.verifySent.body":
     "Megerősítő linket küldtünk ide: {email}. Nyisd meg: bejelentkeztet, és visszahoz erre az oldalra, ahol egy kattintással csatlakozhatsz.",
   "invite.verifySent.resend": "Megerősítő e-mail újraküldése",
+  "invite.verifySent.signIn": "Már megerősítetted? Jelentkezz be",
   "invite.verifySent.resent":
     "Újraküldtük – nézd meg a beérkező leveleket és a spam mappát is.",
   "invite.notVerified.title": "Előbb erősítsd meg az e-mail-címed",

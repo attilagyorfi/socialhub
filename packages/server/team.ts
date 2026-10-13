@@ -276,6 +276,8 @@ export async function revokeInvitation(c: Context, invitationId: string) {
 export async function invitationView(secret: string) {
   const result = await pool.query(
     `SELECT mi.email,mi.role,mi.status,mi.expires_at,o.name AS organization_name,
+     -- Only the invitee holds the token, so this reveals nothing to others.
+     EXISTS(SELECT 1 FROM "user" u WHERE lower(u.email)=mi.email) AS account_exists,
      coalesce(jsonb_agg(jsonb_build_object('id',c.id,'name',c.name)) FILTER (WHERE c.id IS NOT NULL),'[]'::jsonb) AS clients
      FROM member_invitations mi JOIN organizations o ON o.id=mi.organization_id AND o.deleted_at IS NULL
      LEFT JOIN member_invitation_clients mic ON mic.invitation_id=mi.id
