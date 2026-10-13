@@ -2580,3 +2580,10 @@ td {
   margin-right: 10px;
   flex: none;
 }
+.invite-verify {
+  align-items: flex-start;
+  margin: 20px 0;
+}
+.invite-verify p {
+  margin: 6px 0 8px;
+}
