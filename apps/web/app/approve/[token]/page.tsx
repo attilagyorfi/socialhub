@@ -74,6 +74,11 @@ export default function Approval({
   return (
     <main className="approval-page">
       <div className="wordmark dark">
+        <img
+          className="wordmark-mark"
+          src="/brand/socialhub-mark-on-light.png"
+          alt=""
+        />
         g2a<span>{t("approve.wordmark")}</span>
       </div>
       <section className="panel">
