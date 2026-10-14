@@ -1,4 +1,6 @@
+import * as Sentry from "@sentry/node";
 import { Worker } from "bullmq";
+import { scrubEvent, sentryOptions } from "../../../packages/core/telemetry";
 import { pool } from "../../../packages/db";
 import {
   redis,
@@ -33,6 +35,13 @@ import {
 import { processPrivacyMaintenance } from "../../../packages/server/privacy";
 import { syncPublishReconciliations } from "../../../packages/server/publish-reconciliation";
 
+// Error reporting; disabled unless SENTRY_DSN is set.
+Sentry.init({
+  ...sentryOptions(process.env.SENTRY_DSN),
+  beforeSend: (event) => scrubEvent(event),
+});
+Sentry.setTag("service", "worker");
+
 const instanceId =
   process.env.WORKER_INSTANCE_ID ??
   process.env.HOSTNAME ??
@@ -64,6 +73,14 @@ publishWorker.on("error", () =>
     }),
   ),
 );
+// Unexpected job failures (handled outcomes are recorded by the jobs).
+for (const [queue, worker] of [
+  ["publish", publishWorker],
+  ["media", mediaWorker],
+] as const)
+  worker.on("failed", (_job, error) =>
+    Sentry.captureException(error, { tags: { queue } }),
+  );
 mediaWorker.on("error", () =>
   console.error(
     JSON.stringify({
@@ -86,7 +103,8 @@ async function periodic(
   lastRun.set(task, Date.now());
   try {
     await run();
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { task } });
     console.error(
       JSON.stringify({
         event: "maintenance_error",

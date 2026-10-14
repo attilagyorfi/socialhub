@@ -7,7 +7,7 @@ const en = {
   "title.deletion": "Data deletion instructions",
   draftNotice:
     "Draft. This document has not yet been reviewed by a legal professional; professional legal review is required before production launch.",
-  lastUpdated: "Last updated: 2026-10-13",
+  lastUpdated: "Last updated: 2026-10-14",
 
   // ---------------------------------------------------------------- Privacy
   "privacy.s1.title": "1. Data controller",
@@ -32,7 +32,7 @@ const en = {
 
   "privacy.s6.title": "6. Processors and recipients",
   "privacy.s6.body":
-    "We use the following service providers (processors) to operate the Service:\n• Vercel – hosting of the web application (Frankfurt, Germany region).\n• Railway – PostgreSQL database, Redis queue and background worker (EU West region).\n• Cloudflare (R2) – storage of uploaded media files.\n• Resend – sending transactional emails (EU region).\n• OpenAI – AI text generation, only when a user uses the AI features.\n\nMeta Platforms (Facebook and Instagram) receives the content that is published to the connected accounts and processes it as an independent controller under its own terms and privacy policy.\n\nWithin the Service, data is visible only to users who have access to the relevant organization or client workspace, according to their role. We do not sell personal data and do not share it with third parties for their own marketing purposes.",
+    "We use the following service providers (processors) to operate the Service:\n• Vercel – hosting of the web application (Frankfurt, Germany region).\n• Railway – PostgreSQL database, Redis queue and background worker (EU West region).\n• Cloudflare (R2) – storage of uploaded media files.\n• Resend – sending transactional emails (EU region).\n• OpenAI – AI text generation, only when a user uses the AI features.\n• Sentry (Functional Software, Inc.) – error monitoring (EU data region); error reports contain technical data and an internal user ID, but no passwords, access tokens, email addresses or IP addresses.\n\nMeta Platforms (Facebook and Instagram) receives the content that is published to the connected accounts and processes it as an independent controller under its own terms and privacy policy.\n\nWithin the Service, data is visible only to users who have access to the relevant organization or client workspace, according to their role. We do not sell personal data and do not share it with third parties for their own marketing purposes.",
 
   "privacy.s7.title": "7. International data transfers",
   "privacy.s7.body":
@@ -143,7 +143,7 @@ const hu = {
   "title.deletion": "Útmutató az adatok törléséhez",
   draftNotice:
     "Tervezet. A dokumentumot jogi szakember még nem ellenőrizte; éles indulás előtt szakmai jogi ellenőrzés szükséges.",
-  lastUpdated: "Utolsó frissítés: 2026-10-13",
+  lastUpdated: "Utolsó frissítés: 2026-10-14",
 
   // ---------------------------------------------------------------- Privacy
   "privacy.s1.title": "1. Az adatkezelő",
@@ -168,7 +168,7 @@ const hu = {
 
   "privacy.s6.title": "6. Adatfeldolgozók és címzettek",
   "privacy.s6.body":
-    "A Szolgáltatás működtetéséhez az Adatkezelő az alábbi szolgáltatókat (adatfeldolgozókat) veszi igénybe:\n• Vercel – a webalkalmazás tárhelye (frankfurti, németországi régió).\n• Railway – PostgreSQL-adatbázis, Redis-alapú feladatsor és háttérfolyamat (EU West régió).\n• Cloudflare (R2) – a feltöltött médiafájlok tárolása.\n• Resend – tranzakciós e-mailek küldése (EU-s régió).\n• OpenAI – MI-alapú szöveggenerálás, kizárólag akkor, ha a Felhasználó használja az MI-funkciókat.\n\nA Meta Platforms (Facebook és Instagram) megkapja a csatlakoztatott fiókokon közzétett tartalmakat, és azokat saját feltételei és adatkezelési szabályzata szerint, önálló adatkezelőként kezeli.\n\nA Szolgáltatáson belül az adatokhoz csak azok a Felhasználók férnek hozzá, akik szerepkörüknek megfelelően hozzáféréssel rendelkeznek az adott szervezethez vagy ügyfél-munkaterülethez. Az Adatkezelő személyes adatot nem értékesít, és harmadik feleknek azok saját marketingcéljaira nem ad át.",
+    "A Szolgáltatás működtetéséhez az Adatkezelő az alábbi szolgáltatókat (adatfeldolgozókat) veszi igénybe:\n• Vercel – a webalkalmazás tárhelye (frankfurti, németországi régió).\n• Railway – PostgreSQL-adatbázis, Redis-alapú feladatsor és háttérfolyamat (EU West régió).\n• Cloudflare (R2) – a feltöltött médiafájlok tárolása.\n• Resend – tranzakciós e-mailek küldése (EU-s régió).\n• OpenAI – MI-alapú szöveggenerálás, kizárólag akkor, ha a Felhasználó használja az MI-funkciókat.\n• Sentry (Functional Software, Inc.) – hibafigyelés (EU-s adattárolási régió); a hibajelentések technikai adatokat és belső felhasználói azonosítót tartalmaznak, jelszót, hozzáférési tokent, e-mail-címet vagy IP-címet nem.\n\nA Meta Platforms (Facebook és Instagram) megkapja a csatlakoztatott fiókokon közzétett tartalmakat, és azokat saját feltételei és adatkezelési szabályzata szerint, önálló adatkezelőként kezeli.\n\nA Szolgáltatáson belül az adatokhoz csak azok a Felhasználók férnek hozzá, akik szerepkörüknek megfelelően hozzáféréssel rendelkeznek az adott szervezethez vagy ügyfél-munkaterülethez. Az Adatkezelő személyes adatot nem értékesít, és harmadik feleknek azok saját marketingcéljaira nem ad át.",
 
   "privacy.s7.title": "7. Harmadik országba történő adattovábbítás",
   "privacy.s7.body":
