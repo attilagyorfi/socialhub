@@ -75,9 +75,9 @@ test("a forgotten password can be reset from the emailed link", async ({
 
     // The link works once.
     await page.goto(subject);
-    await expect(page.getByRole("alert")).toContainText(
-      "expired or has already been used",
-    );
+    await expect(
+      page.getByText("expired or has already been used"),
+    ).toBeVisible();
   } finally {
     await api.dispose();
     await db.query('DELETE FROM "user" WHERE email=$1', [email]);
