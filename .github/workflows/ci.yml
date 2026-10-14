@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Typecheck, lint, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # FFmpeg lets the video transcoding tests run instead of being skipped.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: npm ci
+      # The lockfile is written on Windows, where npm omits other platforms'
+      # optional native bindings (npm/cli#4828); add the Linux one for Vitest.
+      - run: npm install --no-save "@rolldown/binding-linux-x64-gnu@$(node -p "require('./node_modules/rolldown/package.json').version")"
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+        env:
+          FFMPEG_PATH: /usr/bin/ffmpeg
+          FFPROBE_PATH: /usr/bin/ffprobe
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: npm ci
+      # The lockfile is written on Windows, where npm omits other platforms'
+      # optional native bindings (npm/cli#4828); add the Linux one for Vitest.
+      - run: npm install --no-save "@rolldown/binding-linux-x64-gnu@$(node -p "require('./node_modules/rolldown/package.json').version")"
+      - name: Start Postgres, Redis, MinIO and Mailpit
+        run: docker compose up -d --wait postgres redis minio mail
+      - name: Write CI environment
+        # Local-only values; secrets are generated per run.
+        run: |
+          cp .env.example .env
+          {
+            echo "BETTER_AUTH_SECRET=$(openssl rand -hex 32)"
+            echo "ENCRYPTION_KEY=$(openssl rand -hex 32)"
+            echo "DEMO_PASSWORD=ci-$(openssl rand -hex 12)"
+            echo "FFMPEG_PATH=/usr/bin/ffmpeg"
+            echo "FFPROBE_PATH=/usr/bin/ffprobe"
+            echo "MEDIA_E2E=1"
+          } >> .env
+          # Next.js reads env files from the app directory, not the repo root.
+          cp .env apps/web/.env.local
+      - run: npm run db:migrate
+      - run: npm run db:seed
+      - name: Start web app and worker
+        run: |
+          nohup npm run dev > .local-web.log 2>&1 &
+          nohup npm run worker > .local-worker.log 2>&1 &
+          for i in $(seq 1 90); do
+            curl -sf http://localhost:3010/api/health/live >/dev/null && break
+            sleep 2
+          done
+          # Compile the main pages before the first test hits them.
+          curl -sf http://localhost:3010/login >/dev/null
+          curl -sf http://localhost:3010/ >/dev/null || true
+      - run: npm run test:e2e
+      - name: Server logs
+        if: failure()
+        run: |
+          tail -n 200 .local-web.log || true
+          tail -n 200 .local-worker.log || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-results
+          path: .local/e2e-results
+          retention-days: 7
