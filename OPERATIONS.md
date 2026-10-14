@@ -27,6 +27,15 @@ Recommended alerts:
 
 Owners and administrators can see these job, approval-email, token and worker signals under Settings → Operations. Do not expose the tenant-scoped detail to unauthenticated monitoring.
 
+## Error monitoring
+
+With `SENTRY_DSN` (server, worker) and `NEXT_PUBLIC_SENTRY_DSN` (browser,
+inlined at build time) set, unexpected errors are reported to Sentry. Reports
+are scrubbed of tokens, cookies, request bodies, email and IP addresses. To
+confirm delivery, an owner or administrator can POST
+`{"action":"operations.sentry-test","clientId":"<client>"}` to `/api/hub`; the
+call returns 503 and a "Sentry test error" issue appears in Sentry.
+
 ## Incident triage
 
 1. Check `/api/health/ready` to identify the failed dependency and compare the web and worker `APP_REVISION` values.

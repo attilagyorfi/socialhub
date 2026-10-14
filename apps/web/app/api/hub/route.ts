@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { openCommentCount } from "../../../../../packages/server/comments";
 import { pool } from "../../../../../packages/db";
@@ -92,6 +93,8 @@ function failure(e: unknown) {
       { error: e.message, code: e.code },
       { status: e.status },
     );
+  // Unexpected failures reach error monitoring; expected ones do not.
+  Sentry.captureException(e);
   console.error(
     JSON.stringify({
       event: "api_error",
@@ -394,6 +397,7 @@ export async function POST(request: Request) {
               action === "analytics.backfill" ||
               action === "client.locale.update" ||
               action === "publishing.reconcile" ||
+              action === "operations.sentry-test" ||
               action.startsWith("team.")
             ? "manage"
             : "create",
@@ -426,6 +430,9 @@ export async function POST(request: Request) {
         return Response.json(
           await updateClientLocale(c, localeInput.parse(body.locale)),
         );
+      case "operations.sentry-test":
+        // Lets administrators confirm that error monitoring receives errors.
+        throw new Error("Sentry test error requested by an administrator");
       case "publishing.reconcile":
         return Response.json(await queueUncertainPublishReconciliation(c));
       case "account.connect": {

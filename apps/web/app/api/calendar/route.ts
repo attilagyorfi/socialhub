@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { AppError, sameOrigin } from "../../../../../packages/core/security";
 import { context } from "../../../../../packages/server/context";
@@ -27,6 +28,8 @@ function failure(error: unknown) {
       { error: error.message, code: error.code },
       { status: error.status },
     );
+  // Unexpected failures reach error monitoring; expected ones do not.
+  Sentry.captureException(error);
   console.error(
     JSON.stringify({
       event: "calendar_api_error",
