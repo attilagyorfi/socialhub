@@ -16,6 +16,7 @@ import {
   recoverMediaJobs,
 } from "../../../packages/server/media-processing";
 import { refreshDueMetaCredentials } from "../../../packages/server/meta";
+import { runDueDatabaseBackup } from "../../../packages/server/backups";
 import {
   processCommentWebhooks,
   syncDueComments,
@@ -203,6 +204,11 @@ async function dispatch() {
       const sync = await syncDueComments();
       if (sync.inserted)
         console.log(JSON.stringify({ event: "comment_sync", ...sync }));
+    });
+    await periodic("databaseBackup", 60 * 60 * 1000, async () => {
+      const backup = await runDueDatabaseBackup();
+      if (backup.status === "created")
+        console.log(JSON.stringify({ event: "database_backup", ...backup }));
     });
     await periodic("metaCredentials", 60 * 60 * 1000, async () => {
       await refreshDueMetaCredentials();

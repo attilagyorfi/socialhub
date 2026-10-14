@@ -41,6 +41,22 @@ Owners and administrators can see these job, approval-email, token and worker si
 
 ## PostgreSQL backup and restore drill
 
+### Automatic daily backups (worker)
+
+With `BACKUP_ENABLED=true` the worker runs `pg_dump --format=custom` once a day
+and uploads the file to object storage under `backups/postgres/` (bucket
+`BACKUP_BUCKET`, defaulting to `S3_BUCKET`). Backups older than
+`BACKUP_RETENTION_DAYS` (default 14) are deleted; the newest is always kept.
+Each successful run logs a `database_backup` event with the key and size. The
+worker image installs the PostgreSQL 18 client, matching the hosted server.
+
+To restore one of these backups, download the newest `backups/postgres/*.dump`
+object with the storage credentials (for example `aws s3 cp` with
+`--endpoint-url` set to the R2 endpoint) and follow the drill below with that
+file in place of `g2a-social-hub.dump`.
+
+### Manual backup and drill
+
 Enable managed PostgreSQL point-in-time recovery and encrypted daily backups with a retention period approved by the data-retention policy. The following commands illustrate a portable logical backup; supply credentials through the platform secret mechanism rather than command history:
 
 ```sh
