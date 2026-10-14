@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, production]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -32,6 +32,28 @@ jobs:
         env:
           FFMPEG_PATH: /usr/bin/ffmpeg
           FFPROBE_PATH: /usr/bin/ffprobe
+
+  images:
+    name: Docker images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build web image
+        run: docker build -f Dockerfile.web -t socialhub-web .
+      - name: Build worker image
+        run: docker build -f Dockerfile.worker -t socialhub-worker .
+      - name: Worker image has a PostgreSQL 18 client
+        run: docker run --rm --entrypoint pg_dump socialhub-worker --version | grep -E " 18\."
+      - name: Web image starts and answers the liveness check
+        run: |
+          docker run -d --name web -p 3000:3000 -e APP_URL=http://localhost:3000 socialhub-web
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/api/health/live && exit 0
+            sleep 2
+          done
+          docker logs web
+          exit 1
 
   e2e:
     name: End-to-end (Playwright)

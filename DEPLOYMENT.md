@@ -2,6 +2,33 @@
 
 Target: Next.js on Vercel, long-running BullMQ worker on Railway, managed PostgreSQL and Redis, private S3/R2. Nothing has been deployed to a public domain by this repository setup.
 
+## Environments
+
+| | Staging | Production |
+|---|---|---|
+| URL | https://socialhub-staging.vercel.app | https://hub.g2amarketing.hu |
+| Branch | `main` | `production` |
+| Web | Vercel project `socialhub-staging` | Railway service `web` (`Dockerfile.web`) |
+| Worker | Railway `scintillating-light` / `worker` | Railway production project / `worker` (`Dockerfile.worker`) |
+| Database, Redis | Railway `scintillating-light` | Railway production project (separate) |
+| Media | R2 bucket `g2a-socialhub-staging` | R2 bucket for production (separate) |
+
+Every merge to `main` deploys staging. Production deploys only from
+`production`: release by opening a pull request from `main` into `production`
+after checking the change on staging. Both branches require green CI.
+
+### Production web on Railway
+
+`Dockerfile.web` builds the Next.js standalone server and runs
+`node apps/web/server.js` on Railway's `PORT`. Set the Railway healthcheck path
+to `/api/health/live`. `NEXT_PUBLIC_SENTRY_DSN` and
+`NEXT_PUBLIC_SENTRY_ENVIRONMENT` must exist as service variables before the
+build because they are inlined into the browser bundle. The custom domain
+`hub.g2amarketing.hu` is attached to this service (CNAME + TXT record from the
+Railway domain settings at the DNS provider). Run migrations against the
+production database before the first release and after every release that adds
+one: `npx tsx --env-file=<production env file> scripts/migrate.ts`.
+
 ## Web
 
 Use the repository's locked dependencies. Vercel project root is the repository; build with `npm run build`. Configure the Next.js application directory `apps/web` according to the platform's monorepo settings. Validate output and server tracing before production rollout. Do not deploy a static export: authentication and API routes require a server runtime.
