@@ -17,25 +17,25 @@ A jogi szövegekben (`apps/web/i18n/messages/legal.ts`, HU és EN) szereplő ada
 
 Ebben a dokumentumban még:
 
-- `<domain>` – az éles (production) domain. Jelenleg staging: `socialhub-staging.vercel.app`. Domainváltáskor minden URL-t frissíteni kell a Meta App Dashboardon is.
+- `hub.g2amarketing.hu` – az éles (production) domain: `hub.g2amarketing.hu`. A staging (`socialhub-staging.vercel.app`) csak tesztelésre szolgál; a beadáskor minden URL az éles domainre mutasson.
 
 ## 2. Teendők a Meta App Dashboardon
 
 1. **Business verification** – a G2A Marketing Bt. üzleti ellenőrzése a Meta Business Managerben (Security Center → Business verification). Advanced Access-hez kötelező.
 2. **App settings → Basic**
    - **App icon**: 1024×1024 px, PNG/JPG.
-   - **Privacy Policy URL**: `https://socialhub-staging.vercel.app/legal/privacy` (élesben: `https://<domain>/legal/privacy`).
-   - **Terms of Service URL**: `https://socialhub-staging.vercel.app/legal/terms` (élesben: `https://<domain>/legal/terms`).
-   - **User data deletion**: válaszd a **Data deletion callback URL** opciót → `https://<domain>/api/meta/data-deletion`. (Az emberi olvasásra szánt útmutató: `https://<domain>/legal/deletion` – ezt az adatkezelési tájékoztató is linkeli.)
+   - **Privacy Policy URL**: `https://hub.g2amarketing.hu/legal/privacy`.
+   - **Terms of Service URL**: `https://hub.g2amarketing.hu/legal/terms`.
+   - **User data deletion**: válaszd a **Data deletion callback URL** opciót → `https://hub.g2amarketing.hu/api/meta/data-deletion`. (Az emberi olvasásra szánt útmutató: `https://hub.g2amarketing.hu/legal/deletion` – ezt az adatkezelési tájékoztató is linkeli.)
    - **Category**: Business and pages (vagy a legközelebbi elérhető „Business” kategória).
    - **Contact email**: `info@g2amarketing.hu`.
 3. **Facebook Login for Business → Settings**
-   - **Valid OAuth Redirect URIs**: `https://<domain>/api/oauth/meta/callback` (a staging domainnel is).
-   - **Deauthorize callback URL**: `https://<domain>/api/meta/deauthorize`.
-   - **Data Deletion Request URL** (ha itt is kéri): `https://<domain>/api/meta/data-deletion`.
+   - **Valid OAuth Redirect URIs**: `https://hub.g2amarketing.hu/api/oauth/meta/callback` (a staging domainnel is).
+   - **Deauthorize callback URL**: `https://hub.g2amarketing.hu/api/meta/deauthorize`.
+   - **Data Deletion Request URL** (ha itt is kéri): `https://hub.g2amarketing.hu/api/meta/data-deletion`.
 4. **Facebook Login for Business → Configurations** – a konfiguráció (`META_LOGIN_CONFIG_ID`) pontosan a 3. pontban felsorolt tizenkét engedélyt tartalmazza, ne többet. A meglévő kapcsolatokat az új engedélyek miatt újra kell csatlakoztatni (Connected accounts → Connect Facebook & Instagram).
 4/b. **Webhooks** (App Dashboard → Webhooks, vagy a Használati esetek alatt):
-   - **Callback URL**: `https://<domain>/api/webhooks/meta`, **Verify token**: a `META_WEBHOOK_VERIFY_TOKEN` környezeti változó értéke (a Vercel env-ben; ne írd ide).
+   - **Callback URL**: `https://hub.g2amarketing.hu/api/webhooks/meta`, **Verify token**: a `META_WEBHOOK_VERIFY_TOKEN` környezeti változó értéke (a Vercel env-ben; ne írd ide).
    - **Page** objektum: iratkozz fel a `feed` mezőre.
    - **Instagram** objektum: iratkozz fel a `comments` mezőre.
    - Az oldalak feliratkozását (`/{page-id}/subscribed_apps`) az alkalmazás magától elvégzi az első kommentszinkronnál, ha a kapcsolat már tartalmazza a `pages_manage_metadata` engedélyt.
