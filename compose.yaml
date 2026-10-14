@@ -18,16 +18,16 @@ services:
     ports: ["127.0.0.1:6379:6379"]
     volumes: ["redis:/data"]
   minio:
-    # Docker Hub no longer publishes MinIO images; quay.io is the official registry.
-    image: quay.io/minio/minio:latest
-    command: server /data --console-address :9001
+    # MinIO no longer publishes community images (Docker Hub and quay.io are
+    # gone); Bitnami's archived build of the same server is still public.
+    image: bitnamilegacy/minio:2025.7.23
     environment:
       MINIO_ROOT_USER: g2a_local
       MINIO_ROOT_PASSWORD: g2a_local_storage_only
       # HTTPS is used for local Meta OAuth testing (npm run dev:https).
       MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:3010,https://localhost:3010
     ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
-    volumes: ["media:/data"]
+    volumes: ["media:/bitnami/minio/data"]
   mail:
     image: axllent/mailpit:latest
     ports: ["127.0.0.1:1025:1025", "127.0.0.1:8025:8025"]
