@@ -2599,3 +2599,154 @@ a.button {
   border-radius: 6px;
   text-decoration: none;
 }
+/* Product tour (components/tour): sits above every modal of the hub. */
+.tour-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+.tour-blocker {
+  position: fixed;
+  inset: 0;
+}
+.tour-blocker.dim {
+  background: #13281e8c;
+}
+.tour-spotlight {
+  position: fixed;
+  border-radius: var(--radius);
+  box-shadow:
+    0 0 0 2px #dbe9b7,
+    0 0 0 9999px #13281e8c;
+  pointer-events: none;
+  transition:
+    top 0.25s ease,
+    left 0.25s ease,
+    width 0.25s ease,
+    height 0.25s ease;
+}
+.tour-card {
+  position: fixed;
+  width: min(360px, calc(100vw - 24px));
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 20px 80px #10251c33;
+  padding: 16px 18px 14px;
+}
+.tour-card.centered {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.tour-card.sheet {
+  top: auto;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  border-radius: 14px 14px 0 0;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+}
+.tour-card h2 {
+  font-size: 17px;
+  font-weight: 650;
+  margin: 4px 0 6px;
+  letter-spacing: -0.2px;
+}
+.tour-card p {
+  margin: 0;
+  color: #4d5d5f;
+  line-height: 1.6;
+}
+.tour-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.tour-counter {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 1.2px;
+  color: var(--accent);
+}
+.tour-close {
+  margin: -6px -8px -6px 0;
+  padding: 6px;
+}
+.tour-dots {
+  display: flex;
+  gap: 5px;
+  margin: 14px 0 12px;
+}
+.tour-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  transition:
+    width 0.2s ease,
+    background 0.2s ease;
+}
+.tour-dots span.active {
+  width: 18px;
+  background: var(--accent);
+}
+.tour-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tour-actions .text-button {
+  color: var(--muted);
+}
+.tour-actions-end {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.tour-actions-end .primary {
+  padding: 9px 16px;
+}
+.tour-arrow {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+.tour-card.placement-bottom .tour-arrow {
+  top: -7px;
+  left: calc(var(--tour-arrow) - 6px);
+  border-right: 0;
+  border-bottom: 0;
+}
+.tour-card.placement-top .tour-arrow {
+  bottom: -7px;
+  left: calc(var(--tour-arrow) - 6px);
+  border-left: 0;
+  border-top: 0;
+}
+.tour-card.placement-right .tour-arrow {
+  left: -7px;
+  top: calc(var(--tour-arrow) - 6px);
+  border-right: 0;
+  border-top: 0;
+}
+.tour-card.placement-left .tour-arrow {
+  right: -7px;
+  top: calc(var(--tour-arrow) - 6px);
+  border-left: 0;
+  border-bottom: 0;
+}
+.tour-card.sheet .tour-arrow {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-spotlight,
+  .tour-dots span {
+    transition: none;
+  }
+}
