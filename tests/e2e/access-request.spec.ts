@@ -27,10 +27,14 @@ test("a visitor requests access and the operator is notified", async ({
   const email = `request-${crypto.randomUUID()}@example.test`;
 
   await page.goto("/login");
-  await page.getByRole("button", { name: "Request access" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Request access" }),
-  ).toBeVisible();
+  // On a cold dev server the button renders before React hydrates and an
+  // early click is lost; repeat it until the mode switches.
+  await expect(async () => {
+    await page.getByRole("button", { name: "Request access" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Request access" }),
+    ).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 30000 });
   await expect(page.getByLabel("Password")).toHaveCount(0);
   await page.getByLabel("Your name").fill("Access Visitor");
   await page.getByLabel("Email address").fill(email);
@@ -38,8 +42,10 @@ test("a visitor requests access and the operator is notified", async ({
   await page.getByLabel("Message (optional)").fill("We would like a demo.");
   await page.getByRole("button", { name: "Send request" }).click();
 
+  // The first request compiles the route on the dev server.
   await expect(page.getByRole("status")).toContainText(
     "We have received your request",
+    { timeout: 30000 },
   );
   for (const label of ["Your name", "Email address", "Company (optional)"])
     await expect(page.getByLabel(label)).toHaveCount(0);
