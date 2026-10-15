@@ -34,6 +34,7 @@ import {
 } from "../../../packages/server/approvals";
 import { processPrivacyMaintenance } from "../../../packages/server/privacy";
 import { syncPublishReconciliations } from "../../../packages/server/publish-reconciliation";
+import { runAlertChecks } from "../../../packages/server/alerts";
 
 // Error reporting; disabled unless SENTRY_DSN is set.
 Sentry.init({
@@ -222,6 +223,11 @@ async function dispatch() {
       const sync = await syncDueComments();
       if (sync.inserted)
         console.log(JSON.stringify({ event: "comment_sync", ...sync }));
+    });
+    await periodic("alerts", 5 * 60_000, async () => {
+      const alerts = await runAlertChecks();
+      if (alerts.new || alerts.resolved)
+        console.log(JSON.stringify({ event: "operational_alerts", ...alerts }));
     });
     await periodic("databaseBackup", 60 * 60 * 1000, async () => {
       const backup = await runDueDatabaseBackup();

@@ -12,13 +12,13 @@ import {
 import { mediaBucket, storageClient } from "./media";
 
 const run = promisify(execFile);
-const PREFIX = "backups/postgres/";
+export const BACKUP_PREFIX = "backups/postgres/";
 const INTERVAL_HOURS = 24;
 
 export type StoredBackup = { key: string; createdAt: Date };
 
 export const backupsEnabled = () => process.env.BACKUP_ENABLED === "true";
-const backupBucket = () => process.env.BACKUP_BUCKET || mediaBucket();
+export const backupBucket = () => process.env.BACKUP_BUCKET || mediaBucket();
 const retentionDays = () =>
   Math.max(1, Number(process.env.BACKUP_RETENTION_DAYS) || 14);
 
@@ -26,7 +26,7 @@ const retentionDays = () =>
 // ever exposed publicly.
 export function backupKey(now: Date) {
   const stamp = now.toISOString().replace(/[:.]/g, "-");
-  return `${PREFIX}${stamp}-${randomBytes(8).toString("hex")}.dump`;
+  return `${BACKUP_PREFIX}${stamp}-${randomBytes(8).toString("hex")}.dump`;
 }
 
 export function isBackupDue(backups: StoredBackup[], now: Date) {
@@ -47,14 +47,14 @@ export function expiredBackups(
   return backups.filter((b) => b !== newest && b.createdAt.getTime() < cutoff);
 }
 
-async function listBackups(): Promise<StoredBackup[]> {
+export async function listBackups(): Promise<StoredBackup[]> {
   const backups: StoredBackup[] = [];
   let token: string | undefined;
   do {
     const page = await storageClient().send(
       new ListObjectsV2Command({
         Bucket: backupBucket(),
-        Prefix: PREFIX,
+        Prefix: BACKUP_PREFIX,
         ContinuationToken: token,
       }),
     );
@@ -68,10 +68,16 @@ async function listBackups(): Promise<StoredBackup[]> {
 
 // Daily logical backup of the whole database (pg_dump custom format) to
 // object storage. Restore steps are in OPERATIONS.md.
-export async function runDueDatabaseBackup(now = new Date()) {
-  if (!backupsEnabled()) return { status: "disabled" as const };
+// `force` takes an extra backup now (scripts/backup-now.ts), e.g. before a
+// risky migration or so a restore drill has current data.
+export async function runDueDatabaseBackup(
+  now = new Date(),
+  { force = false } = {},
+) {
+  if (!force && !backupsEnabled()) return { status: "disabled" as const };
   const existing = await listBackups();
-  if (!isBackupDue(existing, now)) return { status: "not_due" as const };
+  if (!force && !isBackupDue(existing, now))
+    return { status: "not_due" as const };
   const directory = await mkdtemp(join(tmpdir(), "g2a-backup-"));
   const file = join(directory, "database.dump");
   try {

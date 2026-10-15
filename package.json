@@ -18,6 +18,8 @@
     "meta:verify": "tsx --env-file=.env scripts/verify-meta-staging.ts",
     "db:migrate": "tsx --env-file=.env scripts/migrate.ts",
     "db:seed": "tsx --env-file=.env scripts/seed.ts",
+    "restore:drill": "tsx scripts/restore-drill.ts",
+    "backup:now": "tsx scripts/backup-now.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
