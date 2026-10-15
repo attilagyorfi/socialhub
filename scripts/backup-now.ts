@@ -3,5 +3,8 @@
 import { runDueDatabaseBackup } from "../packages/server/backups";
 
 const backup = await runDueDatabaseBackup(new Date(), { force: true });
-console.log(JSON.stringify({ event: "database_backup", ...backup }));
-process.exit(0);
+process.stdout.write(
+  `${JSON.stringify({ event: "database_backup", ...backup })}
+`,
+  () => process.exit(0),
+);
