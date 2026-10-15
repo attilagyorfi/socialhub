@@ -105,10 +105,12 @@ the worker first starts, which can be before migrations have run.
 `scripts/restore-drill.ts` (`npm run restore:drill`) restores the newest
 `backups/postgres/*.dump` object into an empty temporary database and verifies
 it. It runs from the worker image, which already contains the script and the
-PostgreSQL 18 client (`pg_restore`). It refuses to run when
-`RESTORE_DATABASE_URL` is missing, points to the same host, port and database as
-`DATABASE_URL`, or the target already has tables in the `public` schema. It
-never prints connection strings.
+PostgreSQL 18 client (`pg_restore`). `RESTORE_DATABASE_URL` points to a
+temporary PostgreSQL server; each run creates its own `restore_drill_<time>`
+database there, restores into it and drops it at the end, so the drill can be
+repeated without recreating the server. It refuses to run when
+`RESTORE_DATABASE_URL` is missing or points to the same host and port as
+`DATABASE_URL`. It never prints connection strings.
 
 The drill checks that `schema_migrations` is not empty (migrations in the
 repository but missing from the backup are reported as "newer than backup",
@@ -141,8 +143,7 @@ Run it at least quarterly and after any change to the backup set-up:
 4. Record the result in the "Restore drill log" table below.
 5. Delete both temporary services (the restored database contains production
    data). Deleting a database service can leave its volume behind as a
-   detached `postgres-volume-…` card: delete that volume too. The target must
-   be empty, so a repeated drill needs a fresh temporary database.
+   detached `postgres-volume-…` card: delete that volume too.
 
 For a deeper drill, point a temporary release at the restored database with
 separate Redis/S3 test resources and run sign-in, tenant-isolation and one mock

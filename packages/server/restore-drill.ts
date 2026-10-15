@@ -60,8 +60,9 @@ export function databaseIdentity(url: string) {
   };
 }
 
-// The drill must never touch the production database: the target has to be a
-// different host/port/database than DATABASE_URL (when set).
+// The drill must never touch the production database server: it creates and
+// drops its own database on the target server, so the target has to be a
+// different host/port than DATABASE_URL (when set).
 export function assertRestoreTarget(
   restoreUrl: string | undefined,
   productionUrl: string | undefined,
@@ -75,15 +76,23 @@ export function assertRestoreTarget(
   } catch {
     throw new Error("DATABASE_URL is not a valid connection URL");
   }
-  if (
-    target.host === production.host &&
-    target.port === production.port &&
-    target.database === production.database
-  )
+  if (target.host === production.host && target.port === production.port)
     throw new Error(
-      "RESTORE_DATABASE_URL points to the same database as DATABASE_URL",
+      "RESTORE_DATABASE_URL points to the same database server as DATABASE_URL",
     );
   return target;
+}
+
+// Each run restores into its own fresh database on the temporary server, so
+// the drill can be repeated without recreating the server.
+export function drillDatabaseName(now: Date) {
+  return `restore_drill_${now.toISOString().replace(/\D/g, "").slice(0, 14)}`;
+}
+
+export function withDatabase(url: string, database: string) {
+  const parsed = new URL(url);
+  parsed.pathname = `/${database}`;
+  return parsed.toString();
 }
 
 // A second guard against the wrong target: production always has tables.
@@ -117,6 +126,7 @@ export type RestoreDrillReport = {
   event: "restore_drill";
   ok: boolean;
   backup?: { key: string; createdAt: string; bytes: number };
+  database?: string;
   restoreSeconds?: number;
   migrations?: ReturnType<typeof compareMigrations>;
   rowCounts?: Record<string, number>;
@@ -133,10 +143,16 @@ export async function runRestoreDrill(): Promise<RestoreDrillReport> {
   const restoreUrl = process.env.RESTORE_DATABASE_URL;
   const report: RestoreDrillReport = { event: "restore_drill", ok: false };
   const directory = await mkdtemp(join(tmpdir(), "g2a-restore-"));
+  let admin: Client | undefined;
   let client: Client | undefined;
   try {
     assertRestoreTarget(restoreUrl, process.env.DATABASE_URL);
-    client = new Client({ connectionString: restoreUrl });
+    admin = new Client({ connectionString: restoreUrl });
+    await admin.connect();
+    report.database = drillDatabaseName(new Date());
+    await admin.query(`CREATE DATABASE "${report.database}"`);
+    const drillUrl = withDatabase(restoreUrl!, report.database);
+    client = new Client({ connectionString: drillUrl });
     await client.connect();
     const tables = await client.query(
       "SELECT tablename FROM pg_tables WHERE schemaname='public'",
@@ -165,7 +181,7 @@ export async function runRestoreDrill(): Promise<RestoreDrillReport> {
           "--no-owner",
           "--no-acl",
           "--exit-on-error",
-          `--dbname=${restoreUrl}`,
+          `--dbname=${drillUrl}`,
           file,
         ],
         { timeout: 60 * 60_000, maxBuffer: 10 * 1024 * 1024 },
@@ -199,6 +215,12 @@ export async function runRestoreDrill(): Promise<RestoreDrillReport> {
     );
   } finally {
     await client?.end().catch(() => {});
+    // The restored copy holds production data; it never outlives the run.
+    if (admin && report.database)
+      await admin
+        .query(`DROP DATABASE IF EXISTS "${report.database}" WITH (FORCE)`)
+        .catch(() => {});
+    await admin?.end().catch(() => {});
     await rm(directory, { recursive: true, force: true });
   }
   return report;

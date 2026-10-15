@@ -3,9 +3,11 @@ import {
   assertEmptyTarget,
   assertRestoreTarget,
   compareMigrations,
+  drillDatabaseName,
   newestBackup,
   redactSecrets,
   restoreDrillSummary,
+  withDatabase,
 } from "../packages/server/restore-drill";
 
 const production =
@@ -18,20 +20,20 @@ describe("restore drill safety", () => {
     );
   });
 
-  it("refuses the production database, even with other credentials", () => {
-    expect(() =>
-      assertRestoreTarget(
-        "postgres://other:pw@POSTGRES.railway.internal/railway",
-        production,
-      ),
-    ).toThrow("same database");
+  it("refuses the production server, even with other credentials or database", () => {
+    for (const url of [
+      "postgres://other:pw@POSTGRES.railway.internal/railway",
+      "postgresql://app:pw@postgres.railway.internal:5432/drill",
+    ])
+      expect(() => assertRestoreTarget(url, production)).toThrow(
+        "same database server",
+      );
   });
 
-  it("accepts a different host, port or database", () => {
+  it("accepts a different host or port", () => {
     for (const url of [
       "postgresql://app:pw@postgres-drill.railway.internal:5432/railway",
       "postgresql://app:pw@postgres.railway.internal:5433/railway",
-      "postgresql://app:pw@postgres.railway.internal:5432/drill",
     ])
       expect(assertRestoreTarget(url, production)).toBeTruthy();
     expect(
@@ -55,6 +57,25 @@ describe("restore drill safety", () => {
   it("never prints connection strings", () => {
     expect(redactSecrets(`could not connect: ${production} refused`)).toBe(
       "could not connect: [database-url] refused",
+    );
+  });
+});
+
+describe("restore drill database", () => {
+  it("names a fresh database per run", () => {
+    expect(drillDatabaseName(new Date("2026-10-15T09:35:49.412Z"))).toBe(
+      "restore_drill_20261015093549",
+    );
+  });
+
+  it("points the connection at that database only", () => {
+    expect(
+      withDatabase(
+        "postgresql://app:p%40ss@drill.railway.internal:5432/railway?sslmode=disable",
+        "restore_drill_1",
+      ),
+    ).toBe(
+      "postgresql://app:p%40ss@drill.railway.internal:5432/restore_drill_1?sslmode=disable",
     );
   });
 });
