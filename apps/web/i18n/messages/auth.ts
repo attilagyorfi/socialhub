@@ -8,19 +8,21 @@ const en = {
     "Bring your brands, approvals and publishing schedule together in one workspace.",
   "login.footer": "G2A Marketing · Agency workspace",
   "login.formEyebrow": "YOUR AGENCY, CONNECTED",
-  "login.createTitle": "Create your account",
+  "login.requestTitle": "Request access",
+  "login.requestSubtitle":
+    "Tell us who you are. Once we approve your request, we email you an invitation to create your account.",
   "login.welcomeBack": "Welcome back",
   "login.subtitle": "Sign in to your Social Hub workspace.",
   "login.signInFailed": "Sign-in failed",
   "login.unableToSignIn": "Unable to sign in",
   "login.checkEmail": "Check your email for a sign-in link.",
-  "login.verifySent":
-    "Account created. We sent a confirmation link to your email address – open it to sign in.",
+  "login.requestSent":
+    "Thank you! We have received your request. Once it is approved, we will email you an invitation to create your account.",
   "login.emailPlaceholder": "you@agency.com",
   "login.sendMagicLink": "Email me a sign-in link",
-  "login.createAccount": "Create account",
+  "login.requestSubmit": "Send request",
   "login.signIn": "Sign in",
-  "login.toSignUp": "Create an account",
+  "login.toRequest": "Request access",
   "login.usePassword": "Use password",
   "login.useMagicLink": "Use a magic link",
   "login.consent.before": "By continuing, you acknowledge the",
@@ -32,6 +34,8 @@ const en = {
   "field.name": "Your name",
   "field.email": "Email address",
   "field.password": "Password",
+  "field.company": "Company (optional)",
+  "field.message": "Message (optional)",
   pleaseWait: "Please wait…",
   haveAccount: "Already have an account?",
   "forgot.link": "Forgot your password?",
@@ -100,6 +104,8 @@ const en = {
     "User already exists. Use another email.",
   "code.EMAIL_NOT_VERIFIED": "Email not verified",
   "code.FAILED_TO_CREATE_USER": "Failed to create user",
+  "code.SIGN_UP_REQUIRES_INVITATION":
+    "Accounts are created by invitation only. Request access on the sign-in page.",
 } as const;
 
 const hu = {
@@ -111,19 +117,21 @@ const hu = {
     "Márkák, jóváhagyások és közzétételi ütemezés egyetlen munkaterületen.",
   "login.footer": "G2A Marketing · Ügynökségi munkaterület",
   "login.formEyebrow": "AZ ÜGYNÖKSÉGED, EGY HELYEN",
-  "login.createTitle": "Hozd létre a fiókod",
+  "login.requestTitle": "Hozzáférés igénylése",
+  "login.requestSubtitle":
+    "Mondd el, ki vagy. Amint jóváhagytuk az igénylésedet, e-mailben küldünk egy meghívót a fiók létrehozásához.",
   "login.welcomeBack": "Üdv újra!",
   "login.subtitle": "Jelentkezz be a Social Hub munkaterületedre.",
   "login.signInFailed": "Nem sikerült bejelentkezni",
   "login.unableToSignIn": "Nem sikerült bejelentkezni",
   "login.checkEmail": "Elküldtük a belépési linket – nézd meg a postafiókodat.",
-  "login.verifySent":
-    "A fiókod elkészült. Megerősítő linket küldtünk az e-mail-címedre – nyisd meg a belépéshez.",
+  "login.requestSent":
+    "Köszönjük! Megkaptuk az igénylésedet. Amint jóváhagytuk, e-mailben küldünk egy meghívót a fiók létrehozásához.",
   "login.emailPlaceholder": "te@ugynokseg.hu",
   "login.sendMagicLink": "Küldj belépési linket e-mailben",
-  "login.createAccount": "Fiók létrehozása",
+  "login.requestSubmit": "Igénylés elküldése",
   "login.signIn": "Bejelentkezés",
-  "login.toSignUp": "Regisztrálok",
+  "login.toRequest": "Hozzáférés igénylése",
   "login.usePassword": "Belépés jelszóval",
   "login.useMagicLink": "Belépés e-mailes linkkel",
   "login.consent.before": "A folytatással tudomásul veszed az",
@@ -135,6 +143,8 @@ const hu = {
   "field.name": "Neved",
   "field.email": "E-mail-cím",
   "field.password": "Jelszó",
+  "field.company": "Cég (nem kötelező)",
+  "field.message": "Üzenet (nem kötelező)",
   pleaseWait: "Egy pillanat…",
   haveAccount: "Már van fiókod?",
   "forgot.link": "Elfelejtetted a jelszavad?",
@@ -205,6 +215,8 @@ const hu = {
     "Ezzel az e-mail-címmel már van fiók. Adj meg egy másikat.",
   "code.EMAIL_NOT_VERIFIED": "Az e-mail-cím még nincs megerősítve.",
   "code.FAILED_TO_CREATE_USER": "Nem sikerült létrehozni a fiókot.",
+  "code.SIGN_UP_REQUIRES_INVITATION":
+    "Fiókot csak meghívóval lehet létrehozni. A bejelentkezési oldalon igényelhetsz hozzáférést.",
 } satisfies Record<keyof typeof en, string>;
 
 export default { en, hu };

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Copy, MailPlus, Trash2, UserRoundCog } from "lucide-react";
-import type { HubData, Mutate, TeamMember } from "./types";
+import { Copy, Inbox, MailPlus, Trash2, UserRoundCog } from "lucide-react";
+import type { AccessRequest, HubData, Mutate, TeamMember } from "./types";
 import { intlLocale, useT, type MessageKey } from "../i18n";
 
 const roles = [
@@ -150,6 +150,103 @@ function MemberEditor({
   );
 }
 
+function AccessRequestRow({
+  request,
+  data,
+  mutate,
+  busy,
+}: {
+  request: AccessRequest;
+  data: HubData;
+  mutate: Mutate;
+  busy: boolean;
+}) {
+  const [role, setRole] = useState("CONTENT_CREATOR");
+  const [clientIds, setClientIds] = useState<string[]>(
+    data.clientId ? [data.clientId] : [],
+  );
+  const { t } = useT();
+  return (
+    <article className="team-member access-request">
+      <div className="member-identity">
+        <span className="avatar">{request.name.slice(0, 2).toUpperCase()}</span>
+        <span>
+          <strong>{request.name}</strong>
+          <small>{request.email}</small>
+        </span>
+      </div>
+      <div className="member-access">
+        <strong>{request.company || t("team.requests.noCompany")}</strong>
+        <small>
+          {new Intl.DateTimeFormat(intlLocale(), {
+            timeZone: data.user.timezone,
+            dateStyle: "medium",
+            timeStyle: "short",
+          }).format(new Date(request.created_at))}
+        </small>
+      </div>
+      {request.message && (
+        <p className="access-request-message">{request.message}</p>
+      )}
+      <div className="member-editor">
+        <label className="member-role">
+          {t("team.role")}
+          <select
+            value={role}
+            onChange={(event) => setRole(event.target.value)}
+          >
+            {roles
+              .filter((item) => item !== "ADMIN" || data.role === "OWNER")
+              .map((item) => (
+                <option key={item} value={item}>
+                  {t(roleKey(item))}
+                </option>
+              ))}
+          </select>
+        </label>
+        {role !== "ADMIN" && (
+          <ClientChoices
+            data={data}
+            selected={clientIds}
+            setSelected={setClientIds}
+          />
+        )}
+        <div className="member-actions">
+          <button
+            className="primary"
+            disabled={busy || (role !== "ADMIN" && !clientIds.length)}
+            onClick={() =>
+              mutate("team.access-request.approve", {
+                requestId: request.id,
+                role,
+                clientIds,
+              }).catch(() => {})
+            }
+          >
+            {t("team.requests.approve")}
+          </button>
+          <button
+            className="danger-button"
+            disabled={busy}
+            onClick={() => {
+              if (
+                window.confirm(
+                  t("team.requests.rejectConfirm", { name: request.name }),
+                )
+              )
+                mutate("team.access-request.reject", {
+                  requestId: request.id,
+                }).catch(() => {});
+            }}
+          >
+            {t("team.requests.reject")}
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export function Team({
   data,
   mutate,
@@ -167,6 +264,29 @@ export function Team({
   const { t } = useT();
   return (
     <>
+      {data.canReviewAccessRequests && (
+        <section className="panel">
+          <div className="panel-title">
+            <div>
+              <h2>{t("team.requests.title")}</h2>
+              <span className="muted">{t("team.requests.note")}</span>
+            </div>
+            <Inbox size={20} />
+          </div>
+          {data.accessRequests.map((request) => (
+            <AccessRequestRow
+              key={request.id}
+              request={request}
+              data={data}
+              mutate={mutate}
+              busy={busy}
+            />
+          ))}
+          {!data.accessRequests.length && (
+            <div className="empty compact">{t("team.requests.empty")}</div>
+          )}
+        </section>
+      )}
       <section className="panel">
         <div className="panel-title">
           <div>

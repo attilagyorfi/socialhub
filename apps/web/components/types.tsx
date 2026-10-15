@@ -155,6 +155,18 @@ export type HubData = {
   commentsOpen: number;
   team: TeamMember[];
   invitations: TeamInvitation[];
+  // Platform operators (owner/admin listed in PLATFORM_ADMIN_EMAILS) only.
+  canReviewAccessRequests: boolean;
+  accessRequests: AccessRequest[];
+};
+export type AccessRequest = {
+  id: string;
+  name: string;
+  email: string;
+  company: string | null;
+  message: string | null;
+  locale: string | null;
+  created_at: string;
 };
 export type PrivacyRequest = {
   id: string;

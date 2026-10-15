@@ -61,6 +61,12 @@ import {
   revokeInvitation,
   updateMember,
 } from "../../../../../packages/server/team";
+import {
+  approveAccessRequest,
+  isPlatformAdmin,
+  listAccessRequests,
+  rejectAccessRequest,
+} from "../../../../../packages/server/access-requests";
 import { memberRole } from "../../../../../packages/server/validation";
 import {
   metaIntegrationStatus,
@@ -155,7 +161,9 @@ export async function GET(request: Request) {
           reviewers: [],
           team: [],
           invitations: [],
+          accessRequests: [],
           canManageTeam: false,
+          canReviewAccessRequests: false,
           commentsOpen: 0,
           operations: null,
           privacy: personalPrivacy,
@@ -264,7 +272,10 @@ export async function GET(request: Request) {
       ),
     ]);
     const canManageTeam = ["OWNER", "ADMIN"].includes(c.role);
-    const [team, operations, reviewers, privacy, commentsOpen] =
+    // Access requests come from outside every organization: operators only.
+    const canReviewAccessRequests =
+      canManageTeam && isPlatformAdmin(actor.email);
+    const [team, operations, reviewers, privacy, commentsOpen, requests] =
       await Promise.all([
         canManageTeam
           ? listTeam(c)
@@ -273,6 +284,7 @@ export async function GET(request: Request) {
         c.role === "VIEWER" ? Promise.resolve([]) : reviewerCandidates(c),
         privacyStatus(actor.id, c.organizationId),
         openCommentCount(c),
+        canReviewAccessRequests ? listAccessRequests(c) : Promise.resolve([]),
       ]);
     return Response.json(
       {
@@ -313,7 +325,9 @@ export async function GET(request: Request) {
         reviewers,
         team: team.members,
         invitations: team.invitations,
+        accessRequests: requests,
         canManageTeam,
+        canReviewAccessRequests,
         commentsOpen,
         operations,
         privacy,
@@ -562,6 +576,22 @@ export async function POST(request: Request) {
       case "team.invitation.revoke":
         return Response.json(
           await revokeInvitation(c, uuid.parse(body.invitationId)),
+        );
+      case "team.access-request.approve":
+        return Response.json(
+          await approveAccessRequest(
+            c,
+            uuid.parse(body.requestId),
+            memberRole.parse(body.role),
+            z
+              .array(uuid)
+              .max(100)
+              .parse(body.clientIds ?? []),
+          ),
+        );
+      case "team.access-request.reject":
+        return Response.json(
+          await rejectAccessRequest(c, uuid.parse(body.requestId)),
         );
       case "media.delete":
         await deleteMedia(c, uuid.parse(body.id));

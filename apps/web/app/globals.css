@@ -1547,6 +1547,12 @@ td {
   justify-content: flex-end;
   gap: 8px;
 }
+.access-request-message {
+  margin: 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .danger-button {
   color: #a64b36;
 }

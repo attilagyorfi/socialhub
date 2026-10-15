@@ -90,6 +90,7 @@ const en = {
   RATE_LIMIT: "Too many requests. Try again shortly.",
   REMINDER_COOLDOWN: "A reminder was sent less than one hour ago.",
   REQUEST_CLOSED: "This privacy request is already closed.",
+  REQUEST_HANDLED: "This request has already been handled.",
   REQUEST_RUNNING: "This deletion is already being processed.",
   REVIEWER_REQUIRED: "Choose an internal reviewer.",
   REVOCATION_REQUIRED:
@@ -220,6 +221,7 @@ const hu = {
   RATE_LIMIT: "Túl sok kérés. Próbáld újra kicsit később.",
   REMINDER_COOLDOWN: "Egy órán belül már küldtünk emlékeztetőt.",
   REQUEST_CLOSED: "Ez az adatvédelmi kérelem már lezárult.",
+  REQUEST_HANDLED: "Ezt az igényt már elbírálták.",
   REQUEST_RUNNING: "Ez a törlés már folyamatban van.",
   REVIEWER_REQUIRED: "Válassz belső jóváhagyót.",
   REVOCATION_REQUIRED:
