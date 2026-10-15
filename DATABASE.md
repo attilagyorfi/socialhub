@@ -30,6 +30,8 @@ Calendar queries have scope/time indexes and load independent bounded time windo
 
 `service_heartbeats` records non-secret service instance identity, release metadata and the latest worker observation. The worker refreshes its row every ten seconds and removes it during graceful shutdown; stale rows are retained briefly for diagnosis and removed after seven days. Tenant job detail remains in the scoped job tables and is exposed only to organization owners/admins.
 
+`operational_alerts` deduplicates operator alerts: one row per problem fingerprint (alert kind plus job or account ID) with first/last seen, notified and resolved timestamps. It holds no tenant content; names for the alert email are read from the scoped tables at send time.
+
 `privacy_requests` is the durable, retryable ledger for personal and organization erasure. It keeps a one-way email hash and subject UUID as minimal evidence after authentication records are deleted; requester foreign keys become null. Active-request partial unique indexes prevent duplicate erasures. Invitation authors and authenticated approval-comment authors also become null during account erasure, while comments are anonymized by the worker.
 
 The worker executes due account requests after 24 hours and organization requests after 72 hours. Organization cascades remove tenant rows while the worker removes S3 objects. Daily retention cleanup uses each organization's 30–3650 day policy for completed operational records and soft-deleted posts/media. Database and object deletion do not shorten external backup expiry; production backup retention must be aligned separately.

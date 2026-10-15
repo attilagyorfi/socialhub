@@ -177,3 +177,35 @@ If you did not ask for it, ignore this email.`,
   };
   return { subject: subjects[locale][kind], text: bodies[locale][kind] };
 }
+
+export type OperationalAlertGroup = {
+  kind: string;
+  title: string;
+  runbook: string;
+  items: { detail: string }[];
+};
+
+// Operator-only message: no post content, tokens or personal data, only
+// organization/client names and internal IDs.
+export function operationalAlertMail(groups: OperationalAlertGroup[]): Mail {
+  const total = groups.reduce((sum, group) => sum + group.items.length, 0);
+  const sections = groups.map((group) => {
+    const shown = group.items.slice(0, 20).map((item) => `  - ${item.detail}`);
+    if (group.items.length > shown.length)
+      shown.push(`  - … és még ${group.items.length - shown.length} további`);
+    return `${group.title} (${group.items.length} db, típus: ${group.kind})
+${shown.join("\n")}
+  Teendő: ${group.runbook}`;
+  });
+  return {
+    subject: `[G2A Social Hub] ${total} új üzemeltetési riasztás`,
+    text: `A G2A Social Hub worker ${total} új üzemeltetési problémát észlelt.
+
+${sections.join("\n\n")}
+
+Részletek: jelentkezz be, és nyisd meg a Beállítások → Üzemeltetés részt az érintett ügyfélnél:
+${process.env.APP_URL}
+
+A hibaelhárítás lépései az OPERATIONS.md „Incident triage” fejezetében vannak. Ugyanarról a problémáról csak egyszer küldünk levelet; ha megszűnik, majd újra jelentkezik, ismét szólunk.`,
+  };
+}

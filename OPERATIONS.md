@@ -25,7 +25,39 @@ Recommended alerts:
 | Delivery reconciliation   | any unresolved job     |
 | Unhealthy social token    | any connected account  |
 
-Owners and administrators can see these job, approval-email, token and worker signals under Settings → Operations. Do not expose the tenant-scoped detail to unauthenticated monitoring.
+The worker emails and reports these signals automatically, except web readiness and the worker heartbeat, which need an external uptime monitor (see Alerting). Owners and administrators can see these job, approval-email, token and worker signals under Settings → Operations. Do not expose the tenant-scoped detail to unauthenticated monitoring.
+
+## Alerting
+
+The worker runs `runAlertChecks()` (`packages/server/alerts.ts`) every five
+minutes across all organizations. It raises an alert for:
+
+| Kind                        | Trigger                                                    |
+| --------------------------- | ---------------------------------------------------------- |
+| `publish_uncertain`         | publish job `DEAD` with `META_DELIVERY_UNCERTAIN`          |
+| `reconciliation_unresolved` | delivery reconciliation job `UNRESOLVED`                   |
+| `publish_dead`              | any other `DEAD` publish job                               |
+| `media_dead`                | `DEAD` media-processing job                                |
+| `queue_stuck`               | oldest due publish/media job waiting over 5 minutes        |
+| `analytics_dead`            | `DEAD` analytics sync job                                  |
+| `approval_email_failed`     | approval email failed three times                          |
+| `token_unhealthy`           | connected social account with unhealthy token              |
+
+Each distinct problem (kind + job/account ID, stored in `operational_alerts`)
+notifies once. When it disappears it is marked resolved; if it comes back later
+it notifies again. All new problems of one run are sent in one Hungarian email
+to `ALERT_EMAIL` (organization/client names and IDs only, no post content or
+tokens) and reported to Sentry as a warning per kind (fingerprint
+`operational-alert` + kind). Without `ALERT_EMAIL` the email is skipped with an
+`operational_alert_email_skipped` log line and only Sentry is notified. A failed
+email is logged (`operational_alert_email_failed`) and retried on the next run.
+
+The worker cannot report its own absence, and the web app does not send
+alerts. A stale worker heartbeat makes `/api/health/ready` return 503, so an
+external uptime monitor covers it (operator task): for example an UptimeRobot
+HTTP(S) monitor on `https://hub.g2amarketing.hu/api/health/ready` every 5
+minutes, expecting status 200 (or keyword `"status":"ok"`), alerting the
+operator after 2 consecutive failures.
 
 ## Error monitoring
 
@@ -59,27 +91,66 @@ and uploads the file to object storage under `backups/postgres/` (bucket
 Each successful run logs a `database_backup` event with the key and size. The
 worker image installs the PostgreSQL 18 client, matching the hosted server.
 
-To restore one of these backups, download the newest `backups/postgres/*.dump`
-object with the storage credentials (for example `aws s3 cp` with
-`--endpoint-url` set to the R2 endpoint) and follow the drill below with that
-file in place of `g2a-social-hub.dump`.
+### Restore drill (Railway)
 
-### Manual backup and drill
+`scripts/restore-drill.ts` (`npm run restore:drill`) restores the newest
+`backups/postgres/*.dump` object into an empty temporary database and verifies
+it. It runs from the worker image, which already contains the script and the
+PostgreSQL 18 client (`pg_restore`). It refuses to run when
+`RESTORE_DATABASE_URL` is missing, points to the same host, port and database as
+`DATABASE_URL`, or the target already has tables in the `public` schema. It
+never prints connection strings.
 
-Enable managed PostgreSQL point-in-time recovery and encrypted daily backups with a retention period approved by the data-retention policy. The following commands illustrate a portable logical backup; supply credentials through the platform secret mechanism rather than command history:
+The drill checks that `schema_migrations` is not empty (migrations in the
+repository but missing from the backup are reported as "newer than backup",
+not as a failure), reports row counts for the key tables and runs integrity
+queries (every client has an organization, every post a client, every target a
+post, every member a user). It prints one JSON line (`"event":"restore_drill"`
+with backup key, timestamp, size, restore seconds, migrations, row counts and
+checks) followed by a human summary, and exits with 1 on any failure.
+
+Run it at least quarterly and after any change to the backup set-up:
+
+1. In the Railway production project add a temporary **PostgreSQL** service
+   (for example `postgres-drill`). Do not enable public networking.
+2. Add a temporary service from the same GitHub repository and the
+   `production` branch (for example `restore-drill`):
+   - Settings → Build: Dockerfile path `Dockerfile.worker`.
+   - Settings → Deploy: custom start command
+     `./node_modules/.bin/tsx scripts/restore-drill.ts`, restart policy
+     **Never**, no healthcheck path, no public domain.
+   - Variables: the worker's variables (at least `DATABASE_URL`,
+     `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`
+     and `BACKUP_BUCKET` if set) plus
+     `RESTORE_DATABASE_URL=${{postgres-drill.DATABASE_URL}}`. Use the reference
+     syntax with the temporary service's real name; never paste a production
+     connection string. `DATABASE_URL` is only used for the same-database guard.
+     Do not set `BACKUP_ENABLED` or `ALERT_EMAIL` on this service.
+3. Deploy once and read the `restore_drill` JSON line and the summary in the
+   deploy logs. `Restore drill: PASSED` and exit code 0 mean success.
+4. Record the result in the "Restore drill log" table below.
+5. Delete both temporary services (the restored database contains production
+   data).
+
+For a deeper drill, point a temporary release at the restored database with
+separate Redis/S3 test resources and run sign-in, tenant-isolation and one mock
+publishing workflow before deleting it.
+
+#### Restore drill log
+
+| Date | Operator | Backup key / timestamp | Size | Restore (s) | Migrations | Key row counts | Result |
+| ---- | -------- | ---------------------- | ---- | ----------- | ---------- | -------------- | ------ |
+|      |          |                        |      |             |            |                |        |
+
+### Manual backup
+
+Enable managed PostgreSQL point-in-time recovery and encrypted daily backups with a retention period approved by the data-retention policy. The following commands illustrate a portable logical backup and restore; supply credentials through the platform secret mechanism rather than command history:
 
 ```sh
 pg_dump --format=custom --no-owner --no-acl --file=g2a-social-hub.dump "$DATABASE_URL"
 pg_restore --list g2a-social-hub.dump
+pg_restore --no-owner --no-acl --exit-on-error --dbname="$RESTORE_DATABASE_URL" g2a-social-hub.dump
 ```
-
-Run quarterly restore drills into a new, isolated database:
-
-1. Create an empty temporary database with no route from production web/worker services.
-2. Restore with `pg_restore --no-owner --no-acl --dbname="$RESTORE_DATABASE_URL" g2a-social-hub.dump`.
-3. Point a temporary release at the restored database and separate Redis/S3 test resources.
-4. Run migrations, authentication smoke checks, tenant-isolation tests and one complete mock publishing workflow.
-5. Record backup timestamp, restore duration, row-count checks, migration version and operator. Destroy the temporary environment according to retention policy.
 
 Never test a restore by replacing the production database. A schema migration needs a forward fix unless a separately reviewed rollback migration exists.
 
