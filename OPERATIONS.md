@@ -140,7 +140,9 @@ Run it at least quarterly and after any change to the backup set-up:
    deploy logs. `Restore drill: PASSED` and exit code 0 mean success.
 4. Record the result in the "Restore drill log" table below.
 5. Delete both temporary services (the restored database contains production
-   data).
+   data). Deleting a database service can leave its volume behind as a
+   detached `postgres-volume-…` card: delete that volume too. The target must
+   be empty, so a repeated drill needs a fresh temporary database.
 
 For a deeper drill, point a temporary release at the restored database with
 separate Redis/S3 test resources and run sign-in, tenant-isolation and one mock
