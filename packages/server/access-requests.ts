@@ -40,6 +40,30 @@ export async function canCreateAccount(email: string) {
   return Boolean(invitation.rowCount);
 }
 
+// Known accounts always get their sign-in link; unknown addresses only when
+// they could create an account, so strangers receive no dead-end email.
+export async function shouldSendMagicLink(email: string) {
+  const account = await pool.query(
+    `SELECT 1 FROM "user" WHERE lower(email)=$1`,
+    [email.trim().toLowerCase()],
+  );
+  return Boolean(account.rowCount) || canCreateAccount(email);
+}
+
+// The edge proxy (Railway, Vercel) sets x-real-ip from the connection; the
+// first x-forwarded-for entry is client-supplied, so only the last one, added
+// by the nearest proxy, is used as a fallback.
+export function clientIp(request: Request) {
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
+  const forwarded = request.headers
+    .get("x-forwarded-for")
+    ?.split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return forwarded?.at(-1) ?? "unknown";
+}
+
 async function operator(c: Context) {
   const person = (
     await pool.query(`SELECT email FROM "user" WHERE id=$1`, [c.userId])

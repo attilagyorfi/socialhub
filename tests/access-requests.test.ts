@@ -30,9 +30,11 @@ vi.mock("../packages/server/mail", () => mail);
 const {
   approveAccessRequest,
   canCreateAccount,
+  clientIp,
   isPlatformAdmin,
   listAccessRequests,
   rejectAccessRequest,
+  shouldSendMagicLink,
   submitAccessRequest,
 } = await import("../packages/server/access-requests");
 
@@ -260,5 +262,35 @@ describe("sign-up gate", () => {
 
     process.env.SIGNUP_MODE = "open";
     expect(await canCreateAccount(unique("stranger"))).toBe(true);
+  });
+
+  it("sends magic links only to accounts and possible sign-ups", async () => {
+    process.env.SIGNUP_MODE = "invite";
+    const existing = unique("existing");
+    await db.query(`INSERT INTO "user"(id,name,email) VALUES($1,'E',$2)`, [
+      crypto.randomUUID(),
+      existing,
+    ]);
+    expect(await shouldSendMagicLink(existing.toUpperCase())).toBe(true);
+    expect(await shouldSendMagicLink(operatorEmail)).toBe(true);
+    expect(await shouldSendMagicLink(unique("stranger"))).toBe(false);
+    process.env.SIGNUP_MODE = "open";
+    expect(await shouldSendMagicLink(unique("stranger"))).toBe(true);
+  });
+});
+
+describe("client IP", () => {
+  const ip = (headers: Record<string, string>) =>
+    clientIp(new Request("https://hub.example", { headers }));
+  it("trusts the edge's x-real-ip over forwarded addresses", () => {
+    expect(
+      ip({ "x-real-ip": "203.0.113.7", "x-forwarded-for": "1.1.1.1" }),
+    ).toBe("203.0.113.7");
+  });
+  it("falls back to the proxy-appended last forwarded address", () => {
+    expect(ip({ "x-forwarded-for": "1.1.1.1, 198.51.100.4 " })).toBe(
+      "198.51.100.4",
+    );
+    expect(ip({})).toBe("unknown");
   });
 });

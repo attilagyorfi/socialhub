@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { magicLink } from "better-auth/plugins";
 import { pool } from "../db";
-import { canCreateAccount } from "./access-requests";
+import { canCreateAccount, shouldSendMagicLink } from "./access-requests";
 import { redis } from "./queue";
 import { sendMail } from "./mail";
 import { authMail, userLocale } from "./mail-templates";
@@ -63,8 +63,14 @@ export const auth = betterAuth({
       : {},
   plugins: [
     magicLink({
-      sendMagicLink: async ({ email, url }) =>
-        sendAuthMail(email, "magic", url),
+      // Same response either way, so the form reveals nothing.
+      sendMagicLink: async ({ email, url }) => {
+        if (!(await shouldSendMagicLink(email))) {
+          console.warn(JSON.stringify({ event: "magic_link_suppressed" }));
+          return;
+        }
+        await sendAuthMail(email, "magic", url);
+      },
     }),
   ],
   secondaryStorage: {

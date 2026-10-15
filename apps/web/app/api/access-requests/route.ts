@@ -1,7 +1,10 @@
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { AppError, sameOrigin } from "../../../../../packages/core/security";
-import { submitAccessRequest } from "../../../../../packages/server/access-requests";
+import {
+  clientIp,
+  submitAccessRequest,
+} from "../../../../../packages/server/access-requests";
 import { rateLimit } from "../../../../../packages/server/queue";
 import { localeInput } from "../../../../../packages/server/validation";
 
@@ -14,12 +17,6 @@ const input = z.object({
   message: z.string().trim().max(1000).optional(),
   locale: localeInput,
 });
-
-// The proxy's first forwarded address identifies the visitor.
-const clientIp = (request: Request) =>
-  request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
-  request.headers.get("x-real-ip") ||
-  "unknown";
 
 export async function POST(request: Request) {
   try {
