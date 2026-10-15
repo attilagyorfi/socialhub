@@ -14,6 +14,7 @@ import posts from "./messages/posts";
 import sections from "./messages/sections";
 import settings from "./messages/settings";
 import team from "./messages/team";
+import tour from "./messages/tour";
 
 // One namespace per UI area; each file defines English and a Hungarian
 // table that the type checker forces to cover every English key.
@@ -34,4 +35,5 @@ export const namespaces = {
   sections,
   settings,
   team,
+  tour,
 };
