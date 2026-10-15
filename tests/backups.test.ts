@@ -121,4 +121,17 @@ describe("daily database backup", () => {
     });
     expect(sent.map((call) => call.name)).toEqual(["ListObjectsV2Command"]);
   });
+
+  it("takes a forced backup even when disabled and not due", async () => {
+    listed.items = [
+      {
+        Key: "backups/postgres/today.dump",
+        LastModified: new Date(now.getTime() - 3600e3),
+      },
+    ];
+    await expect(
+      runDueDatabaseBackup(now, { force: true }),
+    ).resolves.toMatchObject({ status: "created", removed: 0 });
+    expect(sent.map((call) => call.name)).toContain("PutObjectCommand");
+  });
 });

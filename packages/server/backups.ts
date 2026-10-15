@@ -68,10 +68,16 @@ export async function listBackups(): Promise<StoredBackup[]> {
 
 // Daily logical backup of the whole database (pg_dump custom format) to
 // object storage. Restore steps are in OPERATIONS.md.
-export async function runDueDatabaseBackup(now = new Date()) {
-  if (!backupsEnabled()) return { status: "disabled" as const };
+// `force` takes an extra backup now (scripts/backup-now.ts), e.g. before a
+// risky migration or so a restore drill has current data.
+export async function runDueDatabaseBackup(
+  now = new Date(),
+  { force = false } = {},
+) {
+  if (!force && !backupsEnabled()) return { status: "disabled" as const };
   const existing = await listBackups();
-  if (!isBackupDue(existing, now)) return { status: "not_due" as const };
+  if (!force && !isBackupDue(existing, now))
+    return { status: "not_due" as const };
   const directory = await mkdtemp(join(tmpdir(), "g2a-backup-"));
   const file = join(directory, "database.dump");
   try {

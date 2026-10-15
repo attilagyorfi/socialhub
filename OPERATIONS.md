@@ -91,6 +91,15 @@ and uploads the file to object storage under `backups/postgres/` (bucket
 Each successful run logs a `database_backup` event with the key and size. The
 worker image installs the PostgreSQL 18 client, matching the hosted server.
 
+`scripts/backup-now.ts` (`npm run backup:now`) takes one extra backup
+immediately, ignoring `BACKUP_ENABLED` and the daily schedule, and prunes old
+backups the same way. Use it before a risky migration, or before a restore
+drill when the newest backup is older than the data you want to verify. On
+Railway, run it from the temporary drill service (step 2 below) with the start
+command `./node_modules/.bin/tsx scripts/backup-now.ts`, then switch the start
+command back to the drill. The first automatic backup is taken right after
+the worker first starts, which can be before migrations have run.
+
 ### Restore drill (Railway)
 
 `scripts/restore-drill.ts` (`npm run restore:drill`) restores the newest
@@ -114,7 +123,8 @@ Run it at least quarterly and after any change to the backup set-up:
 1. In the Railway production project add a temporary **PostgreSQL** service
    (for example `postgres-drill`). Do not enable public networking.
 2. Add a temporary service from the same GitHub repository and the
-   `production` branch (for example `restore-drill`):
+   `production` branch (for example `restore-drill`; to test an unreleased
+   change of the drill itself, use its feature branch):
    - Settings → Build: Dockerfile path `Dockerfile.worker`.
    - Settings → Deploy: custom start command
      `./node_modules/.bin/tsx scripts/restore-drill.ts`, restart policy
