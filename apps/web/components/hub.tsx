@@ -32,6 +32,7 @@ import { Comments } from "./comments";
 import { TimeZoneSettings } from "./timezone-settings";
 import { PrivacySettings } from "./privacy-settings";
 import { LanguageSettings } from "./language-settings";
+import { TourButton, TourProvider, useTourSetup } from "./tour/tour";
 import {
   apiError,
   errorMessage,
@@ -64,6 +65,13 @@ const deliveryStates = [
   "FAILED",
 ];
 export function Hub() {
+  return (
+    <TourProvider>
+      <HubShell />
+    </TourProvider>
+  );
+}
+function HubShell() {
   const { t, locale, setLocale } = useT();
   const [data, setData] = useState<HubData>();
   const [clientId, setClientId] = useState("");
@@ -81,6 +89,12 @@ export function Hub() {
   const [commentsOpen, setCommentsOpen] = useState(0);
   const loadSequence = useRef(0);
   const dialogRef = useRef<HTMLElement>(null);
+  // The welcome tour starts once per user after the first hub load.
+  useTourSetup({
+    userId: data?.user.id,
+    autoStart: "welcome",
+    host: { setView },
+  });
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const result = params.get("meta");
@@ -294,12 +308,13 @@ export function Hub() {
           </div>
         </div>
         <p className="nav-label">{t("hub.sidebar.workspace")}</p>
-        <nav>
+        <nav data-tour="navigation">
           {navigation
             .filter(([label]) => label !== "Team" || data?.canManageTeam)
             .map(([label, Icon]) => (
               <button
                 key={label}
+                data-tour={`nav-${label.toLowerCase().replace(/\s+/g, "-")}`}
                 className={view === label ? "active" : ""}
                 onClick={() => {
                   if (label === "Create") setEditing(undefined);
@@ -371,7 +386,7 @@ export function Hub() {
             <strong>{viewLabel(view)}</strong>
           </div>
           <div className="topbar-actions">
-            <label className="client-select">
+            <label className="client-select" data-tour="client-switcher">
               <span className="sr-only">{t("hub.topbar.client")}</span>
               <select
                 disabled={busy}
@@ -401,6 +416,7 @@ export function Hub() {
             >
               <RefreshCw size={18} />
             </button>
+            <TourButton />
             <button
               className="icon-button"
               title={t("hub.topbar.notifications")}
@@ -485,6 +501,7 @@ export function Hub() {
                 {view !== "Create" && (
                   <button
                     className="primary"
+                    data-tour="create-post"
                     onClick={() => {
                       setEditing(undefined);
                       setView("Create");

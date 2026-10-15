@@ -19,7 +19,12 @@ export const auth = betterAuth({
   database: pool,
   baseURL: process.env.APP_URL,
   secret: process.env.BETTER_AUTH_SECRET,
-  advanced: { database: { generateId: "uuid" } },
+  advanced: {
+    database: { generateId: "uuid" },
+    // Railway and Vercel both set these from the connecting client, so rate
+    // limits apply per visitor instead of one shared bucket.
+    ipAddress: { ipAddressHeaders: ["x-real-ip", "x-forwarded-for"] },
+  },
   // Every way of creating a user (password, magic link, Google) passes here.
   databaseHooks: {
     user: {
