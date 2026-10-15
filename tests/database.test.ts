@@ -25,6 +25,7 @@ beforeAll(async () => {
     "019_locales.sql",
     "020_meta_compliance.sql",
     "021_social_comments.sql",
+    "022_access_requests.sql",
   ])
     await db.exec(
       await readFile(

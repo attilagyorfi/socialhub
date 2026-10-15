@@ -342,6 +342,7 @@ export async function exportUserData(userId: string) {
     events,
     invitations,
     requests,
+    accessRequests,
   ] = await Promise.all([
     pool.query(
       `SELECT id,"accountId","providerId",scope,"createdAt","updatedAt"
@@ -407,6 +408,11 @@ export async function exportUserData(userId: string) {
          ORDER BY created_at`,
       [userId],
     ),
+    pool.query(
+      `SELECT id,name,email,company,message,locale,status,handled_at,created_at
+         FROM access_requests WHERE email=lower($1) ORDER BY created_at`,
+      [profile.email],
+    ),
   ]);
   await pool.query(
     `INSERT INTO audit_logs(
@@ -433,6 +439,7 @@ export async function exportUserData(userId: string) {
     auditEvents: events.rows,
     invitations: invitations.rows,
     privacyRequests: requests.rows,
+    accessRequests: accessRequests.rows,
   };
 }
 
@@ -511,6 +518,9 @@ async function eraseUser(request: PrivacyRequest) {
       `DELETE FROM member_invitations WHERE lower(email)=lower($1)`,
       [person.email],
     );
+    await tx.query(`DELETE FROM access_requests WHERE email=lower($1)`, [
+      person.email,
+    ]);
     await tx.query(
       `UPDATE audit_logs SET metadata=metadata-'email'-'actor'-'assignedTo'
        WHERE actor_id=$1 OR resource_id=$1`,
@@ -791,8 +801,21 @@ export async function processRetentionPolicies(
   return { completed, failed };
 }
 
+// Access requests belong to no organization, so the deployment-wide
+// DATA_RETENTION_DAYS applies to the handled ones.
+export async function purgeHandledAccessRequests() {
+  const days = Math.max(30, Number(process.env.DATA_RETENTION_DAYS) || 365);
+  const result = await pool.query(
+    `DELETE FROM access_requests WHERE status<>'PENDING'
+     AND updated_at<now()-make_interval(days => $1)`,
+    [days],
+  );
+  return result.rowCount ?? 0;
+}
+
 export async function processPrivacyMaintenance(limit = 10) {
   const erasures = await processErasureRequests(limit);
   const retention = await processRetentionPolicies(limit);
-  return { erasures, retention };
+  const accessRequests = await purgeHandledAccessRequests();
+  return { erasures, retention, accessRequests };
 }

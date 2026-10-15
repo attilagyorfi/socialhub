@@ -35,6 +35,19 @@ Use the repository's locked dependencies. Vercel project root is the repository;
 
 Set `APP_URL` to the actual HTTPS origin, such as the intended `https://app.g2amarketing.hu`; no domain is hardcoded into application logic. Configure matching Better Auth and provider redirects. Use a pooled PostgreSQL endpoint sized for serverless concurrency. Use TLS for production database/Redis connections and a private network for the worker when available.
 
+### Sign-up and access requests
+
+`SIGNUP_MODE` defaults to `invite` in production (`open` elsewhere): an account
+can only be created for an address with a pending team invitation or listed in
+`PLATFORM_ADMIN_EMAILS`, whichever sign-in method is used. Visitors fill in the
+access request form on `/login`; the notification goes to
+`ACCESS_REQUEST_EMAIL` (production: `info@g2amarketing.hu`). Platform
+operators — addresses in `PLATFORM_ADMIN_EMAILS` (comma-separated; falls back
+to `ACCESS_REQUEST_EMAIL`) who are an owner or admin of the open workspace —
+approve requests on the Team page, which sends the usual invitation. Set
+`SIGNUP_MODE=open` only on environments where self-service sign-up is wanted.
+Handled requests are deleted after `DATA_RETENTION_DAYS`.
+
 ## Worker
 
 Run `npm run worker:prod` as a separate long-lived service with the same database, Redis, provider mode, encryption key and `APP_REVISION`. The supplied `Dockerfile.worker` installs FFmpeg/FFprobe and includes a database-backed healthcheck; `docker compose --profile worker up -d --build worker` exercises the same runtime locally. Do not host this polling worker as a short-lived Vercel request. Provision an always-on worker, restart policy, structured log collection, resource limits and alerts on stale heartbeat, durable `DEAD` publishing/media jobs and uncertain Meta delivery.

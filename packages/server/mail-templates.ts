@@ -124,6 +124,43 @@ If you did not expect this invitation, you can ignore this message.`,
   };
 }
 
+export function accessRequestMail(
+  locale: MailLocale,
+  input: {
+    name: string;
+    email: string;
+    company?: string | null;
+    message?: string | null;
+    url: string;
+  },
+): Mail {
+  if (locale === "hu")
+    return {
+      subject: `Hozzáférési igény · ${input.name}`,
+      text: `Új hozzáférési igény érkezett a G2A Social Hubba.
+
+Név: ${input.name}
+E-mail: ${input.email}
+Cég: ${input.company || "–"}
+Üzenet: ${input.message || "–"}
+
+Jóváhagyás vagy elutasítás a Csapat oldalon:
+${input.url}`,
+    };
+  return {
+    subject: `Access request · ${input.name}`,
+    text: `A new access request arrived for the G2A Social Hub.
+
+Name: ${input.name}
+Email: ${input.email}
+Company: ${input.company || "–"}
+Message: ${input.message || "–"}
+
+Approve or reject it on the Team page:
+${input.url}`,
+  };
+}
+
 export function authMail(
   locale: MailLocale,
   kind: "reset" | "verify" | "magic",

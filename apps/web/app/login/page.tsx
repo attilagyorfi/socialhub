@@ -1,6 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
-import { LOCALES, useT, type Locale, type MessageKey } from "../../i18n";
+import {
+  apiError,
+  LOCALES,
+  useT,
+  type Locale,
+  type MessageKey,
+} from "../../i18n";
 
 // English keeps Better Auth's own message; other locales map its error code.
 function authErrorMessage(
@@ -15,19 +21,37 @@ function authErrorMessage(
   return translated === key ? t(fallback) : translated;
 }
 
+type Mode = "sign-in" | "request" | "magic-link" | "forgot";
+
 export default function Login() {
   const { t, locale, setLocale } = useT();
-  const [mode, setMode] = useState<
-    "sign-in" | "sign-up" | "magic-link" | "forgot"
-  >("sign-in");
-  // The reset page links back here with ?forgot=1 to request a new link.
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).has("forgot"))
-      setMode("forgot");
-  }, []);
+  const [mode, setMode] = useState<Mode>("sign-in");
   const [error, setError] = useState("");
+  // A notice means the form was sent: only the message stays on screen.
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  // The reset page links back here with ?forgot=1 to request a new link; a
+  // refused magic-link sign-up returns with ?error=CODE.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("forgot")) setMode("forgot");
+    const code = params.get("error");
+    if (!code) return;
+    window.history.replaceState({}, "", window.location.pathname);
+    setError(
+      authErrorMessage(
+        locale,
+        t,
+        { code, message: params.get("error_description") ?? undefined },
+        "auth.login.signInFailed",
+      ),
+    );
+  }, []);
+  const switchTo = (next: Mode) => {
+    setMode(next);
+    setError("");
+    setNotice("");
+  };
   return (
     <main className="login">
       <section className="login-story">
@@ -76,16 +100,35 @@ export default function Login() {
               return;
             }
             try {
+              if (mode === "request") {
+                const res = await fetch("/api/access-requests", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    name: f.get("name"),
+                    email: f.get("email"),
+                    company: f.get("company") || undefined,
+                    message: f.get("message") || undefined,
+                    locale,
+                  }),
+                });
+                if (!res.ok)
+                  throw new Error(
+                    apiError(await res.json().catch(() => null), locale),
+                  );
+                setNotice(t("auth.login.requestSent"));
+                return;
+              }
               const endpoint =
-                mode === "magic-link" ? "sign-in/magic-link" : `${mode}/email`;
+                mode === "magic-link" ? "sign-in/magic-link" : "sign-in/email";
               const res = await fetch(`/api/auth/${endpoint}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   email: f.get("email"),
                   password: f.get("password"),
-                  name: f.get("name"),
                   callbackURL: "/",
+                  ...(mode === "magic-link" && { errorCallbackURL: "/login" }),
                 }),
               });
               const data = await res.json();
@@ -94,9 +137,6 @@ export default function Login() {
                   authErrorMessage(locale, t, data, "auth.login.signInFailed"),
                 );
               if (mode === "magic-link") setNotice(t("auth.login.checkEmail"));
-              // Sign-up without a session means the address must be confirmed.
-              else if (mode === "sign-up" && !data?.token)
-                setNotice(t("auth.login.verifySent"));
               else window.location.href = "/";
             } catch (e) {
               setError(
@@ -109,119 +149,147 @@ export default function Login() {
         >
           <p className="eyebrow">{t("auth.login.formEyebrow")}</p>
           <h2>
-            {mode === "sign-up"
-              ? t("auth.login.createTitle")
+            {mode === "request"
+              ? t("auth.login.requestTitle")
               : mode === "forgot"
                 ? t("auth.forgot.title")
                 : t("auth.login.welcomeBack")}
           </h2>
-          <p className="muted">
-            {mode === "forgot"
-              ? t("auth.forgot.subtitle")
-              : t("auth.login.subtitle")}
-          </p>
-          {mode === "sign-up" && (
-            <label>
-              {t("auth.field.name")}
-              <input name="name" autoComplete="name" required />
-            </label>
-          )}
-          <label>
-            {t("auth.field.email")}
-            <input
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              placeholder={t("auth.login.emailPlaceholder")}
-            />
-          </label>
-          {mode !== "magic-link" && mode !== "forgot" && (
-            <label>
-              {t("auth.field.password")}
-              <input
-                name="password"
-                type="password"
-                minLength={mode === "sign-up" ? 12 : undefined}
-                autoComplete={
-                  mode === "sign-up" ? "new-password" : "current-password"
-                }
-                required
-              />
-            </label>
-          )}
-          {mode === "sign-in" && (
-            <button
-              type="button"
-              className="text-button forgot-link"
-              onClick={() => {
-                setMode("forgot");
-                setError("");
-                setNotice("");
-              }}
-            >
-              {t("auth.forgot.link")}
-            </button>
-          )}
-          {error && (
-            <p role="alert" className="alert">
-              {error}
-            </p>
-          )}
-          {notice && (
-            <p role="status" className="success-notice">
-              {notice}
-            </p>
-          )}
-          <button className="primary" disabled={busy}>
-            {busy
-              ? t("auth.pleaseWait")
-              : mode === "forgot"
-                ? t("auth.forgot.submit")
-                : mode === "magic-link"
-                  ? t("auth.login.sendMagicLink")
-                  : mode === "sign-up"
-                    ? t("auth.login.createAccount")
-                    : t("auth.login.signIn")}
-          </button>
-          {mode === "forgot" ? (
-            <div className="login-options">
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => {
-                  setMode("sign-in");
-                  setNotice("");
-                }}
-              >
-                {t("auth.forgot.back")}
-              </button>
-            </div>
+          {notice ? (
+            <>
+              <p role="status" className="success-notice">
+                {notice}
+              </p>
+              <div className="login-options">
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => switchTo("sign-in")}
+                >
+                  {t("auth.forgot.back")}
+                </button>
+              </div>
+            </>
           ) : (
-            <div className="login-options">
-              <button
-                type="button"
-                className="text-button"
-                onClick={() =>
-                  setMode(mode === "sign-up" ? "sign-in" : "sign-up")
-                }
-              >
-                {mode === "sign-up"
-                  ? t("auth.haveAccount")
-                  : t("auth.login.toSignUp")}
+            <>
+              <p className="muted">
+                {mode === "forgot"
+                  ? t("auth.forgot.subtitle")
+                  : mode === "request"
+                    ? t("auth.login.requestSubtitle")
+                    : t("auth.login.subtitle")}
+              </p>
+              {mode === "request" && (
+                <label>
+                  {t("auth.field.name")}
+                  <input
+                    name="name"
+                    autoComplete="name"
+                    required
+                    maxLength={120}
+                  />
+                </label>
+              )}
+              <label>
+                {t("auth.field.email")}
+                <input
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  maxLength={320}
+                  placeholder={t("auth.login.emailPlaceholder")}
+                />
+              </label>
+              {mode === "request" && (
+                <>
+                  <label>
+                    {t("auth.field.company")}
+                    <input
+                      name="company"
+                      autoComplete="organization"
+                      maxLength={160}
+                    />
+                  </label>
+                  <label>
+                    {t("auth.field.message")}
+                    <textarea name="message" rows={3} maxLength={1000} />
+                  </label>
+                </>
+              )}
+              {mode === "sign-in" && (
+                <label>
+                  {t("auth.field.password")}
+                  <input
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                  />
+                </label>
+              )}
+              {mode === "sign-in" && (
+                <button
+                  type="button"
+                  className="text-button forgot-link"
+                  onClick={() => switchTo("forgot")}
+                >
+                  {t("auth.forgot.link")}
+                </button>
+              )}
+              {error && (
+                <p role="alert" className="alert">
+                  {error}
+                </p>
+              )}
+              <button className="primary" disabled={busy}>
+                {busy
+                  ? t("auth.pleaseWait")
+                  : mode === "forgot"
+                    ? t("auth.forgot.submit")
+                    : mode === "magic-link"
+                      ? t("auth.login.sendMagicLink")
+                      : mode === "request"
+                        ? t("auth.login.requestSubmit")
+                        : t("auth.login.signIn")}
               </button>
-              <button
-                type="button"
-                className="text-button"
-                onClick={() =>
-                  setMode(mode === "magic-link" ? "sign-in" : "magic-link")
-                }
-              >
-                {mode === "magic-link"
-                  ? t("auth.login.usePassword")
-                  : t("auth.login.useMagicLink")}
-              </button>
-            </div>
+              {mode === "forgot" ? (
+                <div className="login-options">
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => switchTo("sign-in")}
+                  >
+                    {t("auth.forgot.back")}
+                  </button>
+                </div>
+              ) : (
+                <div className="login-options">
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() =>
+                      switchTo(mode === "request" ? "sign-in" : "request")
+                    }
+                  >
+                    {mode === "request"
+                      ? t("auth.haveAccount")
+                      : t("auth.login.toRequest")}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() =>
+                      switchTo(mode === "magic-link" ? "sign-in" : "magic-link")
+                    }
+                  >
+                    {mode === "magic-link"
+                      ? t("auth.login.usePassword")
+                      : t("auth.login.useMagicLink")}
+                  </button>
+                </div>
+              )}
+            </>
           )}
           <small>
             {t("auth.login.consent.before")}{" "}

@@ -25,6 +25,13 @@ const en = {
   expires: "Expires {date}",
   revoke: "Revoke",
   noPending: "No pending invitations.",
+  "requests.title": "Access requests",
+  "requests.note": "Approving sends an invitation to this workspace",
+  "requests.noCompany": "No company given",
+  "requests.approve": "Approve and invite",
+  "requests.reject": "Reject",
+  "requests.rejectConfirm": "Reject the access request from {name}?",
+  "requests.empty": "No pending access requests.",
 } as const;
 
 const hu = {
@@ -53,6 +60,13 @@ const hu = {
   expires: "Lejár: {date}",
   revoke: "Visszavonás",
   noPending: "Nincs függő meghívó.",
+  "requests.title": "Hozzáférési igények",
+  "requests.note": "A jóváhagyás meghívót küld erre a munkaterületre",
+  "requests.noCompany": "Cég nincs megadva",
+  "requests.approve": "Jóváhagyás és meghívás",
+  "requests.reject": "Elutasítás",
+  "requests.rejectConfirm": "Elutasítod {name} hozzáférési igényét?",
+  "requests.empty": "Nincs függő hozzáférési igény.",
 } satisfies Record<keyof typeof en, string>;
 
 export default { en, hu };

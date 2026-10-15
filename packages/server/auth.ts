@@ -1,6 +1,8 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { magicLink } from "better-auth/plugins";
 import { pool } from "../db";
+import { canCreateAccount } from "./access-requests";
 import { redis } from "./queue";
 import { sendMail } from "./mail";
 import { authMail, userLocale } from "./mail-templates";
@@ -18,6 +20,21 @@ export const auth = betterAuth({
   baseURL: process.env.APP_URL,
   secret: process.env.BETTER_AUTH_SECRET,
   advanced: { database: { generateId: "uuid" } },
+  // Every way of creating a user (password, magic link, Google) passes here.
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          if (!(await canCreateAccount(user.email)))
+            throw APIError.from("FORBIDDEN", {
+              code: "SIGN_UP_REQUIRES_INVITATION",
+              message:
+                "Accounts are created by invitation only. Request access on the sign-in page.",
+            });
+        },
+      },
+    },
+  },
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 12,
