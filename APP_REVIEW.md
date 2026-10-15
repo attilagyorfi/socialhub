@@ -35,7 +35,7 @@ Ebben a dokumentumban még:
    - **Data Deletion Request URL** (ha itt is kéri): `https://hub.g2amarketing.hu/api/meta/data-deletion`.
 4. **Facebook Login for Business → Configurations** – a konfiguráció (`META_LOGIN_CONFIG_ID`) pontosan a 3. pontban felsorolt tizenkét engedélyt tartalmazza, ne többet. A meglévő kapcsolatokat az új engedélyek miatt újra kell csatlakoztatni (Connected accounts → Connect Facebook & Instagram).
 4/b. **Webhooks** (App Dashboard → Webhooks, vagy a Használati esetek alatt):
-   - **Callback URL**: `https://hub.g2amarketing.hu/api/webhooks/meta`, **Verify token**: a `META_WEBHOOK_VERIFY_TOKEN` környezeti változó értéke (a Vercel env-ben; ne írd ide).
+   - **Callback URL**: `https://hub.g2amarketing.hu/api/webhooks/meta`, **Verify token**: a `META_WEBHOOK_VERIFY_TOKEN` környezeti változó értéke (az éles Railway web- és worker-szolgáltatás változói között; ne írd ide).
    - **Page** objektum: iratkozz fel a `feed` mezőre.
    - **Instagram** objektum: iratkozz fel a `comments` mezőre.
    - Az oldalak feliratkozását (`/{page-id}/subscribed_apps`) az alkalmazás magától elvégzi az első kommentszinkronnál, ha a kapcsolat már tartalmazza a `pages_manage_metadata` engedélyt.
@@ -144,13 +144,13 @@ HU: Az Instagram-hozzászólások olvasásához, megválaszolásához és elrejt
 Általános szabályok:
 
 - **A felület legyen angol nyelvű.** Az alkalmazás kétnyelvű: felvétel előtt **Settings → Language** (Beállítások → Nyelv) alatt állítsd a felület nyelvét **English**-re. A Facebook felülete is legyen angol, ha lehet.
-- Böngésző címsor látszódjon (staging URL), felbontás legalább 1280×720, felesleges fülek bezárva.
+- Böngésző címsor látszódjon (éles URL: `https://hub.g2amarketing.hu`), felbontás legalább 1280×720, felesleges fülek bezárva.
 - Minden engedélyhez feltölthető ugyanaz a teljes videó, de a leírásban add meg, melyik időpontnál látszik az adott engedély (pl. „0:45 – pages_manage_posts”). Alternatíva: engedélyenként rövid, vágott klip.
 - Jelszó vagy token ne kerüljön képernyőre (a bejelentkezést lehet vágni vagy jelszómezőt takarni).
 
 ### A) Teljes folyamat (minden engedély)
 
-1. Nyisd meg a staging URL-t, jelentkezz be a **reviewer teszt-felhasználóval** (lásd 5. pont).
+1. Nyisd meg a `https://hub.g2amarketing.hu` címet, jelentkezz be a **reviewer teszt-felhasználóval** (lásd 5. pont).
 2. Mutasd meg: Settings → Language = English (ha még nem az).
 3. Válaszd ki a teszt ügyfél-munkaterületet, majd nyisd meg a **Connected accounts** menüpontot.
 4. Kattints a **Connect Facebook & Instagram** gombra → megjelenik a Facebook Login for Business ablak.
@@ -177,7 +177,7 @@ HU: Az Instagram-hozzászólások olvasásához, megválaszolásához és elrejt
 
 ## 5. Teszt-hozzáférés a reviewer számára
 
-- Hozz létre egy külön **reviewer teszt-felhasználót** a staging környezetben (pl. admin vagy social manager szerepkörrel egy dedikált teszt ügyfél-munkaterületen). A jelszót **ne** írd ebbe a dokumentumba és ne commitold; csak az App Review űrlap „Testing instructions / test credentials” mezőjébe kerüljön.
+- Hozz létre egy külön **reviewer teszt-felhasználót** az éles környezetben (`hub.g2amarketing.hu`) meghívóval (pl. admin vagy social manager szerepkörrel egy dedikált teszt ügyfél-munkaterületen). A jelszót **ne** írd ebbe a dokumentumba és ne commitold; csak az App Review űrlap „Testing instructions / test credentials” mezőjébe kerüljön.
 - A teszt-munkaterülethez legyen elérhető egy **teszt Facebook-oldal** és egy hozzá kapcsolt **Instagram szakmai fiók**, amelyet a reviewer a saját Facebook-fiókjával nem tud elérni – ezért a Meta App Dashboardon (App roles → Test users / Roles) adj hozzáférést, vagy írd le a tesztelési utasításban, hogy a reviewer a már csatlakoztatott teszt-oldalon tudja kipróbálni a közzétételt és az analitikát.
 - A tesztelési utasítás (angolul) írja le röviden a 4/A lépéseit, és hogy a felület nyelve a Settings → Language alatt állítható.
 - A beadás után a reviewer fiókot hagyd aktívan, amíg a döntés meg nem születik; utána töröld vagy tiltsd le.
