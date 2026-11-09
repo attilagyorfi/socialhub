@@ -48,46 +48,66 @@ export async function publishabilityErrors(
   }
   return { targets, errors };
 }
-export async function createPost(c: Context, input: z.infer<typeof postInput>) {
-  return transaction(async (tx) => {
-    if (
-      new Set(input.targets.map((t) => t.accountId)).size !==
-      input.targets.length
+// Draft metadata that only the integration API sets today.
+export type DraftMetadata = {
+  suggestedAt: string | null;
+  pillar: string | null;
+  source: string | null;
+  mediaUrls: string[] | null;
+};
+
+// Creates a DRAFT post with its targets and first version. Shared by the UI
+// and the integration API so both keep the same invariants; the caller writes
+// the audit event and owns the transaction.
+export async function insertDraftPost(
+  tx: PoolClient,
+  scope: { organizationId: string; clientId: string; authorId: string | null },
+  input: Omit<z.infer<typeof postInput>, "clientId">,
+  snapshot: unknown,
+  metadata?: DraftMetadata,
+) {
+  if (
+    new Set(input.targets.map((t) => t.accountId)).size !== input.targets.length
+  )
+    throw new AppError(
+      422,
+      "DUPLICATE_TARGET",
+      "Choose each account only once.",
+    );
+  const post = (
+    await tx.query(
+      "INSERT INTO posts(organization_id,client_id,author_id,caption,link,suggested_at,pillar,source,media_urls) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
+      [
+        scope.organizationId,
+        scope.clientId,
+        scope.authorId,
+        input.caption,
+        input.link || null,
+        metadata?.suggestedAt ?? null,
+        metadata?.pillar ?? null,
+        metadata?.source ?? null,
+        metadata?.mediaUrls ? JSON.stringify(metadata.mediaUrls) : null,
+      ],
     )
-      throw new AppError(
-        422,
-        "DUPLICATE_TARGET",
-        "Choose each account only once.",
-      );
-    const post = (
+  ).rows[0];
+  for (const target of input.targets) {
+    const account = (
       await tx.query(
-        "INSERT INTO posts(organization_id,client_id,author_id,caption,link) VALUES($1,$2,$3,$4,$5) RETURNING *",
-        [
-          c.organizationId,
-          c.clientId,
-          c.userId,
-          input.caption,
-          input.link || null,
-        ],
+        "SELECT * FROM social_accounts WHERE organization_id=$1 AND client_id=$2 AND id=$3 AND status='CONNECTED' AND deleted_at IS NULL",
+        [scope.organizationId, scope.clientId, target.accountId],
       )
     ).rows[0];
-    for (const target of input.targets) {
-      const account = (
-        await tx.query(
-          "SELECT * FROM social_accounts WHERE organization_id=$1 AND client_id=$2 AND id=$3 AND status='CONNECTED' AND deleted_at IS NULL",
-          [c.organizationId, c.clientId, target.accountId],
-        )
-      ).rows[0];
-      if (!account)
-        throw new AppError(
-          422,
-          "INVALID_ACCOUNT",
-          "Choose a connected account from this client.",
-        );
+    if (!account)
+      throw new AppError(
+        422,
+        "INVALID_ACCOUNT",
+        "Choose a connected account from this client.",
+      );
+    if (target.mediaIds.length) {
       const media = (
         await tx.query(
           "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND status='READY' AND deleted_at IS NULL",
-          [c.organizationId, c.clientId, target.mediaIds],
+          [scope.organizationId, scope.clientId, target.mediaIds],
         )
       ).rows;
       if (media.length !== target.mediaIds.length)
@@ -96,21 +116,36 @@ export async function createPost(c: Context, input: z.infer<typeof postInput>) {
           "INVALID_MEDIA",
           "Media must belong to this client and be ready.",
         );
-      await tx.query(
-        "INSERT INTO post_targets(organization_id,client_id,post_id,social_account_id,caption,media_ids) VALUES($1,$2,$3,$4,$5,$6)",
-        [
-          c.organizationId,
-          c.clientId,
-          post.id,
-          account.id,
-          target.caption,
-          target.mediaIds,
-        ],
-      );
     }
     await tx.query(
-      "INSERT INTO post_versions(organization_id,client_id,post_id,revision,snapshot) VALUES($1,$2,$3,1,$4)",
-      [c.organizationId, c.clientId, post.id, JSON.stringify(input)],
+      "INSERT INTO post_targets(organization_id,client_id,post_id,social_account_id,caption,media_ids) VALUES($1,$2,$3,$4,$5,$6)",
+      [
+        scope.organizationId,
+        scope.clientId,
+        post.id,
+        account.id,
+        target.caption,
+        target.mediaIds,
+      ],
+    );
+  }
+  await tx.query(
+    "INSERT INTO post_versions(organization_id,client_id,post_id,revision,snapshot) VALUES($1,$2,$3,1,$4)",
+    [scope.organizationId, scope.clientId, post.id, JSON.stringify(snapshot)],
+  );
+  return post;
+}
+export async function createPost(c: Context, input: z.infer<typeof postInput>) {
+  return transaction(async (tx) => {
+    const post = await insertDraftPost(
+      tx,
+      {
+        organizationId: c.organizationId,
+        clientId: c.clientId,
+        authorId: c.userId,
+      },
+      input,
+      input,
     );
     await audit(tx, c, "post.created", post.id);
     return post;
