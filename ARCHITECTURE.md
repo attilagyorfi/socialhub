@@ -106,7 +106,96 @@ minimal audit evidence without retaining the email address.
 }
 ```
 
-Draft, post-status, metrics and brand-profile endpoints and signed webhooks are planned later slices.
+`POST /api/v1/clients/{id}/drafts` uploads a batch of drafts for one client of the key's organization. It requires an `Idempotency-Key` header (8–128 characters from `A–Z a–z 0–9 . _ : -`) and a JSON body of at most 1 MB:
+
+```json
+{
+  "drafts": [
+    {
+      "text": "Main text",
+      "targets": [
+        { "social_account_id": "uuid" },
+        { "social_account_id": "uuid", "text": "Network-specific text" }
+      ],
+      "suggested_at": "2026-12-01T09:30:00+01:00",
+      "media_urls": ["https://cdn.example/image.jpg"],
+      "pillar": "Education",
+      "source": "growth_engine"
+    }
+  ]
+}
+```
+
+- `drafts`: 1–50 items. Unknown fields are rejected.
+- `text`: required, not blank, at most 63 206 characters.
+- `targets`: 1–15 items; each account at most once per draft (`422 DUPLICATE_TARGET`). A target without `text` uses the draft `text`. Every account must be a non-deleted social account of this client (otherwise `404 ACCOUNT_NOT_FOUND`) and `CONNECTED` (otherwise `422 ACCOUNT_NOT_CONNECTED`).
+- `suggested_at`: optional ISO 8601 timestamp with `Z` or an offset. It is stored in `posts.suggested_at` only and never schedules the post.
+- `media_urls`: optional, at most 10 HTTPS URLs without credentials. They are stored as metadata on the post; nothing is downloaded and no media asset is created.
+- `pillar`, `source`: optional labels of 1–100 characters.
+
+Every post and target is created as `DRAFT` with `scheduled_at` null, revision 1 in `post_versions` and a `post.created` audit event (actor null, `metadata.source = "api"`, `metadata.api_key_id`). No publish job or approval request is created: a person still submits, approves and schedules each draft in Social Hub. The batch is atomic: if any draft fails validation or an ownership check, nothing is written. Success is `201`:
+
+```json
+{ "data": [{ "id": "uuid", "status": "draft", "raw_status": "DRAFT" }] }
+```
+
+Errors: missing or malformed `Idempotency-Key` `400 INVALID_IDEMPOTENCY_KEY`; a body that is not JSON `400 INVALID_JSON`; a body over 1 MB `413 PAYLOAD_TOO_LARGE`; schema errors `422 VALIDATION`; a client that is not a live client of the key's organization `404 NOT_FOUND`.
+
+Idempotency keys are scoped to the organization (shared by all its API keys) and stored in `api_idempotency_keys` with a SHA-256 hash of the client id and the canonical request body (object key order does not matter). The row is written in the same transaction as the drafts, so:
+
+- the same key with the same client and body returns the stored status and JSON again, with `Idempotent-Replayed: true`, and creates nothing;
+- the same key with a different body or client returns `422 IDEMPOTENCY_KEY_REUSED` and writes nothing;
+- a concurrent retry waits on the unique `(organization_id, key)` index and then replays the committed response (`409 IDEMPOTENCY_IN_PROGRESS` if that response cannot be read yet); duplicates are never created;
+- a failed request (any error status) stores nothing, so the key can be retried with a corrected body.
+
+`GET /api/v1/posts` lists the organization's non-deleted posts of non-deleted clients, ordered by `(updated_at, id)` ascending. Optional query parameters: `client` (client UUID; another organization's or a deleted client gives `404 NOT_FOUND`), `since` (ISO 8601 timestamp with offset; posts with `updated_at >= since`), `limit` (1–200, default 50) and `cursor` (the previous page's `next_cursor`). Malformed values return `400 INVALID_QUERY` or `400 INVALID_CURSOR`. A poller can store the last `updated_at` it saw and pass it as `since`; posts with that exact timestamp are returned again rather than skipped.
+
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "client_id": "uuid",
+      "status": "published",
+      "raw_status": "PARTIALLY_PUBLISHED",
+      "scheduled_at": "2026-11-02T08:00:00.000Z",
+      "suggested_at": null,
+      "pillar": null,
+      "source": null,
+      "media_urls": [],
+      "created_at": "2026-11-01T10:00:00.000Z",
+      "updated_at": "2026-11-02T10:00:00.000Z",
+      "targets": [
+        {
+          "id": "uuid",
+          "social_account_id": "uuid",
+          "network": "facebook",
+          "status": "published",
+          "raw_status": "PUBLISHED",
+          "published_at": "2026-11-02T09:00:00.000Z",
+          "error_code": null
+        }
+      ]
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+`status` is the contract category and `raw_status` is the exact `post_status`, always present. Posts and targets use the same mapping:
+
+| `post_status`                                   | `status`                                                    |
+| ----------------------------------------------- | ----------------------------------------------------------- |
+| `DRAFT`                                         | `draft`                                                     |
+| `PENDING_APPROVAL`                              | `pending_approval`                                          |
+| `APPROVED`, `SCHEDULED`, `QUEUED`, `PUBLISHING` | `scheduled`                                                 |
+| `PUBLISHED`, `PARTIALLY_PUBLISHED`              | `published` (check `raw_status` and targets for partials)   |
+| `FAILED`                                        | `failed`                                                    |
+| `CANCELLED`                                     | `cancelled` (withdrawn by a user; it will not be published) |
+
+`cancelled` extends the five categories of the original contract; integrations should treat an unknown category as "not going to publish".
+
+Metrics and brand-profile endpoints, `external_ref` and signed webhooks are planned later slices.
 
 ## Scope and honest integration boundaries
 

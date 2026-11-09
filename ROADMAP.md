@@ -32,7 +32,8 @@
 - Authenticated personal-data export; cancellable 24-hour account and 72-hour organization erasure; provider-revocation guard; object cleanup; daily configurable retention; and durable privacy audit evidence.
 - Durable daily analytics jobs, seven-day automatic catch-up, administrator-triggered reconciliation, Operations visibility and current Facebook/Instagram metric normalization with retained raw source data.
 - Fail-closed Meta staging verifier for public configuration, granted scopes, connected identity, provider content, receipt-backed publication and live profile/post insights.
-- Integration API v1, first slice: organization API keys (SHA-256 hash only, shown once, revocable, audited) managed by owners/admins in Settings, Bearer-key authentication and read-only `GET /api/v1/clients`. Drafts, posts, metrics, brand-profile endpoints and signed webhooks remain open.
+- Integration API v1, first slice: organization API keys (SHA-256 hash only, shown once, revocable, audited) managed by owners/admins in Settings, Bearer-key authentication and read-only `GET /api/v1/clients`.
+- Integration API v1, second slice: `POST /api/v1/clients/{id}/drafts` (atomic batch of up to 50 DRAFT posts; suggested time, media URLs, pillar and source kept as metadata; required organization-scoped `Idempotency-Key` with stored replay) and `GET /api/v1/posts` (contract status categories plus raw status, per-target results, `client`/`since` filters, cursor paging). Metrics, brand-profile endpoints, `external_ref` and signed webhooks remain open.
 - Fictional seed, domain/schema regression tests and browser workflow tests.
 
 ## Verification — 2026-09-30
