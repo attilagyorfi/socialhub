@@ -32,6 +32,7 @@ import { Comments } from "./comments";
 import { TimeZoneSettings } from "./timezone-settings";
 import { PrivacySettings } from "./privacy-settings";
 import { LanguageSettings } from "./language-settings";
+import { ApiKeySettings } from "./api-key-settings";
 import { TourButton, TourProvider, useTourSetup } from "./tour/tour";
 import {
   apiError,
@@ -884,6 +885,14 @@ function HubShell() {
                         mutate={mutate}
                         busy={busy}
                       />
+                      {data.clientId && (
+                        <ApiKeySettings
+                          key={data.clientId}
+                          clientId={data.clientId}
+                          canManage={data.canManageTeam}
+                          timeZone={data.user.timezone}
+                        />
+                      )}
                       {data.operations && (
                         <section className="panel">
                           <div className="panel-title">

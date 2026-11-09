@@ -54,6 +54,26 @@ const en = {
   "language.label": "Interface language",
   "language.help":
     "Your interface language. Client-facing pages use the client's language.",
+  "apiKeys.title": "API keys",
+  "apiKeys.subtitle":
+    "Keys let other tools, like Growth Engine, read this organization's data.",
+  "apiKeys.adminOnly": "Only owners and admins can manage API keys.",
+  "apiKeys.name": "Key name",
+  "apiKeys.namePlaceholder": "e.g. Growth Engine",
+  "apiKeys.create": "Create key",
+  "apiKeys.copyWarning": "Copy it now. You won't see it again.",
+  "apiKeys.copy": "Copy",
+  "apiKeys.copied": "Copied",
+  "apiKeys.copyLabel": "Copy API key",
+  "apiKeys.failed": "Something went wrong. Try again.",
+  "apiKeys.createdAt": "Created {date}",
+  "apiKeys.lastUsed": "Last used {date}",
+  "apiKeys.neverUsed": "Never used",
+  "apiKeys.revokedAt": "Revoked {date}",
+  "apiKeys.revoke": "Revoke",
+  "apiKeys.revokeConfirm":
+    "Revoke the “{name}” key? Tools using it will stop working right away.",
+  "apiKeys.empty": "No API keys yet.",
 } as const;
 
 const hu = {
@@ -113,6 +133,26 @@ const hu = {
   "language.label": "Felület nyelve",
   "language.help":
     "A felület nyelve. Az ügyfeleknek szóló oldalak az ügyfél nyelvén jelennek meg.",
+  "apiKeys.title": "API-kulcsok",
+  "apiKeys.subtitle":
+    "A kulccsal más eszközök, például a Growth Engine, olvashatják a szervezet adatait.",
+  "apiKeys.adminOnly": "API-kulcsot csak tulajdonos vagy admin kezelhet.",
+  "apiKeys.name": "Kulcs neve",
+  "apiKeys.namePlaceholder": "pl. Growth Engine",
+  "apiKeys.create": "Kulcs létrehozása",
+  "apiKeys.copyWarning": "Most másold ki, később nem látod újra.",
+  "apiKeys.copy": "Másolás",
+  "apiKeys.copied": "Kimásolva",
+  "apiKeys.copyLabel": "API-kulcs másolása",
+  "apiKeys.failed": "Valami hiba történt. Próbáld újra.",
+  "apiKeys.createdAt": "Létrehozva: {date}",
+  "apiKeys.lastUsed": "Utoljára használva: {date}",
+  "apiKeys.neverUsed": "Még nem használták",
+  "apiKeys.revokedAt": "Visszavonva: {date}",
+  "apiKeys.revoke": "Visszavonás",
+  "apiKeys.revokeConfirm":
+    "Visszavonod a(z) „{name}” kulcsot? Az ezt használó eszközök azonnal leállnak.",
+  "apiKeys.empty": "Még nincs API-kulcs.",
 } satisfies Record<keyof typeof en, string>;
 
 export default { en, hu };

@@ -80,6 +80,34 @@ period, fails closed while a live provider credential remains and deletes both
 tenant rows and stored media. Privacy requests survive subject deletion as
 minimal audit evidence without retaining the email address.
 
+## Integration API (v1)
+
+`/api/v1` is the versioned API for Growth Engine and other trusted tools. Breaking changes require `/api/v2`. Requests authenticate with an organization API key created by an owner/admin in Settings: `Authorization: Bearer shk_live_…`. The key scopes every request to its organization; there is no session or cookie involved. Errors use `{ "error": { "code", "message" } }`; an invalid, missing or revoked key always returns `401` with code `INVALID_API_KEY`. Responses are `Cache-Control: no-store`.
+
+`GET /api/v1/clients` lists the organization's non-deleted clients and their non-deleted social accounts. Remote IDs, capabilities and credentials are never included. `external_ref` is reserved for client matching with Growth Engine and is `null` until that field exists.
+
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Client",
+      "external_ref": null,
+      "accounts": [
+        {
+          "id": "uuid",
+          "platform": "facebook",
+          "name": "Page",
+          "status": "CONNECTED"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Draft, post-status, metrics and brand-profile endpoints and signed webhooks are planned later slices.
+
 ## Scope and honest integration boundaries
 
 Mock mode is the locally testable baseline. The Meta direct adapter remains disabled until explicitly configured and still requires app registration, approved scopes and staging verification. LinkedIn, TikTok and Google direct operations fail explicitly. AI mock output is visibly labeled. Real AI needs an API key and explicit user invocation. No generated caption can publish automatically.
