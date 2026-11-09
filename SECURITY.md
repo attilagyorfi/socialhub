@@ -20,6 +20,8 @@ Direct uploads use random tenant-scoped incoming keys and five-minute signed PUT
 
 Personal-data exports use an authenticated, rate-limited endpoint with explicit table and column allowlists; passwords, sessions and social-provider credentials are excluded. Account deletion requires exact email confirmation, has a 24-hour cancellation window and is blocked for sole organization owners. Organization deletion requires owner access, exact name confirmation, a 72-hour cancellation window and prior removal of live provider grants. The worker retries failures with safe error codes, deletes tenant objects from storage and records request/retention audit events.
 
+Organization API keys for `/api/v1` are 32 bytes from `crypto.randomBytes`, encoded as `shk_live_<base64url>`. Only their SHA-256 hash and a short prefix are stored; the raw key is returned once in the creation response and cannot be shown again. Only organization owners/administrators can create, list and revoke keys; creation and revocation write audit events containing the key name and prefix, never the key or its hash. Revoked keys stop working immediately. Missing, malformed, unknown and revoked keys all receive the same `401 INVALID_API_KEY` response, and `/api/v1` responses are `Cache-Control: no-store`. A key grants read access to its whole organization, so treat it like a password and revoke it when a tool no longer needs it. API rate limiting is not yet implemented.
+
 ## Outstanding production work
 
 - Obtain Meta app review and verify OAuth, token refresh, publishing and webhook subscriptions against a real staging app.
