@@ -84,7 +84,7 @@ minimal audit evidence without retaining the email address.
 
 `/api/v1` is the versioned API for Growth Engine and other trusted tools. Breaking changes require `/api/v2`. Requests authenticate with an organization API key created by an owner/admin in Settings: `Authorization: Bearer shk_live_…`. The key scopes every request to its organization; there is no session or cookie involved. Errors use `{ "error": { "code", "message" } }`; an invalid, missing or revoked key always returns `401` with code `INVALID_API_KEY`. Responses are `Cache-Control: no-store`.
 
-`GET /api/v1/clients` lists the organization's non-deleted clients and their non-deleted social accounts. Remote IDs, capabilities and credentials are never included. `external_ref` is reserved for client matching with Growth Engine and is `null` until that field exists.
+`GET /api/v1/clients` lists the organization's non-deleted clients and their non-deleted social accounts. Remote IDs, capabilities and credentials are never included. `external_ref` is the client's external ID for matching it in Growth Engine (e.g. `mmi`, `viba-team`), or `null` when none is set. Owners/admins edit it in Clients → External ID (other roles see it read-only); it must be 1–64 lowercase letters, digits or hyphens and unique within the organization. The server rejects other values with `400 EXTERNAL_REF_INVALID`, a value already used by another client of the organization with `409 EXTERNAL_REF_TAKEN`, and other roles with `403`; an empty value clears it. Every change writes a `client.external_ref_updated` audit entry with the old and new value.
 
 ```json
 {
@@ -92,7 +92,7 @@ minimal audit evidence without retaining the email address.
     {
       "id": "uuid",
       "name": "Client",
-      "external_ref": null,
+      "external_ref": "viba-team",
       "accounts": [
         {
           "id": "uuid",
@@ -195,7 +195,37 @@ Idempotency keys are scoped to the organization (shared by all its API keys) and
 
 `cancelled` extends the five categories of the original contract; integrations should treat an unknown category as "not going to publish".
 
-Metrics and brand-profile endpoints, `external_ref` and signed webhooks are planned later slices.
+`GET /api/v1/clients/{id}/metrics?from=YYYY-MM-DD&to=YYYY-MM-DD` returns metrics already stored by the analytics sync for one live client of the key's organization. It only reads the database: it never calls a provider or queues a sync. `from` and `to` are required calendar days in UTC with `from <= to`, covering at most 92 days including both ends; a missing, malformed (not `YYYY-MM-DD`), non-existent (e.g. `2026-02-30`), reversed or longer range returns `400 INVALID_QUERY`. Another organization's, a deleted or an unknown client returns `404 NOT_FOUND` without any data.
+
+```json
+{
+  "client_id": "uuid",
+  "from": "2026-03-01",
+  "to": "2026-03-31",
+  "accounts": [
+    {
+      "social_account_id": "uuid",
+      "provider": "facebook",
+      "days": [{ "day": "2026-03-01", "metrics": { "reach": 120 } }]
+    }
+  ],
+  "posts": [
+    {
+      "post_id": "uuid",
+      "target_id": "uuid",
+      "provider": "facebook",
+      "captured_at": "2026-03-31T06:00:00.000Z",
+      "metrics": { "reactions": 12 }
+    }
+  ]
+}
+```
+
+- `accounts` holds `analytics_daily.normalized` for days `from`–`to` (inclusive), grouped by social account in ascending id order, days ascending. Accounts without stored days are omitted; stored days of an account removed later are still returned, so the history stays complete.
+- `posts` holds, for each post target of a non-deleted post, the latest `post_metrics.normalized` captured in `[from 00:00 UTC, to + 1 day 00:00 UTC)`, ordered by `post_id`, then `target_id`. Earlier captures and captures outside the range are left out.
+- `metrics` objects are the stored normalized metrics as they are; their keys depend on the provider. Raw provider payloads are never included.
+
+Brand-profile endpoints and signed webhooks are planned later slices.
 
 ## Scope and honest integration boundaries
 

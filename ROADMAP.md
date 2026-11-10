@@ -33,7 +33,8 @@
 - Durable daily analytics jobs, seven-day automatic catch-up, administrator-triggered reconciliation, Operations visibility and current Facebook/Instagram metric normalization with retained raw source data.
 - Fail-closed Meta staging verifier for public configuration, granted scopes, connected identity, provider content, receipt-backed publication and live profile/post insights.
 - Integration API v1, first slice: organization API keys (SHA-256 hash only, shown once, revocable, audited) managed by owners/admins in Settings, Bearer-key authentication and read-only `GET /api/v1/clients`.
-- Integration API v1, second slice: `POST /api/v1/clients/{id}/drafts` (atomic batch of up to 50 DRAFT posts; suggested time, media URLs, pillar and source kept as metadata; required organization-scoped `Idempotency-Key` with stored replay) and `GET /api/v1/posts` (contract status categories plus raw status, per-target results, `client`/`since` filters, cursor paging). Metrics, brand-profile endpoints, `external_ref` and signed webhooks remain open.
+- Integration API v1, second slice: `POST /api/v1/clients/{id}/drafts` (atomic batch of up to 50 DRAFT posts; suggested time, media URLs, pillar and source kept as metadata; required organization-scoped `Idempotency-Key` with stored replay) and `GET /api/v1/posts` (contract status categories plus raw status, per-target results, `client`/`since` filters, cursor paging).
+- Integration API v1, third slice: client `external_ref` (organization-unique, owner/admin-editable in Clients, audited, returned by `GET /api/v1/clients`) and read-only `GET /api/v1/clients/{id}/metrics` (stored daily account metrics and latest per-target post metrics for a required UTC range of at most 92 days; no provider calls). Brand-profile endpoints and signed webhooks remain open.
 - Fictional seed, domain/schema regression tests and browser workflow tests.
 
 ## Verification — 2026-09-30
