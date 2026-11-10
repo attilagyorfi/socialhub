@@ -10,6 +10,7 @@ import {
   connectMock,
   disconnect,
   updateClientLocale,
+  updateClientExternalRef,
 } from "../../../../../packages/server/clients";
 import {
   editDraft,
@@ -396,6 +397,7 @@ export async function POST(request: Request) {
               action === "privacy.retention.update" ||
               action === "analytics.backfill" ||
               action === "client.locale.update" ||
+              action === "client.external_ref.update" ||
               action === "publishing.reconcile" ||
               action === "operations.sentry-test" ||
               action.startsWith("team.")
@@ -429,6 +431,10 @@ export async function POST(request: Request) {
       case "client.locale.update":
         return Response.json(
           await updateClientLocale(c, localeInput.parse(body.locale)),
+        );
+      case "client.external_ref.update":
+        return Response.json(
+          await updateClientExternalRef(c, body.externalRef ?? null),
         );
       case "operations.sentry-test":
         // Lets administrators confirm that error monitoring receives errors.

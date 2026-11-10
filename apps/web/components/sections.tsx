@@ -253,6 +253,41 @@ export function Clients({
             <p className="panel-note">{t("sections.clients.languageHelp")}</p>
           </div>
         )}
+        {activeClient && canManage && (
+          <form
+            key={`${activeClient.id}:${activeClient.external_ref ?? ""}`}
+            className="client-locale"
+            onSubmit={(e) => {
+              e.preventDefault();
+              mutate("client.external_ref.update", {
+                externalRef: new FormData(e.currentTarget).get("externalRef"),
+              }).catch(() => {});
+            }}
+          >
+            <label>
+              {t("sections.clients.externalRef")}
+              <input
+                name="externalRef"
+                defaultValue={activeClient.external_ref ?? ""}
+                maxLength={64}
+                pattern="[a-z0-9\-]*"
+                placeholder={t("sections.clients.externalRefPlaceholder")}
+              />
+            </label>
+            <p className="panel-note">
+              {t("sections.clients.externalRefHelp")}
+            </p>
+            <button disabled={busy}>
+              {t("sections.clients.externalRefSave")}
+            </button>
+          </form>
+        )}
+        {activeClient && !canManage && activeClient.external_ref && (
+          <p className="panel-note">
+            {t("sections.clients.externalRef")}:{" "}
+            <code>{activeClient.external_ref}</code>
+          </p>
+        )}
       </section>
       {data.clientId && (
         <section className="panel">

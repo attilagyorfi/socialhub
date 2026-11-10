@@ -33,6 +33,11 @@ const en = {
   "clients.language": "Client language",
   "clients.languageHelp":
     "Used for the external approval page and client emails.",
+  "clients.externalRef": "External ID",
+  "clients.externalRefPlaceholder": "e.g. viba-team",
+  "clients.externalRefHelp":
+    "Other tools connected through the API use this to find the client. Lowercase letters, numbers and hyphens, up to 64 characters. Leave it empty to remove it.",
+  "clients.externalRefSave": "Save ID",
   "workflow.title": "Approval workflow",
   "workflow.sequence": "Review sequence",
   "workflow.external": "Client approval",
@@ -114,6 +119,11 @@ const hu = {
   "clients.language": "Ügyfél nyelve",
   "clients.languageHelp":
     "Ezen a nyelven jelenik meg a külső jóváhagyási oldal és az ügyfélnek küldött e-mailek.",
+  "clients.externalRef": "Külső azonosító",
+  "clients.externalRefPlaceholder": "pl. viba-team",
+  "clients.externalRefHelp":
+    "Erről ismerik fel az ügyfelet az API-n át csatlakozó eszközök. Kisbetű, szám és kötőjel, legfeljebb 64 karakter. Ha üresen hagyod, töröljük.",
+  "clients.externalRefSave": "Azonosító mentése",
   "workflow.title": "Jóváhagyási folyamat",
   "workflow.sequence": "Jóváhagyás sorrendje",
   "workflow.external": "Ügyfél-jóváhagyás",

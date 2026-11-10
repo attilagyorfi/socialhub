@@ -75,6 +75,7 @@ export type Client = {
   role: string;
   organization_id: string;
   locale: "hu" | "en";
+  external_ref: string | null;
 };
 export type HubData = {
   user: {

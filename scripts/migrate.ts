@@ -31,6 +31,7 @@ try {
     "021_social_comments.sql",
     "024_api_keys.sql",
     "025_api_idempotency.sql",
+    "026_client_external_ref.sql",
   ]) {
     const exists = await conn.query(
       "SELECT 1 FROM schema_migrations WHERE name=$1",

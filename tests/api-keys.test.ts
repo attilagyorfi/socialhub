@@ -15,9 +15,10 @@ vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
 const { createApiKey, generateApiKey, listApiKeys, revokeApiKey } =
   await import("../packages/server/api-keys");
+const { updateClientExternalRef } = await import("../packages/server/clients");
 const { GET } = await import("../apps/web/app/api/v1/clients/route");
 
-type Role = "OWNER" | "ADMIN" | "SOCIAL_MANAGER" | "VIEWER";
+type Role = "OWNER" | "ADMIN" | "SOCIAL_MANAGER" | "CONTENT_CREATOR" | "VIEWER";
 
 beforeAll(async () => {
   const directory = new URL("../packages/db/migrations/", import.meta.url);
@@ -248,5 +249,141 @@ describe("GET /api/v1/clients", () => {
       expect(serialized).not.toContain(secret);
 
     expect((await listApiKeys(w.c))[0].last_used_at).not.toBeNull();
+  });
+});
+
+describe("client external_ref", () => {
+  const stored = async (client: string) =>
+    (
+      await db.query<{ external_ref: string | null }>(
+        "SELECT external_ref FROM clients WHERE id=$1",
+        [client],
+      )
+    ).rows[0].external_ref;
+
+  it("lets owners and admins set and clear it, with an audit entry", async () => {
+    const w = await workspace();
+    expect(await updateClientExternalRef(w.c, " viba-team ")).toEqual({
+      external_ref: "viba-team",
+    });
+    expect(await stored(w.client)).toBe("viba-team");
+    const admin = { ...w.c, role: "ADMIN" as const };
+    await updateClientExternalRef(admin, "mmi");
+    expect(await stored(w.client)).toBe("mmi");
+    await updateClientExternalRef(admin, "");
+    expect(await stored(w.client)).toBeNull();
+    await updateClientExternalRef(w.c, "mmi");
+    await updateClientExternalRef(w.c, null);
+    expect(await stored(w.client)).toBeNull();
+
+    const logs = (
+      await db.query<{ action: string; actor_id: string; metadata: unknown }>(
+        "SELECT action,actor_id,metadata FROM audit_logs WHERE resource_id=$1 ORDER BY created_at,id",
+        [w.client],
+      )
+    ).rows;
+    expect(logs.map((l) => l.metadata)).toEqual([
+      { from: null, to: "viba-team" },
+      { from: "viba-team", to: "mmi" },
+      { from: "mmi", to: null },
+      { from: null, to: "mmi" },
+      { from: "mmi", to: null },
+    ]);
+    expect(new Set(logs.map((l) => l.action))).toEqual(
+      new Set(["client.external_ref_updated"]),
+    );
+    expect(logs[0].actor_id).toBe(w.c.userId);
+  });
+
+  it("forbids other roles on the server", async () => {
+    const w = await workspace();
+    await updateClientExternalRef(w.c, "kept");
+    for (const role of [
+      "SOCIAL_MANAGER",
+      "CONTENT_CREATOR",
+      "VIEWER",
+    ] as const) {
+      await expect(
+        updateClientExternalRef({ ...w.c, role }, "changed"),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        updateClientExternalRef({ ...w.c, role }, null),
+      ).rejects.toMatchObject({ status: 403 });
+    }
+    expect(await stored(w.client)).toBe("kept");
+  });
+
+  it("rejects malformed values with a 400", async () => {
+    const w = await workspace();
+    for (const value of [
+      "Viba",
+      "viba team",
+      "viba_team",
+      "á",
+      "a".repeat(65),
+      42,
+      undefined,
+    ])
+      await expect(updateClientExternalRef(w.c, value)).rejects.toMatchObject({
+        status: 400,
+        code: "EXTERNAL_REF_INVALID",
+        message: expect.stringContaining("kisbetűt"),
+      });
+    await updateClientExternalRef(w.c, "a".repeat(64));
+    expect(await stored(w.client)).toBe("a".repeat(64));
+  });
+
+  it("is unique within an organization but not across them", async () => {
+    const w = await workspace();
+    const sibling = crypto.randomUUID();
+    await db.query(
+      "INSERT INTO clients(id,organization_id,name) VALUES($1,$2,'Client B')",
+      [sibling, w.org],
+    );
+    await updateClientExternalRef(w.c, "mmi");
+    await expect(
+      updateClientExternalRef({ ...w.c, clientId: sibling }, "mmi"),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "EXTERNAL_REF_TAKEN",
+      message: "Ez az azonosító már foglalt ennél a szervezetnél.",
+    });
+    expect(await stored(sibling)).toBeNull();
+
+    const other = await workspace();
+    await updateClientExternalRef(other.c, "mmi");
+    expect(await stored(other.client)).toBe("mmi");
+    // Setting the same value again is not a conflict with itself.
+    await updateClientExternalRef(w.c, "mmi");
+  });
+
+  it("does not touch another organization's client", async () => {
+    const one = await workspace();
+    const two = await workspace();
+    await expect(
+      updateClientExternalRef({ ...two.c, clientId: one.client }, "stolen"),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(await stored(one.client)).toBeNull();
+  });
+
+  it("is returned by GET /api/v1/clients", async () => {
+    const w = await workspace();
+    const sibling = crypto.randomUUID();
+    await db.query(
+      "INSERT INTO clients(id,organization_id,name) VALUES($1,$2,'Client B')",
+      [sibling, w.org],
+    );
+    await updateClientExternalRef(w.c, "viba-team");
+    const key = await createApiKey(w.c, "Growth Engine");
+    const body = await (await call(`Bearer ${key.key}`)).json();
+    expect(
+      body.data.map((c: { id: string; external_ref: string | null }) => [
+        c.id,
+        c.external_ref,
+      ]),
+    ).toEqual([
+      [w.client, "viba-team"],
+      [sibling, null],
+    ]);
   });
 });

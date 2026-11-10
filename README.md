@@ -71,6 +71,15 @@ Mock captions containing `[mock:fail]` demonstrate permanent rejection. `[mock:r
 
 Post details also allow rotating a pending external review link and cancelling an unpublished scheduled post. Cancellation prevents remaining queued deliveries; posts with an already published target cannot be cancelled through this action.
 
+## Integration API v1
+
+Trusted tools such as Growth Engine use `/api/v1` with an organization API key (`Authorization: Bearer shk_live_…`) that owners/admins create in Settings. Every request is scoped to the key's organization. Details, response shapes and error codes are in `ARCHITECTURE.md`.
+
+- `GET /api/v1/clients`: clients with their accounts and `external_ref` (the client's external ID, or `null`). Owners/admins set the external ID in Clients → External ID: lowercase letters, digits and hyphens, 1–64 characters (e.g. `mmi`, `viba-team`), unique within the organization.
+- `POST /api/v1/clients/{id}/drafts`: batch draft upload with a required `Idempotency-Key`.
+- `GET /api/v1/posts`: post statuses with `client`/`since` filters and cursor paging.
+- `GET /api/v1/clients/{id}/metrics?from=YYYY-MM-DD&to=YYYY-MM-DD`: already stored, normalized daily account metrics and the latest post metrics per target. Both dates are required UTC days, `from <= to`, at most 92 days including both ends. It never calls a provider or starts a sync.
+
 ## Verification
 
 ```sh

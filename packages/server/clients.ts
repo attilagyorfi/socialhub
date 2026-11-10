@@ -1,7 +1,8 @@
 import { pool } from "../db";
 import { transaction, audit } from "./transaction";
 import type { Context } from "./context";
-import { capabilities, type Platform } from "../core/domain";
+import { z } from "zod";
+import { capabilities, type Platform, type Role } from "../core/domain";
 import { encrypt, AppError } from "../core/security";
 import { disconnectMeta } from "./meta";
 export async function listClients(userId: string) {
@@ -84,6 +85,63 @@ export async function updateClientLocale(c: Context, locale: "hu" | "en") {
     await audit(tx, c, "client.locale_updated", c.clientId, { locale });
     return { locale };
   });
+}
+// Matches the CHECK constraint of migration 026. An empty string or null
+// clears the value.
+const externalRefMessage =
+  "A külső azonosító legfeljebb 64 karakter lehet, és csak kisbetűt, számot és kötőjelet tartalmazhat.";
+export const externalRefInput = z
+  .union([z.string(), z.null()])
+  .transform((value) => (value === null ? "" : value.trim()))
+  .refine((value) => value === "" || /^[a-z0-9-]{1,64}$/.test(value))
+  .transform((value) => value || null);
+
+// Identifier an integration (e.g. Growth Engine) uses for this client; it is
+// returned by GET /api/v1/clients and unique within the organization.
+export async function updateClientExternalRef(c: Context, input: unknown) {
+  if (!(["OWNER", "ADMIN"] as Role[]).includes(c.role))
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "Ezt csak a szervezet tulajdonosa vagy adminisztrátora módosíthatja.",
+    );
+  const parsed = externalRefInput.safeParse(input);
+  if (!parsed.success)
+    throw new AppError(400, "EXTERNAL_REF_INVALID", externalRefMessage);
+  const externalRef = parsed.data;
+  try {
+    return await transaction(async (tx) => {
+      const current = (
+        await tx.query(
+          "SELECT external_ref FROM clients WHERE organization_id=$1 AND id=$2 AND deleted_at IS NULL FOR UPDATE",
+          [c.organizationId, c.clientId],
+        )
+      ).rows[0];
+      if (!current) throw new AppError(404, "NOT_FOUND", "Client not found.");
+      await tx.query(
+        "UPDATE clients SET external_ref=$1 WHERE organization_id=$2 AND id=$3 AND deleted_at IS NULL",
+        [externalRef, c.organizationId, c.clientId],
+      );
+      await audit(tx, c, "client.external_ref_updated", c.clientId, {
+        from: current.external_ref ?? null,
+        to: externalRef,
+      });
+      return { external_ref: externalRef };
+    });
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "23505"
+    )
+      throw new AppError(
+        409,
+        "EXTERNAL_REF_TAKEN",
+        "Ez az azonosító már foglalt ennél a szervezetnél.",
+      );
+    throw error;
+  }
 }
 export async function connectMock(
   c: Context,

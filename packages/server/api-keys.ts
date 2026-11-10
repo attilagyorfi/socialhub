@@ -126,7 +126,7 @@ export async function authenticateApiKey(
 // capabilities and credentials out of the integration response.
 export async function listIntegrationClients(organizationId: string) {
   const result = await pool.query(
-    `SELECT c.id,c.name,
+    `SELECT c.id,c.name,c.external_ref,
        coalesce(jsonb_agg(jsonb_build_object(
          'id',a.id,'platform',a.platform,'name',a.name,'status',a.status
        ) ORDER BY a.created_at,a.id) FILTER (WHERE a.id IS NOT NULL),'[]'::jsonb) AS accounts
@@ -140,7 +140,7 @@ export async function listIntegrationClients(organizationId: string) {
   return result.rows.map((row) => ({
     id: String(row.id),
     name: String(row.name),
-    external_ref: null,
+    external_ref: row.external_ref == null ? null : String(row.external_ref),
     accounts: row.accounts as {
       id: string;
       platform: string;
