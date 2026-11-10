@@ -1,6 +1,9 @@
 import { PGlite } from "@electric-sql/pglite";
 import { createHmac, randomBytes } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
+import type { request as httpsRequest } from "node:https";
+import { createServer, type AddressInfo } from "node:net";
+import type { WebhookRequest } from "../packages/server/webhooks";
 import {
   afterAll,
   afterEach,
@@ -30,6 +33,8 @@ const {
   enqueueWebhookEvent,
   listWebhookEndpoints,
   maxWebhookAttempts,
+  pinnedHttpsSend,
+  pinnedLookup,
   processWebhookDeliveries,
   revokeWebhookEndpoint,
   rotateWebhookSecret,
@@ -225,8 +230,8 @@ describe("signing and sending", () => {
     );
   });
 
-  it("sends the contract headers without following redirects", async () => {
-    const fetch = vi.fn(async () => new Response(null, { status: 204 }));
+  it("sends the contract headers to the checked addresses", async () => {
+    const send = vi.fn(async (_request: WebhookRequest) => 204);
     const result = await sendWebhook(
       {
         url: "https://hooks.example.com/",
@@ -235,14 +240,16 @@ describe("signing and sending", () => {
         type: "post.approved",
       },
       '{"id":"evt"}',
-      { fetch, lookup: publicLookup, now: () => 1700000000_500 },
+      { send, lookup: publicLookup, now: () => 1700000000_500 },
     );
     expect(result).toEqual({ ok: true, statusCode: 204 });
-    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("https://hooks.example.com/");
-    expect(init.redirect).toBe("manual");
-    expect(init.signal).toBeInstanceOf(AbortSignal);
-    expect(init.headers).toMatchObject({
+    const [request] = send.mock.calls[0];
+    expect(request.url.toString()).toBe("https://hooks.example.com/");
+    expect(request.addresses).toEqual([
+      { address: "93.184.216.34", family: 4 },
+    ]);
+    expect(request.signal).toBeInstanceOf(AbortSignal);
+    expect(request.headers).toMatchObject({
       "Content-Type": "application/json",
       "X-SocialHub-Event-Id": "evt-1",
       "X-SocialHub-Event": "post.approved",
@@ -256,13 +263,7 @@ describe("signing and sending", () => {
   });
 
   it("treats redirects as failures and never calls blocked hosts", async () => {
-    const fetch = vi.fn(
-      async () =>
-        new Response(null, {
-          status: 302,
-          headers: { location: "http://169.254.169.254/" },
-        }),
-    );
+    const send = vi.fn(async () => 302);
     const delivery = {
       url: "https://hooks.example.com/",
       secret: "s",
@@ -271,16 +272,16 @@ describe("signing and sending", () => {
     };
     expect(
       await sendWebhook(delivery, "{}", {
-        fetch,
+        send,
         lookup: publicLookup,
         now: Date.now,
       }),
     ).toEqual({ ok: false, statusCode: 302, error: "WEBHOOK_REDIRECT" });
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledTimes(1);
     const blocked = vi.fn();
     expect(
       await sendWebhook(delivery, "{}", {
-        fetch: blocked,
+        send: blocked,
         lookup: async () => [{ address: "192.168.0.10", family: 4 }],
         now: Date.now,
       }),
@@ -290,10 +291,10 @@ describe("signing and sending", () => {
 
   it("aborts slow receivers after the timeout", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const fetch = vi.fn(
-      (_url: string, init: RequestInit) =>
-        new Promise<Response>((_resolve, reject) =>
-          init.signal?.addEventListener("abort", () =>
+    const send = vi.fn(
+      (request: WebhookRequest) =>
+        new Promise<number>((_resolve, reject) =>
+          request.signal.addEventListener("abort", () =>
             reject(new DOMException("aborted", "AbortError")),
           ),
         ),
@@ -306,12 +307,134 @@ describe("signing and sending", () => {
         type: "post.failed",
       },
       "{}",
-      { fetch: fetch as never, lookup: publicLookup, now: Date.now },
+      { send, lookup: publicLookup, now: Date.now },
     );
     await vi.advanceTimersByTimeAsync(webhookTimeoutMs - 1);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(await pending).toEqual({ ok: false, error: "WEBHOOK_TIMEOUT" });
+  });
+});
+
+describe("DNS rebinding protection", () => {
+  const checked = [
+    { address: "93.184.216.34", family: 4 as const },
+    { address: "2606:2800:220:1::1", family: 6 as const },
+  ];
+  const resolve = (
+    lookup: ReturnType<typeof pinnedLookup>,
+    options: { all?: boolean; family?: number },
+  ) =>
+    new Promise<unknown>((done, fail) =>
+      lookup("hooks.example.com", options as never, (error, address, family) =>
+        error ? fail(error) : done(options.all ? address : { address, family }),
+      ),
+    );
+
+  it("answers lookups only with the checked addresses", async () => {
+    const lookup = pinnedLookup(checked);
+    expect(await resolve(lookup, { all: true })).toEqual(checked);
+    expect(await resolve(lookup, {})).toEqual(checked[0]);
+    expect(await resolve(lookup, { family: 6 })).toEqual(checked[1]);
+    await expect(
+      resolve(pinnedLookup([checked[0]]), { family: 6 }),
+    ).rejects.toMatchObject({ code: "ENOTFOUND" });
+  });
+
+  it("connects to the first checked address even if DNS changes to a private one", async () => {
+    // The first resolution (the check) is public, any later one is loopback.
+    const lookup = vi
+      .fn()
+      .mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }])
+      .mockResolvedValue([{ address: "127.0.0.1", family: 4 }]);
+    const connected: unknown[] = [];
+    let options: Record<string, unknown> = {};
+    let body = "";
+    const request = vi.fn((opts: Record<string, unknown>, onResponse) => {
+      options = opts;
+      // What the socket would connect to, in both lookup forms node:net uses.
+      const pinned = opts.lookup as ReturnType<typeof pinnedLookup>;
+      pinned("hooks.example.com", { all: true }, (_e, addresses) =>
+        connected.push(...(addresses as unknown as { address: string }[])),
+      );
+      pinned("hooks.example.com", {}, (_e, address) =>
+        connected.push({ address }),
+      );
+      const destroy = vi.fn();
+      return {
+        on: vi.fn(),
+        end: (chunk: string) => {
+          body = chunk;
+          onResponse({ statusCode: 204, destroy });
+        },
+      };
+    });
+    const result = await sendWebhook(
+      {
+        url: "https://hooks.example.com:8443/in?x=1",
+        secret: "s",
+        eventId: "e",
+        type: "post.approved",
+      },
+      '{"id":"evt"}',
+      {
+        send: pinnedHttpsSend(request as unknown as typeof httpsRequest),
+        lookup,
+        now: Date.now,
+      },
+    );
+    expect(result).toEqual({ ok: true, statusCode: 204 });
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(connected).toEqual([
+      { address: "93.184.216.34", family: 4 },
+      { address: "93.184.216.34" },
+    ]);
+    expect(JSON.stringify(connected)).not.toContain("127.0.0.1");
+    // SNI and Host stay the webhook's hostname; TLS settings are untouched.
+    expect(options).toMatchObject({
+      protocol: "https:",
+      hostname: "hooks.example.com",
+      servername: "hooks.example.com",
+      port: "8443",
+      path: "/in?x=1",
+      method: "POST",
+      agent: false,
+    });
+    expect(options.headers).toMatchObject({
+      Host: "hooks.example.com:8443",
+      "Content-Length": String(body.length),
+    });
+    expect(options).not.toHaveProperty("rejectUnauthorized");
+    expect(options).not.toHaveProperty("checkServerIdentity");
+    expect(body).toBe('{"id":"evt"}');
+  });
+
+  it("opens the real socket to the pinned address with the original SNI", async () => {
+    // A plain TCP server stands in for the pinned address: hooks.example.com
+    // is never resolved, and the TLS ClientHello names the original host.
+    let hello = Buffer.alloc(0);
+    const server = createServer((socket) =>
+      socket.once("data", (chunk) => {
+        hello = chunk;
+        socket.destroy();
+      }),
+    );
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    const { port } = server.address() as AddressInfo;
+    try {
+      await expect(
+        pinnedHttpsSend()({
+          url: new URL(`https://hooks.example.com:${port}/`),
+          addresses: [{ address: "127.0.0.1", family: 4 }],
+          headers: {},
+          body: "{}",
+          signal: AbortSignal.timeout(5000),
+        }),
+      ).rejects.toThrow();
+    } finally {
+      server.close();
+    }
+    expect(hello.includes(Buffer.from("hooks.example.com"))).toBe(true);
   });
 });
 
@@ -706,13 +829,13 @@ describe("webhook delivery worker", () => {
     );
   }
   const transport = (status: number | Error) => {
-    const fetch = vi.fn(async (_url: string, _init: RequestInit) => {
+    const send = vi.fn(async (_request: WebhookRequest) => {
       if (status instanceof Error) throw status;
-      return new Response("receiver secret body", { status });
+      return status;
     });
     return {
-      fetch,
-      transport: { fetch: fetch as never, lookup: publicLookup, now: Date.now },
+      send,
+      transport: { send, lookup: publicLookup, now: Date.now },
     };
   };
 
@@ -721,7 +844,7 @@ describe("webhook delivery worker", () => {
     const hook = await endpoint(w);
     await queued(w);
     const rotated = await rotateWebhookSecret(w.c, hook.id);
-    const { fetch, transport: t } = transport(200);
+    const { send, transport: t } = transport(200);
     expect(await processWebhookDeliveries(10, t, w.org)).toMatchObject({
       delivered: 1,
     });
@@ -731,8 +854,8 @@ describe("webhook delivery worker", () => {
       attempts: 1,
       last_status_code: 200,
     });
-    const init = fetch.mock.calls[0][1];
-    const headers = init.headers as Record<string, string>;
+    const init = send.mock.calls[0][0];
+    const headers = init.headers;
     expect(headers["X-SocialHub-Event-Id"]).toBe(delivery.event_id);
     expect(JSON.parse(String(init.body))).toEqual(delivery.payload);
     expect(headers["X-SocialHub-Signature"]).toBe(
@@ -814,12 +937,12 @@ describe("webhook delivery worker", () => {
       "UPDATE webhook_deliveries SET status='PENDING',last_error=NULL WHERE organization_id=$1",
       [w.org],
     );
-    const { fetch, transport: t } = transport(200);
+    const { send, transport: t } = transport(200);
     expect(await processWebhookDeliveries(10, t, w.org)).toMatchObject({
       delivered: 0,
       skipped: 1,
     });
-    expect(fetch).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
     expect((await deliveries(w.org))[0]).toMatchObject({
       status: "DEAD",
       last_error: "ENDPOINT_REVOKED",

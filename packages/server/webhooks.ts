@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
-import { BlockList, isIP } from "node:net";
+import { request as httpsRequest } from "node:https";
+import { BlockList, isIP, type LookupFunction } from "node:net";
 import type { PoolClient } from "pg";
 import { pool } from "../db";
 import type { Role } from "../core/domain";
@@ -93,12 +94,15 @@ const blockedDestination = () =>
     "The webhook URL must be a public HTTPS address.",
   );
 
-// Validates the URL and every address its host resolves to. Used when an
-// endpoint is saved and again right before each delivery.
-export async function assertPublicWebhookUrl(
+export type ResolvedAddress = { address: string; family: 4 | 6 };
+
+// Validates the URL and every address its host resolves to, and returns the
+// checked addresses. Used when an endpoint is saved and again right before
+// each delivery, which then connects only to these addresses.
+export async function resolvePublicWebhookUrl(
   value: string,
   lookup: Lookup = systemLookup,
-) {
+): Promise<{ url: URL; addresses: ResolvedAddress[] }> {
   let url: URL;
   try {
     url = new URL(value);
@@ -116,9 +120,10 @@ export async function assertPublicWebhookUrl(
     host.endsWith(".internal")
   )
     throw blockedDestination();
-  if (isIP(host)) {
+  const literal = isIP(host);
+  if (literal) {
     if (isBlockedAddress(host)) throw blockedDestination();
-    return url;
+    return { url, addresses: [{ address: host, family: literal as 4 | 6 }] };
   }
   let addresses: { address: string }[];
   try {
@@ -132,7 +137,21 @@ export async function assertPublicWebhookUrl(
   }
   if (!addresses.length || addresses.some((a) => isBlockedAddress(a.address)))
     throw blockedDestination();
-  return url;
+  return {
+    url,
+    // The family comes from the address itself, not from the resolver.
+    addresses: addresses.map((a) => ({
+      address: a.address,
+      family: isIP(a.address) as 4 | 6,
+    })),
+  };
+}
+
+export async function assertPublicWebhookUrl(
+  value: string,
+  lookup: Lookup = systemLookup,
+) {
+  return (await resolvePublicWebhookUrl(value, lookup)).url;
 }
 
 // ---------------------------------------------------------------------------
@@ -366,14 +385,84 @@ export function signWebhook(secret: string, timestamp: number, body: string) {
   );
 }
 
+// A DNS lookup that never resolves: it answers with the addresses that were
+// already checked, so the connection cannot be rebound to another address
+// between the check and the connect.
+export function pinnedLookup(addresses: ResolvedAddress[]): LookupFunction {
+  return (_hostname, options, callback) => {
+    const usable = addresses.filter(
+      (a) => !options.family || a.family === options.family,
+    );
+    if (!usable.length) {
+      const error = Object.assign(new Error("No verified address."), {
+        code: "ENOTFOUND",
+      });
+      return options.all ? callback(error, []) : callback(error, "", 0);
+    }
+    if (options.all) return callback(null, usable);
+    callback(null, usable[0].address, usable[0].family);
+  };
+}
+
+export type WebhookRequest = {
+  url: URL;
+  addresses: ResolvedAddress[];
+  headers: Record<string, string>;
+  body: string;
+  signal: AbortSignal;
+};
+
+// Sends one POST and resolves with the status code only.
+export type WebhookSend = (request: WebhookRequest) => Promise<number>;
+
+// node:https with the pinned lookup. The URL's hostname stays the request
+// host, so the Host header and the TLS server name (SNI) are the original
+// name and the certificate is verified against it as usual. Redirects are
+// never followed (node:https does not follow them) and the receiver's body
+// is discarded unread.
+export function pinnedHttpsSend(
+  request: typeof httpsRequest = httpsRequest,
+): WebhookSend {
+  return ({ url, addresses, headers, body, signal }) =>
+    new Promise((resolve, reject) => {
+      const hostname = url.hostname.replace(/^\[|\]$/g, "");
+      const req = request(
+        {
+          protocol: "https:",
+          hostname,
+          port: url.port || 443,
+          path: `${url.pathname}${url.search}`,
+          method: "POST",
+          headers: {
+            ...headers,
+            Host: url.host,
+            "Content-Length": String(Buffer.byteLength(body)),
+          },
+          ...(isIP(hostname) ? {} : { servername: hostname }),
+          lookup: pinnedLookup(addresses),
+          // A fresh connection per delivery: no pooled socket from an
+          // earlier resolution is reused.
+          agent: false,
+          signal,
+        },
+        (response) => {
+          response.destroy();
+          resolve(response.statusCode ?? 0);
+        },
+      );
+      req.on("error", reject);
+      req.end(body);
+    });
+}
+
 export type WebhookTransport = {
-  fetch: typeof fetch;
+  send: WebhookSend;
   lookup: Lookup;
   now: () => number;
 };
 
 const defaultTransport: WebhookTransport = {
-  fetch: (...args) => fetch(...args),
+  send: pinnedHttpsSend(),
   lookup: systemLookup,
   now: () => Date.now(),
 };
@@ -387,10 +476,11 @@ export async function sendWebhook(
   body: string,
   transport: WebhookTransport = defaultTransport,
 ): Promise<SendResult> {
+  let target: Awaited<ReturnType<typeof resolvePublicWebhookUrl>>;
   try {
-    // DNS is checked again right before sending (see SECURITY.md about the
-    // remaining DNS-rebinding window).
-    await assertPublicWebhookUrl(delivery.url, transport.lookup);
+    // DNS is checked again right before sending, and the connection is
+    // pinned to the addresses checked here (see SECURITY.md).
+    target = await resolvePublicWebhookUrl(delivery.url, transport.lookup);
   } catch (e) {
     return {
       ok: false,
@@ -401,9 +491,9 @@ export async function sendWebhook(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), webhookTimeoutMs);
   try {
-    const response = await transport.fetch(delivery.url, {
-      method: "POST",
-      redirect: "manual",
+    const status = await transport.send({
+      url: target.url,
+      addresses: target.addresses,
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
@@ -415,15 +505,12 @@ export async function sendWebhook(
       },
       body,
     });
-    // The receiver's body is never read or stored.
-    await response.body?.cancel().catch(() => {});
-    if (response.status >= 200 && response.status < 300)
-      return { ok: true, statusCode: response.status };
+    if (status >= 200 && status < 300) return { ok: true, statusCode: status };
     return {
       ok: false,
-      statusCode: response.status,
+      statusCode: status,
       error:
-        response.status >= 300 && response.status < 400
+        status >= 300 && status < 400
           ? "WEBHOOK_REDIRECT"
           : "WEBHOOK_HTTP_ERROR",
     };

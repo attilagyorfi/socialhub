@@ -13,6 +13,9 @@ export const maxTargetsPerDraft = 15;
 export const maxMediaUrlsPerDraft = 10;
 export const defaultPostsLimit = 50;
 export const maxPostsLimit = 200;
+// A stored Idempotency-Key response is replayed for this long; after that
+// the same key runs as a new request and the worker deletes the old row.
+export const idempotencyWindowHours = 24;
 
 // Integration status categories of the v1 contract. `raw_status` carries the
 // exact post_status next to it, so finer distinctions are never lost.
@@ -154,6 +157,12 @@ export async function createApiDrafts(
   const hash = requestHash(clientId, drafts);
 
   return transaction(async (tx) => {
+    // An expired record is not replayed, even before the worker removes it.
+    await tx.query(
+      `DELETE FROM api_idempotency_keys
+       WHERE organization_id=$1 AND key=$2 AND created_at<now()-$3*interval '1 hour'`,
+      [key.organizationId, idempotencyKey, idempotencyWindowHours],
+    );
     // A concurrent request holding the same key blocks here until it commits
     // (then this one replays) or rolls back (then this one proceeds).
     const claimed = (
@@ -430,4 +439,28 @@ export async function listApiPosts(
           ).toString("base64url")
         : null,
   };
+}
+
+// Worker retention: deletes expired Idempotency-Key records in small batches
+// so one run never holds long locks; the rest waits for the next run.
+export async function cleanupExpiredIdempotencyKeys(
+  batchSize = 1000,
+  maxBatches = 20,
+) {
+  let deleted = 0;
+  for (let batch = 0; batch < maxBatches; batch++) {
+    const removed = (
+      await pool.query(
+        `DELETE FROM api_idempotency_keys WHERE id IN (
+           SELECT id FROM api_idempotency_keys
+           WHERE created_at<now()-$1*interval '1 hour'
+           ORDER BY created_at LIMIT $2
+         ) RETURNING id`,
+        [idempotencyWindowHours, batchSize],
+      )
+    ).rows.length;
+    deleted += removed;
+    if (removed < batchSize) break;
+  }
+  return deleted;
 }
