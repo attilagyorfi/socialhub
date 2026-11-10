@@ -225,7 +225,28 @@ Idempotency keys are scoped to the organization (shared by all its API keys) and
 - `posts` holds, for each post target of a non-deleted post, the latest `post_metrics.normalized` captured in `[from 00:00 UTC, to + 1 day 00:00 UTC)`, ordered by `post_id`, then `target_id`. Earlier captures and captures outside the range are left out.
 - `metrics` objects are the stored normalized metrics as they are; their keys depend on the provider. Raw provider payloads are never included.
 
-Brand-profile endpoints and signed webhooks are planned later slices.
+`PUT /api/v1/clients/{id}/brand-profile` syncs the brand profile from Growth Engine for one live client of the key's organization. **Growth Engine owns the brand profile:** the synced fields are stored apart from the local profile (`brand_profiles.synced_*`), shown read-only in Clients with their source and sync time, and the PUT never writes the local supplement (`brand_profiles.profile`) that the team edits in Social Hub. The Social Hub save path writes only `profile` and drops any `synced*` key. Body (JSON, at most 1 MB; every field optional, unknown keys rejected):
+
+```json
+{
+  "voice": "Warm and direct",
+  "required_phrases": ["#acme"],
+  "forbidden_phrases": ["miracle", "free, forever"],
+  "required_disclaimer": "Terms, conditions apply",
+  "pillars": [{ "name": "Education", "description": "How-tos" }]
+}
+```
+
+- `voice`: string up to 2,000 characters or `null`; `required_disclaimer`: string up to 1,000 characters or `null`. Both are trimmed; an empty string is stored as `null`.
+- `required_phrases`, `forbidden_phrases`: at most 100 strings of up to 200 characters each. Items are trimmed; blanks and case-insensitive duplicates are dropped and the list is sorted.
+- `pillars`: at most 20 objects `{ name (1–120 characters, required), description (up to 1,000 characters or null, optional) }`; order is kept, a repeated name keeps its first occurrence.
+- The PUT replaces the whole synced profile: an omitted field is stored empty (`null` or `[]`).
+
+The reply is `200` with the stored profile, `client_id`, `synced_source` (`growth_engine`) and `synced_at`. The hash of the normalized profile is compared with the stored one under a row lock in the same transaction as the write: an identical profile (also when only order, spacing or duplicates differ) writes nothing, keeps `synced_at`, adds no audit entry and returns the same reply. A change writes the `brand.synced` audit entry with `api_key_id`, `previous_hash`, `hash` and `changed_fields`. If the client has no `brand_profiles` row yet, the PUT creates one with an empty local profile. Errors: `400 VALIDATION` (unknown key, wrong type, too long or too many items), `400 INVALID_JSON`, `401 INVALID_API_KEY`, and `404 NOT_FOUND` alike for a malformed id, an unknown, a deleted or another organization's client. There is no per-key scope: like every v1 endpoint, any active key of the organization may call it.
+
+The rules in force are produced by one function, `effectiveBrandRules` (`packages/core/brand-guardrails.ts`): the local profile plus the synced one, with `forbidden_phrases` merged into `forbiddenTerminology` and `required_phrases` into `requiredTerminology` (unions), and the synced `required_disclaimer`, `voice` (as `toneOfVoice`) and `pillars` (as `contentPillars`) taking precedence when set. AI generation (prompt, `brand_snapshot`, guardrail check), the content check and approval requests all read it through `loadEffectiveBrand`. Synced phrases and disclaimers are checked whole, even if they contain commas; the local form fields keep being split at commas, semicolons and new lines.
+
+Signed webhooks are a planned later slice.
 
 ## Scope and honest integration boundaries
 

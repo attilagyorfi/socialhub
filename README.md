@@ -79,6 +79,7 @@ Trusted tools such as Growth Engine use `/api/v1` with an organization API key (
 - `POST /api/v1/clients/{id}/drafts`: batch draft upload with a required `Idempotency-Key`.
 - `GET /api/v1/posts`: post statuses with `client`/`since` filters and cursor paging.
 - `GET /api/v1/clients/{id}/metrics?from=YYYY-MM-DD&to=YYYY-MM-DD`: already stored, normalized daily account metrics and the latest post metrics per target. Both dates are required UTC days, `from <= to`, at most 92 days including both ends. It never calls a provider or starts a sync.
+- `PUT /api/v1/clients/{id}/brand-profile`: Growth Engine syncs the client's brand profile (voice, required/forbidden phrases, required disclaimer, pillars). Growth Engine owns these fields: Clients shows them read-only with the sync time, while the local additions stay in a separate, editable block that the PUT never overwrites. Both apply together in AI generation and approval checks. A repeated identical PUT changes nothing.
 
 ## Verification
 

@@ -1104,6 +1104,30 @@ td {
 .brand-form label {
   font-size: 12px;
 }
+.brand-synced {
+  padding: 0 24px 20px;
+}
+.brand-synced h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.brand-synced .panel-note {
+  padding: 0;
+}
+.brand-synced dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 20px;
+  margin: 12px 0 24px;
+}
+.brand-synced dt {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.brand-synced dd {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+}
 .calendar-filters {
   display: flex;
   align-items: center;

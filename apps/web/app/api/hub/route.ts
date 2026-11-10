@@ -11,6 +11,7 @@ import {
   disconnect,
   updateClientLocale,
   updateClientExternalRef,
+  saveLocalBrandProfile,
 } from "../../../../../packages/server/clients";
 import {
   editDraft,
@@ -42,11 +43,9 @@ import {
   connectInput,
   postInput,
   uuid,
-  brandInput,
   timeZoneInput,
   localeInput,
 } from "../../../../../packages/server/validation";
-import { transaction, audit } from "../../../../../packages/server/transaction";
 import { rateLimit } from "../../../../../packages/server/queue";
 import { boundedForm } from "../../../../../packages/server/upload-validation";
 import {
@@ -145,6 +144,7 @@ export async function GET(request: Request) {
           notifications: [],
           audit: [],
           brand: {},
+          brandSync: null,
           workflow: ["EXTERNAL"],
           approvalAutomation: {
             automaticReminders: false,
@@ -249,7 +249,7 @@ export async function GET(request: Request) {
         values,
       ),
       pool.query(
-        "SELECT profile FROM brand_profiles WHERE organization_id=$1 AND client_id=$2",
+        "SELECT profile,synced_profile,synced_at,synced_source FROM brand_profiles WHERE organization_id=$1 AND client_id=$2",
         values,
       ),
       pool.query(
@@ -293,6 +293,14 @@ export async function GET(request: Request) {
         notifications: results[3].rows,
         audit: results[4].rows,
         brand: results[5].rows[0]?.profile ?? {},
+        // Read-only in the UI: owned by the Growth Engine sync.
+        brandSync: results[5].rows[0]?.synced_profile
+          ? {
+              profile: results[5].rows[0].synced_profile,
+              source: results[5].rows[0].synced_source,
+              syncedAt: results[5].rows[0].synced_at,
+            }
+          : null,
         workflow: results[6].rows.length
           ? results[6].rows.map((r) => r.kind)
           : ["EXTERNAL"],
@@ -529,14 +537,7 @@ export async function POST(request: Request) {
           ),
         );
       case "brand.save": {
-        const brand = brandInput.parse(body.brand);
-        await transaction(async (tx) => {
-          await tx.query(
-            "UPDATE brand_profiles SET profile=$1,updated_at=now() WHERE organization_id=$2 AND client_id=$3",
-            [JSON.stringify(brand), c.organizationId, c.clientId],
-          );
-          await audit(tx, c, "brand.updated", c.clientId);
-        });
+        await saveLocalBrandProfile(c, body.brand);
         break;
       }
       case "team.invite":

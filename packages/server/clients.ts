@@ -5,6 +5,7 @@ import { z } from "zod";
 import { capabilities, type Platform, type Role } from "../core/domain";
 import { encrypt, AppError } from "../core/security";
 import { disconnectMeta } from "./meta";
+import { brandInput } from "./validation";
 export async function listClients(userId: string) {
   return (
     await pool.query(
@@ -73,6 +74,18 @@ export async function createClient(
       client.id,
     );
     return client;
+  });
+}
+// Saves the local brand supplement edited in Social Hub. Only the `profile`
+// column is written; the synced_* columns belong to the Growth Engine sync.
+export async function saveLocalBrandProfile(c: Context, input: unknown) {
+  const brand = brandInput.parse(input);
+  await transaction(async (tx) => {
+    await tx.query(
+      "UPDATE brand_profiles SET profile=$1,updated_at=now() WHERE organization_id=$2 AND client_id=$3",
+      [JSON.stringify(brand), c.organizationId, c.clientId],
+    );
+    await audit(tx, c, "brand.updated", c.clientId);
   });
 }
 // Language of the client's external approval page and client-facing email.
