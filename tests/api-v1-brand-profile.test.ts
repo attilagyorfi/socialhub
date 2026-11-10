@@ -11,6 +11,10 @@ vi.mock("../packages/db", () => {
   };
 });
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+// The /api/v1 rate limits count in Redis.
+vi.mock("ioredis", async () => ({
+  Redis: (await import("./fixtures/redis")).FakeRedis,
+}));
 
 const { createApiKey, revokeApiKey } = await import(
   "../packages/server/api-keys"

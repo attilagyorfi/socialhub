@@ -35,6 +35,7 @@ import {
 import { processPrivacyMaintenance } from "../../../packages/server/privacy";
 import { syncPublishReconciliations } from "../../../packages/server/publish-reconciliation";
 import { processWebhookDeliveries } from "../../../packages/server/webhooks";
+import { cleanupExpiredIdempotencyKeys } from "../../../packages/server/api-v1-posts";
 
 // Error reporting; disabled unless SENTRY_DSN is set.
 Sentry.init({
@@ -244,6 +245,11 @@ async function dispatch() {
     });
     await periodic("heartbeatCleanup", 60 * 60 * 1000, async () => {
       await cleanupServiceHeartbeats();
+      const idempotencyKeys = await cleanupExpiredIdempotencyKeys();
+      if (idempotencyKeys)
+        console.log(
+          JSON.stringify({ event: "idempotency_cleanup", idempotencyKeys }),
+        );
     });
   } finally {
     if (!stopping) setTimeout(dispatch, 2000);

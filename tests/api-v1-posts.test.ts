@@ -11,13 +11,16 @@ vi.mock("../packages/db", () => {
   };
 });
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+// The /api/v1 rate limits count in Redis.
+vi.mock("ioredis", async () => ({
+  Redis: (await import("./fixtures/redis")).FakeRedis,
+}));
 
 const { createApiKey, revokeApiKey } = await import(
   "../packages/server/api-keys"
 );
-const { apiStatusCategory, requestHash } = await import(
-  "../packages/server/api-v1-posts"
-);
+const { apiStatusCategory, cleanupExpiredIdempotencyKeys, requestHash } =
+  await import("../packages/server/api-v1-posts");
 const { POST: postDrafts } = await import(
   "../apps/web/app/api/v1/clients/[id]/drafts/route"
 );
@@ -313,6 +316,32 @@ describe("POST /api/v1/clients/{id}/drafts", () => {
     expect(other.status).toBe(201);
     expect(await other.json()).toEqual(firstBody);
     expect(await counts(w.org)).toEqual(before);
+  });
+
+  it("runs an expired key as a new request after 24 hours", async () => {
+    const w = await workspace();
+    const key = crypto.randomUUID();
+    const body = {
+      drafts: [{ text: "Daily", targets: [{ social_account_id: w.facebook }] }],
+    };
+    const first = await drafts(w.client, { auth: w.auth, key, body });
+    const firstBody = await first.json();
+    await db.query(
+      "UPDATE api_idempotency_keys SET created_at=now()-interval '23 hours' WHERE organization_id=$1",
+      [w.org],
+    );
+    const replay = await drafts(w.client, { auth: w.auth, key, body });
+    expect(replay.headers.get("idempotent-replayed")).toBe("true");
+    expect(await replay.json()).toEqual(firstBody);
+    await db.query(
+      "UPDATE api_idempotency_keys SET created_at=now()-interval '25 hours' WHERE organization_id=$1",
+      [w.org],
+    );
+    const fresh = await drafts(w.client, { auth: w.auth, key, body });
+    expect(fresh.status).toBe(201);
+    expect(fresh.headers.get("idempotent-replayed")).toBeNull();
+    expect(await fresh.json()).not.toEqual(firstBody);
+    expect(await counts(w.org)).toMatchObject({ posts: 2, keys: 1 });
   });
 
   it("rejects a reused key with a different body or client without writing", async () => {
@@ -820,5 +849,26 @@ describe("GET /api/v1/posts", () => {
       const body = await response.json();
       expect(Object.keys(body.error).sort()).toEqual(["code", "message"]);
     }
+  });
+});
+
+describe("idempotency key retention", () => {
+  it("deletes only records older than 24 hours, in batches", async () => {
+    const w = await workspace();
+    const insert = (age: string) =>
+      db.query(
+        `INSERT INTO api_idempotency_keys(organization_id,key,request_hash,response_status,response_body,created_at)
+         VALUES($1,$2,$3,201,'{}',now()-$4::interval)`,
+        [w.org, crypto.randomUUID(), "0".repeat(64), age],
+      );
+    for (let i = 0; i < 5; i++) await insert("25 hours");
+    await insert("23 hours");
+    await insert("1 minute");
+    // One batch of two is all a run may delete when capped at one batch.
+    expect(await cleanupExpiredIdempotencyKeys(2, 1)).toBe(2);
+    expect(await count("api_idempotency_keys", w.org)).toBe(5);
+    expect(await cleanupExpiredIdempotencyKeys(2)).toBe(3);
+    expect(await cleanupExpiredIdempotencyKeys(2)).toBe(0);
+    expect(await count("api_idempotency_keys", w.org)).toBe(2);
   });
 });

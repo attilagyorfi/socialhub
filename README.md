@@ -73,7 +73,7 @@ Post details also allow rotating a pending external review link and cancelling a
 
 ## Integration API v1
 
-Trusted tools such as Growth Engine use `/api/v1` with an organization API key (`Authorization: Bearer shk_live_…`) that owners/admins create in Settings. Every request is scoped to the key's organization. Details, response shapes and error codes are in `ARCHITECTURE.md`.
+Trusted tools such as Growth Engine use `/api/v1` with an organization API key (`Authorization: Bearer shk_live_…`) that owners/admins create in Settings. Every request is scoped to the key's organization. Limits: 120 requests per minute per key and 20 failed authentications per minute per IP; over a limit the answer is `429 RATE_LIMITED` with `Retry-After` (seconds), and `503` if the rate-limit store (Redis) is unavailable. An `Idempotency-Key` is replayed for 24 hours; after that the same key runs as a new request. Details, response shapes and error codes are in `ARCHITECTURE.md`.
 
 - `GET /api/v1/clients`: clients with their accounts and `external_ref` (the client's external ID, or `null`). Owners/admins set the external ID in Clients → External ID: lowercase letters, digits and hyphens, 1–64 characters (e.g. `mmi`, `viba-team`), unique within the organization.
 - `POST /api/v1/clients/{id}/drafts`: batch draft upload with a required `Idempotency-Key`.

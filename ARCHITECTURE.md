@@ -84,6 +84,8 @@ minimal audit evidence without retaining the email address.
 
 `/api/v1` is the versioned API for Growth Engine and other trusted tools. Breaking changes require `/api/v2`. Requests authenticate with an organization API key created by an owner/admin in Settings: `Authorization: Bearer shk_live_…`. The key scopes every request to its organization; there is no session or cookie involved. Errors use `{ "error": { "code", "message" } }`; an invalid, missing or revoked key always returns `401` with code `INVALID_API_KEY`. Responses are `Cache-Control: no-store`.
 
+Rate limits: 120 requests per minute per API key, and 20 failed authentications per minute per client IP (`x-real-ip`, otherwise the first `x-forwarded-for` address). While an IP is over its failure limit every request from it is refused before the key is checked; successful requests do not count toward it. Over a limit the response is `429` with code `RATE_LIMITED` and a `Retry-After` header (whole seconds until the window resets). The counters are in Redis; if Redis is unavailable the response is `503 SERVICE_UNAVAILABLE` (the limits never fail open), so retry later.
+
 `GET /api/v1/clients` lists the organization's non-deleted clients and their non-deleted social accounts. Remote IDs, capabilities and credentials are never included. `external_ref` is the client's external ID for matching it in Growth Engine (e.g. `mmi`, `viba-team`), or `null` when none is set. Owners/admins edit it in Clients → External ID (other roles see it read-only); it must be 1–64 lowercase letters, digits or hyphens and unique within the organization. The server rejects other values with `400 EXTERNAL_REF_INVALID`, a value already used by another client of the organization with `409 EXTERNAL_REF_TAKEN`, and other roles with `403`; an empty value clears it. Every change writes a `client.external_ref_updated` audit entry with the old and new value.
 
 ```json
@@ -146,7 +148,8 @@ Idempotency keys are scoped to the organization (shared by all its API keys) and
 - the same key with the same client and body returns the stored status and JSON again, with `Idempotent-Replayed: true`, and creates nothing;
 - the same key with a different body or client returns `422 IDEMPOTENCY_KEY_REUSED` and writes nothing;
 - a concurrent retry waits on the unique `(organization_id, key)` index and then replays the committed response (`409 IDEMPOTENCY_IN_PROGRESS` if that response cannot be read yet); duplicates are never created;
-- a failed request (any error status) stores nothing, so the key can be retried with a corrected body.
+- a failed request (any error status) stores nothing, so the key can be retried with a corrected body;
+- a stored response is replayed for 24 hours; after that the same key runs as a new request (and may create new drafts), and the worker deletes the expired record. Retry within the window, and use a new key for a new upload.
 
 `GET /api/v1/posts` lists the organization's non-deleted posts of non-deleted clients, ordered by `(updated_at, id)` ascending. Optional query parameters: `client` (client UUID; another organization's or a deleted client gives `404 NOT_FOUND`), `since` (ISO 8601 timestamp with offset; posts with `updated_at >= since`), `limit` (1–200, default 50) and `cursor` (the previous page's `next_cursor`). Malformed values return `400 INVALID_QUERY` or `400 INVALID_CURSOR`. A poller can store the last `updated_at` it saw and pass it as `since`; posts with that exact timestamp are returned again rather than skipped.
 
