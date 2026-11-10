@@ -368,6 +368,48 @@ export function Clients({
               {t("sections.brand.title", { name: activeClient?.name ?? "" })}
             </h2>
           </div>
+          {data.brandSync && (
+            <div className="brand-synced" aria-readonly="true">
+              <h3>
+                {t("sections.brand.synced.title", {
+                  date: formatDate(data.brandSync.syncedAt, data.user.timezone),
+                })}
+              </h3>
+              <p className="panel-note">{t("sections.brand.synced.note")}</p>
+              <dl>
+                {(
+                  [
+                    ["voice", data.brandSync.profile.voice],
+                    [
+                      "requiredPhrases",
+                      data.brandSync.profile.required_phrases.join(", "),
+                    ],
+                    [
+                      "forbiddenPhrases",
+                      data.brandSync.profile.forbidden_phrases.join(", "),
+                    ],
+                    ["disclaimer", data.brandSync.profile.required_disclaimer],
+                    [
+                      "pillars",
+                      data.brandSync.profile.pillars
+                        .map((p) =>
+                          p.description
+                            ? `${p.name}: ${p.description}`
+                            : p.name,
+                        )
+                        .join(" · "),
+                    ],
+                  ] as const
+                ).map(([key, value]) => (
+                  <div key={key}>
+                    <dt>{t(`sections.brand.synced.${key}`)}</dt>
+                    <dd>{value || t("sections.brand.synced.empty")}</dd>
+                  </div>
+                ))}
+              </dl>
+              <h3>{t("sections.brand.local.title")}</h3>
+            </div>
+          )}
           <form
             className="brand-form"
             onSubmit={(e) => {

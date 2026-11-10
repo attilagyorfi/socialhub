@@ -47,10 +47,18 @@ export const connectInput = z.object({
   platform: z.enum(platforms),
   name: z.string().trim().min(1).max(120),
 });
-export const brandInput = z.record(
-  z.string(),
-  z.union([z.string().max(10000), z.array(z.string().max(500)).max(100)]),
-);
+// Local brand profile (brand_profiles.profile). synced* keys are dropped: the
+// synced profile is owned by the Growth Engine and lives in its own columns.
+export const brandInput = z
+  .record(
+    z.string(),
+    z.union([z.string().max(10000), z.array(z.string().max(500)).max(100)]),
+  )
+  .transform((brand) =>
+    Object.fromEntries(
+      Object.entries(brand).filter(([key]) => !/^synced/i.test(key)),
+    ),
+  );
 export const calendarQueryInput = z.object({
   clientId: uuid,
   from: z.iso.datetime({ offset: true }),

@@ -99,6 +99,18 @@ export type HubData = {
     metadata: Record<string, unknown>;
   }[];
   brand: Record<string, string>;
+  // Brand profile synced from the Growth Engine; shown read-only.
+  brandSync: {
+    profile: {
+      voice: string | null;
+      required_phrases: string[];
+      forbidden_phrases: string[];
+      required_disclaimer: string | null;
+      pillars: { name: string; description: string | null }[];
+    };
+    source: string;
+    syncedAt: string;
+  } | null;
   workflow: string[];
   approvalAutomation: {
     automaticReminders: boolean;

@@ -17,6 +17,7 @@ import {
   userLocale,
 } from "./mail-templates";
 import { checkBrandGuardrails } from "../core/brand-guardrails";
+import { loadEffectiveBrand } from "./brand-profile";
 import { publishabilityErrors } from "./posts";
 import type { Platform } from "../core/domain";
 export async function requestApproval(
@@ -38,13 +39,7 @@ export async function requestApproval(
         "INVALID_STATE",
         "Only drafts can be submitted for approval.",
       );
-    const brand =
-      (
-        await tx.query(
-          "SELECT profile FROM brand_profiles WHERE organization_id=$1 AND client_id=$2",
-          [c.organizationId, c.clientId],
-        )
-      ).rows[0]?.profile ?? {};
+    const brand = await loadEffectiveBrand(tx, c.organizationId, c.clientId);
     const targets = (
       await tx.query(
         `SELECT pt.caption,sa.platform

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { pool } from "../db";
 import { AppError } from "../core/security";
 import { checkBrandGuardrails } from "../core/brand-guardrails";
+import { loadEffectiveBrand } from "./brand-profile";
 import type { Platform } from "../core/domain";
 import type { Context } from "./context";
 import { audit, transaction } from "./transaction";
@@ -133,16 +134,9 @@ export function llm(): LLMProvider {
     : new MockAI();
 }
 
-async function brandProfile(c: Context) {
-  return (
-    (
-      await pool.query(
-        "SELECT profile FROM brand_profiles WHERE organization_id=$1 AND client_id=$2",
-        [c.organizationId, c.clientId],
-      )
-    ).rows[0]?.profile ?? {}
-  );
-}
+// Local brand profile combined with the one synced from the Growth Engine.
+const brandProfile = (c: Context) =>
+  loadEffectiveBrand(pool, c.organizationId, c.clientId);
 
 export async function generateContent(
   c: Context,

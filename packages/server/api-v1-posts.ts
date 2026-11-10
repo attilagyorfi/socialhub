@@ -105,7 +105,7 @@ function validationError(error: z.ZodError) {
 
 // Key order does not change the hash, so a client that re-serializes the same
 // request still gets a replay.
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value && typeof value === "object")
     return `{${Object.keys(value)
