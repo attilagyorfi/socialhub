@@ -144,6 +144,8 @@ export type HubData = {
     approvalDeliveriesFailed: number;
     analyticsWaiting: number;
     analyticsDead: number;
+    webhookWaiting: number;
+    webhookDead: number;
     analyticsLastSuccessAt: string | null;
     worker: {
       healthy: boolean;

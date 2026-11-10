@@ -730,6 +730,12 @@ export async function processRetentionPolicies(
            AND updated_at<now()-make_interval(days => $2)`,
         );
         await remove(
+          "webhookDeliveries",
+          `DELETE FROM webhook_deliveries WHERE organization_id=$1
+           AND status IN ('DONE','DEAD')
+           AND updated_at<now()-make_interval(days => $2)`,
+        );
+        await remove(
           "analytics",
           `DELETE FROM analytics_daily WHERE organization_id=$1
            AND day<(current_date-$2::integer)`,

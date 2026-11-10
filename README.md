@@ -81,6 +81,8 @@ Trusted tools such as Growth Engine use `/api/v1` with an organization API key (
 - `GET /api/v1/clients/{id}/metrics?from=YYYY-MM-DD&to=YYYY-MM-DD`: already stored, normalized daily account metrics and the latest post metrics per target. Both dates are required UTC days, `from <= to`, at most 92 days including both ends. It never calls a provider or starts a sync.
 - `PUT /api/v1/clients/{id}/brand-profile`: Growth Engine syncs the client's brand profile (voice, required/forbidden phrases, required disclaimer, pillars). Growth Engine owns these fields: Clients shows them read-only with the sync time, while the local additions stay in a separate, editable block that the PUT never overwrites. Both apply together in AI generation and approval checks. A repeated identical PUT changes nothing.
 
+Signed webhooks notify the integrated tool about `post.approved`, `post.changes_requested`, `post.published` and `post.failed`. Owners/admins add public HTTPS endpoints in Settings → Webhooks; the signing secret is shown once. Each request carries `X-SocialHub-Event-Id`, `X-SocialHub-Event`, `X-SocialHub-Timestamp` (Unix seconds) and `X-SocialHub-Signature: sha256=<hex HMAC-SHA256(secret, timestamp + "." + body)>`. Verify it in constant time with a timestamp tolerance (e.g. 5 minutes), deduplicate on the event ID, expect retries with exponential backoff (12 attempts), and note that a `post.failed` may be followed by `post.published` after reconciliation. Payload, verification example and retry rules: `ARCHITECTURE.md` → Webhooks.
+
 ## Verification
 
 ```sh

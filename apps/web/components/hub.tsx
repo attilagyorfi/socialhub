@@ -33,6 +33,7 @@ import { TimeZoneSettings } from "./timezone-settings";
 import { PrivacySettings } from "./privacy-settings";
 import { LanguageSettings } from "./language-settings";
 import { ApiKeySettings } from "./api-key-settings";
+import { WebhookSettings } from "./webhook-settings";
 import { TourButton, TourProvider, useTourSetup } from "./tour/tour";
 import {
   apiError,
@@ -288,7 +289,8 @@ function HubShell() {
     ? data.operations.publishDead +
       data.operations.mediaDead +
       data.operations.approvalDeliveriesFailed +
-      data.operations.analyticsDead
+      data.operations.analyticsDead +
+      data.operations.webhookDead
     : 0;
   return (
     <div className="app-shell">
@@ -893,6 +895,14 @@ function HubShell() {
                           timeZone={data.user.timezone}
                         />
                       )}
+                      {data.clientId && (
+                        <WebhookSettings
+                          key={`webhooks-${data.clientId}`}
+                          clientId={data.clientId}
+                          canManage={data.canManageTeam}
+                          timeZone={data.user.timezone}
+                        />
+                      )}
                       {data.operations && (
                         <section className="panel">
                           <div className="panel-title">
@@ -1037,6 +1047,16 @@ function HubShell() {
                               >
                                 {t("hub.operations.backfill")}
                               </button>
+                            </div>
+                            <div>
+                              <small>{t("hub.operations.webhooks")}</small>
+                              <strong>
+                                {t("hub.operations.activeDead", {
+                                  active: data.operations.webhookWaiting,
+                                  dead: data.operations.webhookDead,
+                                })}
+                              </strong>
+                              <small>{t("hub.operations.webhooksHint")}</small>
                             </div>
                           </div>
                           <p className="panel-note">

@@ -20,6 +20,7 @@ import { checkBrandGuardrails } from "../core/brand-guardrails";
 import { loadEffectiveBrand } from "./brand-profile";
 import { publishabilityErrors } from "./posts";
 import type { Platform } from "../core/domain";
+import { enqueueWebhookEvent } from "./webhooks";
 export async function requestApproval(
   c: Context,
   id: string,
@@ -568,6 +569,19 @@ export async function decideApproval(
           post.id,
         ],
       );
+      // Only the final approval and change requests notify integrations;
+      // intermediate steps of a multi-step workflow do not.
+      if (action === "changes" || !next)
+        await enqueueWebhookEvent(
+          tx,
+          action === "approve" ? "post.approved" : "post.changes_requested",
+          {
+            organizationId: request.organization_id,
+            clientId: request.client_id,
+            postId: post.id,
+            status: action === "approve" ? "APPROVED" : "CHANGES_REQUESTED",
+          },
+        );
     }
     await tx.query(
       "INSERT INTO audit_logs(organization_id,client_id,action,resource_id,metadata,actor_id) VALUES($1,$2,$3,$4,$5,$6)",

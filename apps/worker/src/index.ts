@@ -34,6 +34,7 @@ import {
 } from "../../../packages/server/approvals";
 import { processPrivacyMaintenance } from "../../../packages/server/privacy";
 import { syncPublishReconciliations } from "../../../packages/server/publish-reconciliation";
+import { processWebhookDeliveries } from "../../../packages/server/webhooks";
 
 // Error reporting; disabled unless SENTRY_DSN is set.
 Sentry.init({
@@ -187,6 +188,16 @@ async function dispatch() {
             ...reconciliation,
           }),
         );
+    });
+    await periodic("webhooks", 5_000, async () => {
+      const webhooks = await processWebhookDeliveries();
+      if (
+        webhooks.delivered ||
+        webhooks.retried ||
+        webhooks.failed ||
+        webhooks.skipped
+      )
+        console.log(JSON.stringify({ event: "webhook_delivery", ...webhooks }));
     });
     await periodic("approvalAutomation", 60_000, async () => {
       const automation = await processApprovalAutomations();
