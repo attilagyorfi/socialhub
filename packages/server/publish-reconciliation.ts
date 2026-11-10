@@ -4,6 +4,7 @@ import { AppError } from "../core/security";
 import type { Context } from "./context";
 import { findMetaPublishedMatches } from "./meta";
 import { audit, transaction } from "./transaction";
+import { enqueueWebhookEvent } from "./webhooks";
 
 type ReconciliationJob = {
   id: string;
@@ -165,6 +166,18 @@ async function confirmMatch(
        WHERE id=$3`,
       [match.id, match.createdAt, input.target_id],
     );
+    // Same transaction as the confirmation; this may follow an earlier
+    // post.failed (META_DELIVERY_UNCERTAIN) for the same target.
+    await enqueueWebhookEvent(tx, "post.published", {
+      organizationId: job.organization_id,
+      clientId: job.client_id,
+      postId: input.post_id,
+      status: "PUBLISHED",
+      postTargetId: input.target_id,
+      platform: input.platform,
+      platformPostId: match.id,
+      publishedUrl: match.permalink,
+    });
     await tx.query("SELECT id FROM posts WHERE id=$1 FOR UPDATE", [
       input.post_id,
     ]);

@@ -246,7 +246,74 @@ The reply is `200` with the stored profile, `client_id`, `synced_source` (`growt
 
 The rules in force are produced by one function, `effectiveBrandRules` (`packages/core/brand-guardrails.ts`): the local profile plus the synced one, with `forbidden_phrases` merged into `forbiddenTerminology` and `required_phrases` into `requiredTerminology` (unions), and the synced `required_disclaimer`, `voice` (as `toneOfVoice`) and `pillars` (as `contentPillars`) taking precedence when set. AI generation (prompt, `brand_snapshot`, guardrail check), the content check and approval requests all read it through `loadEffectiveBrand`. Synced phrases and disclaimers are checked whole, even if they contain commas; the local form fields keep being split at commas, semicolons and new lines.
 
-Signed webhooks are a planned later slice.
+### Webhooks
+
+Owners/admins add webhook endpoints for the organization in Settings → Webhooks (at most 10 active endpoints). The URL must be public HTTPS; the server rejects other schemes, credentials in the URL, `localhost` and any host that resolves to a non-public address (see `SECURITY.md`). Each endpoint subscribes to one or more events. Its signing secret (`whsec_…`) is shown once when it is created or rotated; rotation applies immediately, also to deliveries that are still waiting. Creation, rotation and revocation are audited (`webhook.created`, `webhook.secret_rotated`, `webhook.revoked`) with the host and the secret prefix only. Revoking an endpoint drops its waiting deliveries (`DEAD`, `ENDPOINT_REVOKED`); they are never sent.
+
+| Event | When |
+| --- | --- |
+| `post.approved` | The final approval step (internal or client link) moves the post to `APPROVED`. Intermediate steps of a multi-step workflow send nothing. |
+| `post.changes_requested` | A reviewer requests changes; the post returns to `DRAFT`. |
+| `post.published` | A target is published, including a target that publish reconciliation later confirms as published. |
+| `post.failed` | A target fails for good (`DEAD`). Failures that are retried send nothing. |
+
+The event is written to the `webhook_deliveries` outbox in the same transaction as the state change, one row per subscribed active endpoint, so an event exists exactly when the change is committed. `post.published` and `post.failed` are per target: a post with three networks sends up to three events.
+
+```json
+{
+  "id": "event-uuid",
+  "type": "post.published",
+  "created_at": "2026-11-10T09:30:00.000Z",
+  "data": {
+    "post_id": "uuid",
+    "client_id": "uuid",
+    "client_external_ref": "viba-team",
+    "organization_id": "uuid",
+    "status": "PUBLISHED",
+    "post_target_id": "uuid",
+    "platform": "facebook",
+    "platform_post_id": "123_456",
+    "published_url": "https://www.facebook.com/…"
+  }
+}
+```
+
+`status` is `APPROVED`, `CHANGES_REQUESTED`, `PUBLISHED` or `FAILED`. `post_target_id` and `platform` appear only on `post.published`/`post.failed`; `platform_post_id` when the network returned one; `published_url` when it is known (currently after reconciliation); `error_code` (e.g. `MOCK_REJECTED`, `META_DELIVERY_UNCERTAIN`) only on `post.failed`. `client_external_ref` is `null` when the client has no external ID. Captions, comments, tokens and secrets are never included; read details with `GET /api/v1/posts`.
+
+Every request is a `POST` with `Content-Type: application/json` and these headers:
+
+- `X-SocialHub-Event-Id`: the event ID (same as `id` in the body).
+- `X-SocialHub-Event`: the event type.
+- `X-SocialHub-Timestamp`: Unix time in seconds when the request was signed.
+- `X-SocialHub-Signature`: `sha256=` followed by the hex HMAC-SHA256 of `<timestamp>.<raw body>`, keyed with the endpoint secret (the whole `whsec_…` string as UTF-8). The secret current at sending time is used.
+
+Verify the signature over the raw body before parsing it, compare in constant time and reject old timestamps (we suggest 5 minutes of tolerance):
+
+```ts
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+export function verifySocialHubWebhook(
+  rawBody: string,
+  headers: Headers,
+  secret: string,
+  toleranceSeconds = 300,
+) {
+  const timestamp = Number(headers.get("x-socialhub-timestamp"));
+  const received = headers.get("x-socialhub-signature") ?? "";
+  if (!Number.isInteger(timestamp)) return false;
+  if (Math.abs(Date.now() / 1000 - timestamp) > toleranceSeconds) return false;
+  const expected =
+    "sha256=" +
+    createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
+  const a = Buffer.from(received);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+```
+
+Delivery is at least once. Store processed event IDs and ignore a repeated `X-SocialHub-Event-Id`: every retry of a delivery carries the same ID. Each endpoint gets its own event ID for the same change, so deduplicate per endpoint. Order is not guaranteed; use `created_at` and, when it matters, the current state from `GET /api/v1/posts`. In particular a target can send `post.failed` with `error_code: "META_DELIVERY_UNCERTAIN"` and later `post.published` once reconciliation finds the publication on Meta; the later `post.published` wins.
+
+Retries: the worker claims due rows with `FOR UPDATE SKIP LOCKED` every few seconds. Any `2xx` answer marks the delivery `DONE`. Other statuses (including `3xx`, because redirects are not followed), network errors and timeouts (5 seconds) are retried after `min(3600, 5 · 2^(attempt-1))` seconds (5 s, 10 s, 20 s … capped at one hour, about 2.5 hours in total). After 12 attempts the delivery is `DEAD` and is counted under Operations → Webhooks for the organization. A delivery left `RUNNING` by a stopped worker is retried after 5 minutes. Only a short error code (`WEBHOOK_HTTP_ERROR`, `WEBHOOK_REDIRECT`, `WEBHOOK_TIMEOUT`, `WEBHOOK_NETWORK`, `WEBHOOK_URL_BLOCKED`, …) and the HTTP status are stored; the response body is never read. Answer quickly with `2xx` and process the event asynchronously.
 
 ## Scope and honest integration boundaries
 

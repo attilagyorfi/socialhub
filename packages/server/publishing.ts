@@ -5,6 +5,7 @@ import { provider } from "../core/providers";
 import { aggregateStatus, type Status, type Platform } from "../core/domain";
 import { AppError } from "../core/security";
 import { metaProviderError, publishMeta } from "./meta";
+import { enqueueWebhookEvent } from "./webhooks";
 export const receipts = {
   async get(key: string) {
     return (
@@ -204,7 +205,7 @@ async function recordOutcome(
          WHERE publish_reconciliation_jobs.status<>'RUNNING'`,
         [job.organization_id, job.client_id, job.id],
       );
-    if (!retry)
+    if (!retry) {
       await tx.query(
         "INSERT INTO notifications(organization_id,client_id,message,resource_id) VALUES($1,$2,$3,$4)",
         [
@@ -214,6 +215,18 @@ async function recordOutcome(
           target.post_id,
         ],
       );
+      // Final failures only; META_DELIVERY_UNCERTAIN may still be confirmed
+      // as published later by reconciliation.
+      await enqueueWebhookEvent(tx, "post.failed", {
+        organizationId: job.organization_id,
+        clientId: job.client_id,
+        postId: target.post_id,
+        status: "FAILED",
+        postTargetId: target.id,
+        platform: target.platform,
+        errorCode: failure.code,
+      });
+    }
   } else {
     await tx.query(
       "UPDATE publish_jobs SET status='DONE',attempts=$1,last_error=NULL,updated_at=now() WHERE id=$2",
@@ -227,6 +240,15 @@ async function recordOutcome(
       "UPDATE publish_attempts SET status='SUCCEEDED',provider_request_id=$1,finished_at=now() WHERE id=$2",
       [remoteId, trace],
     );
+    await enqueueWebhookEvent(tx, "post.published", {
+      organizationId: job.organization_id,
+      clientId: job.client_id,
+      postId: target.post_id,
+      status: "PUBLISHED",
+      postTargetId: target.id,
+      platform: target.platform,
+      platformPostId: remoteId,
+    });
   }
   // Serialize aggregation across concurrent targets to avoid a stale parent status.
   await tx.query("SELECT id FROM posts WHERE id=$1 FOR UPDATE", [

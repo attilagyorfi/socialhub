@@ -74,6 +74,37 @@ const en = {
   "apiKeys.revokeConfirm":
     "Revoke the “{name}” key? Tools using it will stop working right away.",
   "apiKeys.empty": "No API keys yet.",
+  "webhooks.title": "Webhooks",
+  "webhooks.subtitle":
+    "Signed notifications to your tools when a post is approved or published.",
+  "webhooks.adminOnly": "Only owners and admins can manage webhooks.",
+  "webhooks.url": "HTTPS address",
+  "webhooks.urlPlaceholder": "https://example.com/webhooks/social-hub",
+  "webhooks.events": "Events",
+  "webhooks.event.post.approved": "Post approved",
+  "webhooks.event.post.changes_requested": "Changes requested",
+  "webhooks.event.post.published": "Post published",
+  "webhooks.event.post.failed": "Publishing failed",
+  "webhooks.create": "Add webhook",
+  "webhooks.secretWarning":
+    "This is the signing secret. Copy it now, you won't see it again.",
+  "webhooks.copy": "Copy",
+  "webhooks.copied": "Copied",
+  "webhooks.copyLabel": "Copy signing secret",
+  "webhooks.failed": "Something went wrong. Try again.",
+  "webhooks.invalidUrl":
+    "Use a public HTTPS address. Local and private addresses are not allowed.",
+  "webhooks.limit": "You can have up to 10 webhooks. Revoke one first.",
+  "webhooks.createdAt": "Added {date}",
+  "webhooks.rotatedAt": "Secret changed {date}",
+  "webhooks.revokedAt": "Revoked {date}",
+  "webhooks.rotate": "New secret",
+  "webhooks.rotateConfirm":
+    "Create a new secret for {url}? The old one stops working right away.",
+  "webhooks.revoke": "Revoke",
+  "webhooks.revokeConfirm":
+    "Revoke the webhook for {url}? Waiting notifications won't be sent.",
+  "webhooks.empty": "No webhooks yet.",
 } as const;
 
 const hu = {
@@ -153,6 +184,37 @@ const hu = {
   "apiKeys.revokeConfirm":
     "Visszavonod a(z) „{name}” kulcsot? Az ezt használó eszközök azonnal leállnak.",
   "apiKeys.empty": "Még nincs API-kulcs.",
+  "webhooks.title": "Webhookok",
+  "webhooks.subtitle":
+    "Aláírt értesítés a csatolt eszközeidnek, ha egy posztot jóváhagynak vagy kiküldenek.",
+  "webhooks.adminOnly": "Webhookot csak tulajdonos vagy admin kezelhet.",
+  "webhooks.url": "HTTPS-cím",
+  "webhooks.urlPlaceholder": "https://pelda.hu/webhooks/social-hub",
+  "webhooks.events": "Események",
+  "webhooks.event.post.approved": "Poszt jóváhagyva",
+  "webhooks.event.post.changes_requested": "Módosítást kértek",
+  "webhooks.event.post.published": "Poszt kiküldve",
+  "webhooks.event.post.failed": "Sikertelen kiküldés",
+  "webhooks.create": "Webhook hozzáadása",
+  "webhooks.secretWarning":
+    "Ez az aláíró titok. Most másold ki, később nem látod újra.",
+  "webhooks.copy": "Másolás",
+  "webhooks.copied": "Kimásolva",
+  "webhooks.copyLabel": "Aláíró titok másolása",
+  "webhooks.failed": "Valami hiba történt. Próbáld újra.",
+  "webhooks.invalidUrl":
+    "Nyilvános HTTPS-címet adj meg. Helyi és belső cím nem használható.",
+  "webhooks.limit": "Legfeljebb 10 webhookod lehet. Előbb vonj vissza egyet.",
+  "webhooks.createdAt": "Hozzáadva: {date}",
+  "webhooks.rotatedAt": "Titok cserélve: {date}",
+  "webhooks.revokedAt": "Visszavonva: {date}",
+  "webhooks.rotate": "Új titok",
+  "webhooks.rotateConfirm":
+    "Új titkot kérsz ehhez: {url}? A régi azonnal megszűnik.",
+  "webhooks.revoke": "Visszavonás",
+  "webhooks.revokeConfirm":
+    "Visszavonod ezt a webhookot: {url}? A még várakozó értesítések nem mennek ki.",
+  "webhooks.empty": "Még nincs webhook.",
 } satisfies Record<keyof typeof en, string>;
 
 export default { en, hu };
