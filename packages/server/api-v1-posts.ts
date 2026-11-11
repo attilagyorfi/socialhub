@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { PoolClient } from "pg";
 import { z } from "zod";
 import { pool } from "../db";
 import type { Status } from "../core/domain";
@@ -72,11 +73,159 @@ const draftInput = z
   })
   .strict();
 
-export const draftsInput = z
-  .object({
-    drafts: z.array(draftInput).min(1).max(maxDraftsPerRequest),
-  })
-  .strict();
+// The one drafts validator: the API batch allows maxDraftsPerRequest, the
+// calendar import a whole month's file.
+export const draftsInputWithMax = (max: number) =>
+  z
+    .object({
+      drafts: z.array(draftInput).min(1).max(max),
+    })
+    .strict();
+
+export const draftsInput = draftsInputWithMax(maxDraftsPerRequest);
+
+export type DraftInput = z.infer<typeof draftInput>;
+
+// A problem with one draft (by array index) that the schema cannot see.
+export type DraftIssue = {
+  index: number;
+  code: "DUPLICATE_TARGET" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_NOT_CONNECTED";
+  accountId?: string;
+};
+
+export function duplicateTargetIssues(drafts: DraftInput[]): DraftIssue[] {
+  return drafts.flatMap((draft, index) => {
+    const accounts = draft.targets.map((t) => t.social_account_id);
+    return new Set(accounts).size === accounts.length
+      ? []
+      : [{ index, code: "DUPLICATE_TARGET" as const }];
+  });
+}
+
+// The API reports only the first issue, as this error.
+export function draftIssueError(issue: DraftIssue) {
+  if (issue.code === "DUPLICATE_TARGET")
+    return new AppError(
+      422,
+      "DUPLICATE_TARGET",
+      `drafts.${issue.index}.targets: Use each social account only once per draft.`,
+    );
+  if (issue.code === "ACCOUNT_NOT_FOUND")
+    return new AppError(
+      404,
+      "ACCOUNT_NOT_FOUND",
+      `Social account ${issue.accountId} was not found for this client.`,
+    );
+  return new AppError(
+    422,
+    "ACCOUNT_NOT_CONNECTED",
+    `Social account ${issue.accountId} must be reconnected before drafts can target it.`,
+  );
+}
+
+export class DraftIssuesError extends AppError {
+  constructor(readonly issues: DraftIssue[]) {
+    const first = draftIssueError(issues[0]);
+    super(first.status, first.code, first.message);
+  }
+}
+
+type Queryable = Pick<PoolClient, "query">;
+export type DraftScope = {
+  organizationId: string;
+  clientId: string;
+  userId: string | null;
+};
+
+// Every issue of every draft against the client's accounts. Throws NOT_FOUND
+// when the client is missing or belongs to another organization.
+export async function checkDrafts(
+  db: Queryable,
+  scope: DraftScope,
+  drafts: DraftInput[],
+): Promise<DraftIssue[]> {
+  const client = (
+    await db.query(
+      "SELECT id FROM clients WHERE id=$1 AND organization_id=$2 AND deleted_at IS NULL FOR SHARE",
+      [scope.clientId, scope.organizationId],
+    )
+  ).rows[0];
+  if (!client) throw clientNotFound();
+
+  const accountIds = [
+    ...new Set(
+      drafts.flatMap((d) => d.targets.map((t) => t.social_account_id)),
+    ),
+  ];
+  const accounts = new Map<string, string>(
+    (
+      await db.query(
+        `SELECT id,status FROM social_accounts
+         WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL`,
+        [scope.organizationId, scope.clientId, accountIds],
+      )
+    ).rows.map((row) => [String(row.id), String(row.status)]),
+  );
+  const issues = duplicateTargetIssues(drafts);
+  drafts.forEach((draft, index) => {
+    for (const id of new Set(draft.targets.map((t) => t.social_account_id))) {
+      const status = accounts.get(id);
+      if (!status)
+        issues.push({ index, code: "ACCOUNT_NOT_FOUND", accountId: id });
+      else if (status !== "CONNECTED")
+        issues.push({ index, code: "ACCOUNT_NOT_CONNECTED", accountId: id });
+    }
+  });
+  return issues;
+}
+
+// The shared draft-creation core of the API and the calendar import. Runs
+// inside the caller's transaction; any issue throws before the first insert.
+// Posts are always DRAFT: suggested_at is metadata, nothing is scheduled.
+export async function insertDrafts(
+  tx: PoolClient,
+  scope: DraftScope,
+  drafts: DraftInput[],
+  options: { source: "api" | "import"; audit?: Record<string, unknown> },
+) {
+  const issues = await checkDrafts(tx, scope, drafts);
+  if (issues.length) throw new DraftIssuesError(issues);
+  const ids: string[] = [];
+  for (const draft of drafts) {
+    const input = {
+      caption: draft.text,
+      targets: draft.targets.map((t) => ({
+        accountId: t.social_account_id,
+        caption: t.text ?? draft.text,
+        mediaIds: [],
+      })),
+    };
+    const metadata = {
+      suggestedAt: draft.suggested_at ?? null,
+      pillar: draft.pillar ?? null,
+      // An import is always marked as one; the API keeps the caller's label.
+      source: options.source === "import" ? "import" : (draft.source ?? null),
+      mediaUrls: draft.media_urls ?? null,
+    };
+    const post = await insertDraftPost(
+      tx,
+      {
+        organizationId: scope.organizationId,
+        clientId: scope.clientId,
+        authorId: scope.userId,
+      },
+      input,
+      { clientId: scope.clientId, ...input, ...metadata },
+      metadata,
+    );
+    await audit(tx, scope, "post.created", post.id, {
+      source: options.source,
+      ...options.audit,
+    });
+    ids.push(String(post.id));
+  }
+  return ids;
+}
 
 const idempotencyKeyPattern = /^[A-Za-z0-9._:-]{8,128}$/;
 
@@ -144,15 +293,8 @@ export async function createApiDrafts(
   const parsed = draftsInput.safeParse(body);
   if (!parsed.success) throw validationError(parsed.error);
   const drafts = parsed.data.drafts;
-  for (const [index, draft] of drafts.entries()) {
-    const accounts = draft.targets.map((t) => t.social_account_id);
-    if (new Set(accounts).size !== accounts.length)
-      throw new AppError(
-        422,
-        "DUPLICATE_TARGET",
-        `drafts.${index}.targets: Use each social account only once per draft.`,
-      );
-  }
+  const duplicate = duplicateTargetIssues(drafts)[0];
+  if (duplicate) throw draftIssueError(duplicate);
   if (!uuid.safeParse(clientId).success) throw clientNotFound();
   const hash = requestHash(clientId, drafts);
 
@@ -200,84 +342,14 @@ export async function createApiDrafts(
       };
     }
 
-    const client = (
-      await tx.query(
-        "SELECT id FROM clients WHERE id=$1 AND organization_id=$2 AND deleted_at IS NULL FOR SHARE",
-        [clientId, key.organizationId],
-      )
-    ).rows[0];
-    if (!client) throw clientNotFound();
-
-    const accountIds = [
-      ...new Set(
-        drafts.flatMap((d) => d.targets.map((t) => t.social_account_id)),
-      ),
-    ];
-    const accounts = new Map<string, string>(
-      (
-        await tx.query(
-          `SELECT id,status FROM social_accounts
-           WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL`,
-          [key.organizationId, clientId, accountIds],
-        )
-      ).rows.map((row) => [String(row.id), String(row.status)]),
+    const ids = await insertDrafts(
+      tx,
+      { organizationId: key.organizationId, clientId, userId: null },
+      drafts,
+      { source: "api", audit: { api_key_id: key.keyId } },
     );
-    for (const id of accountIds) {
-      const status = accounts.get(id);
-      if (!status)
-        throw new AppError(
-          404,
-          "ACCOUNT_NOT_FOUND",
-          `Social account ${id} was not found for this client.`,
-        );
-      if (status !== "CONNECTED")
-        throw new AppError(
-          422,
-          "ACCOUNT_NOT_CONNECTED",
-          `Social account ${id} must be reconnected before drafts can target it.`,
-        );
-    }
-
-    const actor = {
-      organizationId: key.organizationId,
-      clientId,
-      userId: null,
-    };
     const created: { id: string; status: ApiPostStatus; raw_status: Status }[] =
-      [];
-    for (const draft of drafts) {
-      const input = {
-        caption: draft.text,
-        targets: draft.targets.map((t) => ({
-          accountId: t.social_account_id,
-          caption: t.text ?? draft.text,
-          mediaIds: [],
-        })),
-      };
-      const metadata = {
-        suggestedAt: draft.suggested_at ?? null,
-        pillar: draft.pillar ?? null,
-        source: draft.source ?? null,
-        mediaUrls: draft.media_urls ?? null,
-      };
-      const post = await insertDraftPost(
-        tx,
-        { organizationId: key.organizationId, clientId, authorId: null },
-        input,
-        { clientId, ...input, ...metadata },
-        metadata,
-      );
-      await audit(tx, actor, "post.created", post.id, {
-        source: "api",
-        api_key_id: key.keyId,
-      });
-      created.push({
-        id: String(post.id),
-        status: "draft",
-        raw_status: "DRAFT",
-      });
-    }
-
+      ids.map((id) => ({ id, status: "draft", raw_status: "DRAFT" }));
     const response = { data: created };
     await tx.query(
       "UPDATE api_idempotency_keys SET response_body=$2 WHERE id=$1",

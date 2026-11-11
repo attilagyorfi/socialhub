@@ -83,6 +83,29 @@ Trusted tools such as Growth Engine use `/api/v1` with an organization API key (
 
 Signed webhooks notify the integrated tool about `post.approved`, `post.changes_requested`, `post.published` and `post.failed`. Owners/admins add public HTTPS endpoints in Settings → Webhooks; the signing secret is shown once. Each request carries `X-SocialHub-Event-Id`, `X-SocialHub-Event`, `X-SocialHub-Timestamp` (Unix seconds) and `X-SocialHub-Signature: sha256=<hex HMAC-SHA256(secret, timestamp + "." + body)>`. Verify it in constant time with a timestamp tolerance (e.g. 5 minutes), deduplicate on the event ID, expect retries with exponential backoff (12 attempts), and note that a `post.failed` may be followed by `post.published` after reconciliation. Payload, verification example and retry rules: `ARCHITECTURE.md` → Webhooks.
 
+## Calendar import (JSON/CSV)
+
+Calendar → Import calendar uploads a month's drafts for the active client from a `.json` or `.csv` file. Who may import: the roles with the `create` permission (OWNER, ADMIN, SOCIAL_MANAGER, CONTENT_CREATOR). There is no separate "editor" role; CONTENT_CREATOR and SOCIAL_MANAGER are the editors. CLIENT_REVIEWER and VIEWER get `403`, a client of another organization `404`. Requests need a session and the same-origin check, like the rest of the UI API (`POST /api/calendar/import`, multipart: `clientId`, `mode=preview|import`, `file`).
+
+- **Flow:** choosing a file runs a server-side preview that writes nothing and lists every row (line, date, channels, start of the text) as OK or with a Hungarian error. Import is enabled only with zero errors. The import request sends the raw file again; the server re-parses and re-validates it and creates all rows in one transaction, or nothing if any row fails.
+- **Always drafts:** every post is `DRAFT` with `posts.source = "import"`. `suggested_at` is only a suggested time: nothing is scheduled, queued, sent for approval or announced by webhook. Each post gets a `post.created` audit event (`source: "import"`, the signed-in user as actor) and the import one `calendar.imported` event (cleaned file name, format, row count; never the file content).
+- **Limits:** 1 MB (checked on the bytes before parsing) and 200 rows. The file must be UTF-8 (a BOM is fine; Excel: "CSV UTF-8").
+- **JSON:** exactly the body of `POST /api/v1/clients/{id}/drafts`, `{ "drafts": [...] }`, with the same validation, except that `source` is not allowed: the system fills it in, and a row with `source` gets an error instead of losing it silently. Errors point to the array position (first draft = 1).
+- **CSV:** the first line is the header. Columns (any order, case-insensitive; unknown columns are an error):
+
+  | Column | Required | Maps to | Format |
+  | --- | --- | --- | --- |
+  | `suggested_at` | no | `suggested_at` | ISO 8601 with a time zone, e.g. `2026-12-01T09:00:00+01:00` or `…Z` |
+  | `text` | yes | `text` | the post text; line breaks allowed inside quotes |
+  | `targets` | yes | `targets[].social_account_id` | account IDs separated by `\|`, each at most once |
+  | `media_urls` | no | `media_urls` | HTTPS links separated by `\|`, at most 10 |
+  | `pillar` | no | `pillar` | up to 100 characters |
+
+  The delimiter is detected from the header: `;` (Hungarian Excel) when it has more semicolons than commas, otherwise `,`. Fields follow RFC 4180: wrap a field containing the delimiter, a quote or a line break in `"…"`, write a quote as `""`; CRLF and LF both work. Empty lines are skipped. Per-account texts (`targets[].text`) are JSON-only. Errors point to the physical line where the record starts (the header is line 1, multi-line fields counted).
+- **Samples:** the panel offers a sample CSV (with BOM, `;`, accented text) and a sample JSON filled with the client's connected account IDs, and lists those accounts with their IDs.
+
+The parser is `packages/core/calendar-import.ts`; validation and creation reuse `draftsInputWithMax`, `checkDrafts` and `insertDrafts` from `packages/server/api-v1-posts.ts` (`packages/server/calendar-import.ts`).
+
 ## Verification
 
 ```sh

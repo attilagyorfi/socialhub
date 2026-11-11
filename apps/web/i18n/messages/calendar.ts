@@ -30,6 +30,30 @@ const en = {
     "That local time does not exist in {timeZone} because of a daylight-saving change.",
   "error.timeAmbiguous":
     "That local time occurs twice in {timeZone}. Choose an unambiguous time.",
+  "import.title": "Import calendar",
+  "import.subtitle":
+    "Upload a month's calendar from a CSV or JSON file (up to 1 MB, {max} rows). Every post becomes a draft.",
+  "import.file": "File (.csv, .json)",
+  "import.sampleCsv": "Sample CSV",
+  "import.sampleJson": "Sample JSON",
+  "import.help":
+    "The sample files already contain this client's accounts. Put the account ID in the targets column; separate several accounts with |.",
+  "import.noAccounts":
+    "This client has no connected account yet. Connect one first.",
+  "import.checking": "Checking the file…",
+  "import.ready": "All good: {count} drafts will be created.",
+  "import.hasErrors": "Found {count} errors. Fix the file and upload it again.",
+  "import.lineError": "Line {line}: {message}",
+  "import.previewLabel": "Import preview",
+  "import.col.line": "Line",
+  "import.col.date": "Date",
+  "import.col.channels": "Channels",
+  "import.col.text": "Text",
+  "import.col.result": "Result",
+  "import.rowOk": "OK",
+  "import.submit": "Import",
+  "import.done": "{count} drafts imported.",
+  "import.failed": "Couldn't process the file. Try again.",
 } as const;
 
 const hu = {
@@ -63,6 +87,31 @@ const hu = {
     "Ez a helyi időpont az óraátállítás miatt nem létezik ({timeZone}).",
   "error.timeAmbiguous":
     "Ez a helyi időpont kétszer fordul elő ({timeZone}). Válassz egyértelmű időpontot.",
+  "import.title": "Naptár importálása",
+  "import.subtitle":
+    "Tölts fel egy havi naptárt CSV- vagy JSON-fájlból (legfeljebb 1 MB, {max} sor). Minden poszt vázlat lesz.",
+  "import.file": "Fájl (.csv, .json)",
+  "import.sampleCsv": "Minta-CSV",
+  "import.sampleJson": "Minta-JSON",
+  "import.help":
+    "A mintafájlok már ennek az ügyfélnek a fiókjait tartalmazzák. A targets oszlopba a fiók azonosítója kerül, több fiókot | jellel válassz el.",
+  "import.noAccounts":
+    "Ennek az ügyfélnek még nincs csatlakoztatott fiókja. Előbb csatlakoztass egyet.",
+  "import.checking": "Fájl ellenőrzése…",
+  "import.ready": "Minden rendben: {count} vázlat jön létre.",
+  "import.hasErrors":
+    "{count} hibát találtunk. Javítsd a fájlt, és töltsd fel újra.",
+  "import.lineError": "{line}. sor: {message}",
+  "import.previewLabel": "Az import előnézete",
+  "import.col.line": "Sor",
+  "import.col.date": "Dátum",
+  "import.col.channels": "Csatornák",
+  "import.col.text": "Szöveg",
+  "import.col.result": "Eredmény",
+  "import.rowOk": "Rendben",
+  "import.submit": "Importálás",
+  "import.done": "{count} vázlat importálva.",
+  "import.failed": "Nem sikerült feldolgozni a fájlt. Próbáld újra.",
 } satisfies Record<keyof typeof en, string>;
 
 export default { en, hu };

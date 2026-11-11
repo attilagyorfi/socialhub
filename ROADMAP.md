@@ -38,6 +38,7 @@
 - Integration API v1, fourth slice: `PUT /api/v1/clients/{id}/brand-profile` (migration 027: `brand_profiles.synced_*` columns; Growth Engine owns the synced profile, local additions stay in `profile`; strict validation, full replacement, hash-based idempotency in one locked transaction, `brand.synced` audit with changed fields). Synced forbidden/required phrases, disclaimer, voice and pillars apply to AI generation and approval checks through one shared `effectiveBrandRules`; Clients shows them read-only with source and sync date. All Growth Engine → Social Hub endpoints of the v1 contract are done; signed webhooks (`post.approved`, `post.changes_requested`, `post.published`, `post.failed`) remain open.
 - Integration API v1, fifth slice: signed webhooks (migration 028: `webhook_endpoints`, `webhook_deliveries` outbox) for `post.approved`, `post.changes_requested`, `post.published` (including reconciled deliveries) and final `post.failed`, written in the state-change transaction; owner/admin endpoint management in Settings (HTTPS only, SSRF-checked, encrypted secret shown once, rotation, revocation, audit, 10 active per organization); HMAC-SHA256 signed worker delivery with exponential backoff, `DEAD` after 12 attempts and Operations visibility.
 - Integration API v1 hardening: webhook deliveries pinned to the checked public addresses (custom `lookup` on `node:https`, original SNI/Host, default TLS verification) against DNS rebinding; Redis rate limits on `/api/v1` (120 requests/min per key, 20 failed authentications/min per IP, `429 RATE_LIMITED` with `Retry-After`, `503` when Redis is down); 24-hour `Idempotency-Key` replay window with batched hourly cleanup in the worker.
+- Calendar import in the UI: a month's drafts from a JSON (the exact `POST /api/v1/clients/{id}/drafts` body) or CSV file (UTF-8 with or without BOM, `,`/`;` detected, RFC 4180 quoting), up to 1 MB and 200 rows. A server-side preview lists every row as OK or with a Hungarian error by line; only an error-free file imports, in one transaction, through the same validator and draft core as the API. Every post is a `DRAFT` with `source = "import"`, `post.created` audit per post plus one `calendar.imported`; no jobs or webhooks.
 - Fictional seed, domain/schema regression tests and browser workflow tests.
 
 ## Verification — 2026-09-30
@@ -51,6 +52,12 @@
 - This verifies the local mock workflow. Real social APIs and production hosting remain unverified.
 
 ## Outstanding requested scope
+
+### SOCIAL_HUB_TERV F1
+
+- [x] Integration API v1 (`/api/v1`): keys, clients, drafts, posts, metrics, brand profile, signed webhooks, hardening.
+- [x] JSON/CSV calendar import in the UI too ("JSON/CSV naptárimport a felületen is").
+- [ ] LinkedIn adapter (separate, later round).
 
 ### Delivery priority
 
