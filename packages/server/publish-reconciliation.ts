@@ -17,6 +17,10 @@ type ReconciliationJob = {
 const maxAttempts = 4;
 const retrySeconds = [60, 300, 900, 3600];
 
+// The sweep and the administrator recheck only pick up Meta targets on
+// purpose. LINKEDIN_DELIVERY_UNCERTAIN gets its job when the outcome is
+// recorded, and without a LinkedIn lookup a recheck could only close it as
+// manual again.
 export async function ensurePublishReconciliationJobs() {
   const recovered = await pool.query(
     `UPDATE publish_reconciliation_jobs
@@ -92,7 +96,7 @@ async function loadInput(job: ReconciliationJob) {
          SELECT started_at,finished_at
          FROM publish_attempts
          WHERE publish_job_id=j.id
-           AND error_code='META_DELIVERY_UNCERTAIN'
+           AND error_code IN ('META_DELIVERY_UNCERTAIN','LINKEDIN_DELIVERY_UNCERTAIN')
          ORDER BY attempt DESC LIMIT 1
        ) uncertain ON true
        WHERE r.id=$1 AND r.organization_id=$2 AND r.client_id=$3`,
@@ -105,7 +109,10 @@ async function loadInput(job: ReconciliationJob) {
       "RECONCILIATION_INPUT_MISSING",
       "Delivery reconciliation input is missing.",
     );
-  if (row.mode !== "direct" || !["facebook", "instagram"].includes(row.platform))
+  if (
+    row.mode !== "direct" ||
+    !["facebook", "instagram", "linkedin"].includes(row.platform)
+  )
     throw new AppError(
       422,
       "RECONCILIATION_PROVIDER_UNSUPPORTED",
@@ -256,7 +263,7 @@ async function leaveUnresolved(
       [
         job.organization_id,
         job.client_id,
-        `Meta delivery could not be reconciled automatically: ${errorCode}`,
+        `${input.platform === "linkedin" ? "LinkedIn" : "Meta"} delivery could not be reconciled automatically: ${errorCode}`,
         input.post_id,
       ],
     );
@@ -280,10 +287,7 @@ async function leaveUnresolved(
 }
 
 export async function processPublishReconciliationJobs(limit = 20) {
-  return processPublishReconciliationJobsWith(
-    limit,
-    findMetaPublishedMatches,
-  );
+  return processPublishReconciliationJobsWith(limit, findMetaPublishedMatches);
 }
 
 export async function processPublishReconciliationJobsWith(
@@ -318,6 +322,19 @@ export async function processPublishReconciliationJobsWith(
     let input: Awaited<ReturnType<typeof loadInput>> | undefined;
     try {
       input = await loadInput(job);
+      // There is no LinkedIn lookup yet: the post must be checked by hand and
+      // is never resent blindly, nor matched through the Meta API.
+      if (input.platform === "linkedin") {
+        await leaveUnresolved(
+          job,
+          input,
+          "ERROR",
+          "LINKEDIN_RECONCILIATION_MANUAL",
+          true,
+        );
+        unresolved++;
+        continue;
+      }
       const matches = await findMatches({
         organizationId: job.organization_id,
         clientId: job.client_id,
@@ -363,11 +380,7 @@ export async function processPublishReconciliationJobsWith(
           `UPDATE social_accounts
            SET token_health='EXPIRED',updated_at=now()
            WHERE id=$1 AND organization_id=$2 AND client_id=$3`,
-          [
-            input.social_account_id,
-            job.organization_id,
-            job.client_id,
-          ],
+          [input.social_account_id, job.organization_id, job.client_id],
         );
       await leaveUnresolved(job, input, "ERROR", appError.code, terminal);
       if (terminal) unresolved++;

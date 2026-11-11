@@ -148,7 +148,7 @@ export async function operationalSummary(c: Context) {
         `SELECT
        count(*) FILTER (WHERE kind='publish' AND status IN ('PENDING','RETRY')) AS publish_waiting,
        count(*) FILTER (WHERE kind='publish' AND status='DEAD') AS publish_dead,
-       count(*) FILTER (WHERE kind='publish' AND status='DEAD' AND last_error='META_DELIVERY_UNCERTAIN') AS publish_uncertain,
+       count(*) FILTER (WHERE kind='publish' AND status='DEAD' AND last_error IN ('META_DELIVERY_UNCERTAIN','LINKEDIN_DELIVERY_UNCERTAIN')) AS publish_uncertain,
        count(*) FILTER (WHERE kind='media' AND status IN ('PENDING','RETRY','RUNNING')) AS media_waiting,
        count(*) FILTER (WHERE kind='media' AND status='DEAD') AS media_dead,
        max(age_seconds) FILTER (WHERE status IN ('PENDING','RETRY') AND due) AS oldest_due_seconds

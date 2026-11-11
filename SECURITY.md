@@ -6,6 +6,8 @@ Access tokens and client secrets are not returned by the application API. Approv
 
 Meta OAuth state expires after ten minutes, is stored only as SHA-256 and is consumed once before token exchange. It is bound to the initiating user, organization and client. Meta webhook POST requests are authenticated with HMAC-SHA256 over the exact raw request body before JSON parsing or persistence. Meta media delivery URLs expire after fifteen minutes because the provider must download the asset asynchronously.
 
+LinkedIn OAuth uses the same hashed, ten-minute, single-use state bound to user, organization and client (provider `linkedin`). Its access and refresh tokens are encrypted per account in `social_credentials` and sent only in the Authorization header. Image bytes are read from our own bucket, never from a user-supplied URL, and the bearer token is only sent to `*.linkedin.com` upload URLs returned by `initializeUpload`. The integration is off unless `LINKEDIN_INTEGRATION_ENABLED`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_REDIRECT_URI` and `LINKEDIN_API_VERSION` are all set.
+
 Meta analytics requests send access tokens only in the Authorization header. Durable jobs and stored raw metric payloads contain provider responses, mapping identity and safe error codes, never credentials. Backfill is restricted to organization owners/administrators and bounded to 90 days per request.
 
 Organization owners can grant administrator access. Administrators can manage lower roles but cannot grant, change or remove another administrator. Owners cannot be changed through the team screen, and users cannot remove or change their own access there. Every accepted non-admin invitation receives explicit client memberships.

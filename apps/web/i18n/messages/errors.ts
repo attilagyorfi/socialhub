@@ -55,6 +55,20 @@ const en = {
     "The stored Meta credential is invalid. Reconnect the account.",
   META_DELIVERY_UNCERTAIN:
     "Meta did not confirm whether the content was published.",
+  LINKEDIN_DELIVERY_UNCERTAIN:
+    "LinkedIn did not confirm whether the post was published. Check the profile before retrying.",
+  LINKEDIN_TOKEN_EXPIRED:
+    "The LinkedIn authorization expired. Reconnect the account.",
+  LINKEDIN_TOKEN_INVALID:
+    "The LinkedIn authorization is no longer valid. Reconnect the account.",
+  LINKEDIN_SCOPE_MISSING:
+    "LinkedIn did not grant permission to publish on the profile.",
+  LINKEDIN_MEDIA_UNSUPPORTED:
+    "LinkedIn publishing currently supports text or a single image.",
+  LINKEDIN_ORGANIZATION_UNSUPPORTED:
+    "Publishing to LinkedIn company pages is not supported yet.",
+  LINKEDIN_RECONCILIATION_MANUAL:
+    "Check on the LinkedIn profile whether the post was published.",
   META_DISABLED: "Meta integration is not enabled.",
   META_INSTAGRAM_INVALID: "The Instagram account or media is unavailable.",
   META_LOGIN_CONFIG_INVALID:
@@ -183,6 +197,20 @@ const hu = {
     "A tárolt Meta-hozzáférés érvénytelen. Csatlakoztasd újra a fiókot.",
   META_DELIVERY_UNCERTAIN:
     "A Meta nem erősítette meg, hogy megjelent-e a tartalom. Újrapróbálás előtt nézd meg a fiókot.",
+  LINKEDIN_DELIVERY_UNCERTAIN:
+    "A LinkedIn nem erősítette meg, hogy megjelent-e a poszt. Újrapróbálás előtt nézd meg a profilt.",
+  LINKEDIN_TOKEN_EXPIRED:
+    "Lejárt a LinkedIn-hozzáférés. Csatlakoztasd újra a fiókot.",
+  LINKEDIN_TOKEN_INVALID:
+    "A LinkedIn-hozzáférés már nem érvényes. Csatlakoztasd újra a fiókot.",
+  LINKEDIN_SCOPE_MISSING:
+    "A LinkedIn nem adott engedélyt a profilodon való posztolásra.",
+  LINKEDIN_MEDIA_UNSUPPORTED:
+    "LinkedInre most szöveget vagy egy képet tudsz posztolni.",
+  LINKEDIN_ORGANIZATION_UNSUPPORTED:
+    "LinkedIn-cégoldalra még nem tudsz posztolni.",
+  LINKEDIN_RECONCILIATION_MANUAL:
+    "Nézd meg a LinkedIn-profilodon, hogy megjelent-e a poszt.",
   META_DISABLED: "A Meta-integráció nincs bekapcsolva.",
   META_INSTAGRAM_INVALID:
     "Az Instagram-fiók vagy a csatolt média nem érhető el.",

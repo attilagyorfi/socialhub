@@ -5,7 +5,14 @@ import { provider } from "../core/providers";
 import { aggregateStatus, type Status, type Platform } from "../core/domain";
 import { AppError } from "../core/security";
 import { metaProviderError, publishMeta } from "./meta";
+import { publishLinkedIn } from "./linkedin";
 import { enqueueWebhookEvent } from "./webhooks";
+// Direct deliveries that may be live although the provider did not confirm
+// them; they go to reconciliation instead of being retried.
+export const UNCERTAIN_DELIVERY_CODES = [
+  "META_DELIVERY_UNCERTAIN",
+  "LINKEDIN_DELIVERY_UNCERTAIN",
+];
 export const receipts = {
   async get(key: string) {
     return (
@@ -121,6 +128,16 @@ export async function executePublish(id: string) {
           idempotencyKey: job.idempotency_key,
         })
       ).remoteId;
+    else if (target.mode === "direct" && target.platform === "linkedin")
+      remoteId = (
+        await publishLinkedIn({
+          organizationId: job.organization_id,
+          clientId: job.client_id,
+          accountId: target.social_account_id,
+          content,
+          idempotencyKey: job.idempotency_key,
+        })
+      ).remoteId;
     else {
       const adapter = provider(
         target.platform as Platform,
@@ -193,7 +210,7 @@ async function recordOutcome(
         "UPDATE publish_attempts SET status='FAILED',error_code=$1,finished_at=now() WHERE id=$2",
         [failure.code, trace],
       );
-    if (failure.code === "META_DELIVERY_UNCERTAIN")
+    if (UNCERTAIN_DELIVERY_CODES.includes(failure.code))
       await tx.query(
         `INSERT INTO publish_reconciliation_jobs(
            organization_id,client_id,publish_job_id,run_at
@@ -215,7 +232,7 @@ async function recordOutcome(
           target.post_id,
         ],
       );
-      // Final failures only; META_DELIVERY_UNCERTAIN may still be confirmed
+      // Final failures only; an uncertain delivery may still be confirmed
       // as published later by reconciliation.
       await enqueueWebhookEvent(tx, "post.failed", {
         organizationId: job.organization_id,
@@ -280,9 +297,9 @@ async function recordOutcome(
   );
 }
 
-// A worker that dies during a provider call leaves its job RUNNING. A Meta
-// delivery may already be live, so it becomes uncertain and is picked up by
-// reconciliation; other providers deduplicate by idempotency key and retry.
+// A worker that dies during a provider call leaves its job RUNNING. A Meta or
+// LinkedIn delivery may already be live, so it becomes uncertain and is picked
+// up by reconciliation; other providers deduplicate by idempotency key and retry.
 export async function recoverInterruptedPublishes() {
   return transaction(async (tx) => {
     const stale = (
@@ -302,9 +319,14 @@ export async function recoverInterruptedPublishes() {
           [job.id, job.attempts],
         )
       ).rows[0]?.id;
-      const meta =
-        job.mode === "direct" &&
-        ["facebook", "instagram"].includes(job.platform);
+      const uncertainCode =
+        job.mode !== "direct"
+          ? undefined
+          : ["facebook", "instagram"].includes(job.platform)
+            ? "META_DELIVERY_UNCERTAIN"
+            : job.platform === "linkedin"
+              ? "LINKEDIN_DELIVERY_UNCERTAIN"
+              : undefined;
       await recordOutcome(
         tx,
         {
@@ -317,10 +339,10 @@ export async function recoverInterruptedPublishes() {
           attempt: job.attempts,
           trace,
         },
-        meta
+        uncertainCode
           ? new AppError(
               409,
-              "META_DELIVERY_UNCERTAIN",
+              uncertainCode,
               "The worker stopped during delivery.",
             )
           : new AppError(503, "WORKER_INTERRUPTED", "The worker stopped."),

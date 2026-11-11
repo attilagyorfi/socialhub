@@ -280,6 +280,26 @@ export async function assertStoredObject(key: string) {
   }
 }
 
+// Reads an object from our own bucket; providers that need the bytes uploaded
+// get them from here, never from a user-supplied URL.
+export async function readStoredObject(key: string) {
+  try {
+    const object = await storageClient().send(
+      new GetObjectCommand({ Bucket: mediaBucket(), Key: key }),
+    );
+    if (!object.Body) throw Object.assign(new Error(), { name: "NoSuchKey" });
+    return Buffer.from(await object.Body.transformToByteArray());
+  } catch (error) {
+    if (["NotFound", "NoSuchKey"].includes((error as Error).name))
+      throw new AppError(
+        422,
+        "MEDIA_MISSING",
+        "The attachment is missing from storage. Upload it again.",
+      );
+    throw error;
+  }
+}
+
 // Renditions derived from an asset; storage cleanup must remove them too.
 export function derivedObjectKeys(media: {
   id: string;

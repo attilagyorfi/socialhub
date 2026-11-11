@@ -5,6 +5,7 @@ import { z } from "zod";
 import { capabilities, type Platform, type Role } from "../core/domain";
 import { encrypt, AppError } from "../core/security";
 import { disconnectMeta } from "./meta";
+import { revokeLinkedInAccess } from "./linkedin";
 import { brandInput } from "./validation";
 export async function listClients(userId: string) {
   return (
@@ -213,6 +214,8 @@ export async function disconnect(c: Context, id: string) {
     ["facebook", "instagram"].includes(current.platform)
   )
     return disconnectMeta(c, id);
+  const linkedIn = current.mode === "direct" && current.platform === "linkedin";
+  if (linkedIn) await revokeLinkedInAccess(c, id);
   return transaction(async (tx) => {
     const account = (
       await tx.query(
@@ -221,7 +224,7 @@ export async function disconnect(c: Context, id: string) {
       )
     ).rows[0];
     if (!account) throw new AppError(404, "NOT_FOUND", "Account not found.");
-    if (account.mode !== "mock")
+    if (account.mode !== "mock" && !linkedIn)
       throw new AppError(
         409,
         "REVOCATION_REQUIRED",

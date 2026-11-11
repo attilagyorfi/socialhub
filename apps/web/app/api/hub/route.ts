@@ -66,6 +66,10 @@ import {
   metaIntegrationStatus,
   startMetaOAuth,
 } from "../../../../../packages/server/meta";
+import {
+  linkedInIntegrationStatus,
+  startLinkedInOAuth,
+} from "../../../../../packages/server/linkedin";
 import { operationalSummary } from "../../../../../packages/server/operations";
 import {
   updateUserLocale,
@@ -165,6 +169,7 @@ export async function GET(request: Request) {
           hasMore: false,
           mode: process.env.SOCIAL_PROVIDER_MODE ?? "mock",
           meta: metaIntegrationStatus(),
+          linkedin: linkedInIntegrationStatus(),
         },
         { headers: { "Cache-Control": "no-store" } },
       );
@@ -330,6 +335,7 @@ export async function GET(request: Request) {
         hasMore: results[0].rows.length === 50,
         mode: process.env.SOCIAL_PROVIDER_MODE ?? "mock",
         meta: metaIntegrationStatus(),
+        linkedin: linkedInIntegrationStatus(),
       },
       { headers: { "Cache-Control": "no-store" } },
     );
@@ -414,7 +420,11 @@ export async function POST(request: Request) {
     );
     switch (action) {
       case "account.oauth.start":
-        return Response.json(await startMetaOAuth(c));
+        return Response.json(
+          body.provider === "linkedin"
+            ? await startLinkedInOAuth(c)
+            : await startMetaOAuth(c),
+        );
       case "privacy.organization.erase.request":
         return Response.json(
           await requestOrganizationErasure(

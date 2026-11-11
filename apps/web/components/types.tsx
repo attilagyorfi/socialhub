@@ -128,6 +128,7 @@ export type HubData = {
   hasMore: boolean;
   mode: string;
   meta: { enabled: boolean };
+  linkedin: { enabled: boolean };
   operations: {
     publishWaiting: number;
     publishDead: number;
