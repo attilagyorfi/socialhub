@@ -57,7 +57,8 @@
 
 - [x] Integration API v1 (`/api/v1`): keys, clients, drafts, posts, metrics, brand profile, signed webhooks, hardening.
 - [x] JSON/CSV calendar import in the UI too ("JSON/CSV naptárimport a felületen is").
-- [ ] LinkedIn adapter (separate, later round).
+- [x] LinkedIn adapter, personal profile: `w_member_social` OAuth, text and single-image posts, receipts, manual reconciliation of uncertain deliveries.
+- [ ] LinkedIn company pages (Community Management API), later round.
 
 ### Delivery priority
 

@@ -9,6 +9,7 @@ const en = {
   "accounts.oauthDisabled":
     "Live OAuth connections are not enabled in this build.",
   "accounts.connectMeta": "Connect Facebook & Instagram",
+  "accounts.connectLinkedIn": "Connect LinkedIn profile",
   "accounts.metaNote":
     "Meta OAuth becomes available after the Meta app credentials and API version are configured.",
   "accounts.tokenHealth": "Token health",
@@ -105,6 +106,7 @@ const hu = {
   "accounts.oauthDisabled":
     "Ebben a buildben nincs bekapcsolva az éles OAuth-csatlakozás.",
   "accounts.connectMeta": "Facebook és Instagram csatlakoztatása",
+  "accounts.connectLinkedIn": "LinkedIn-profil csatlakoztatása",
   "accounts.metaNote":
     "A Meta OAuth akkor érhető el, ha be vannak állítva a Meta-alkalmazás hitelesítő adatai és az API-verzió.",
   "accounts.tokenHealth": "Token állapota",

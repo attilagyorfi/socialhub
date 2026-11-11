@@ -109,9 +109,11 @@ export function Accounts({
             {t("sections.accounts.connectMock")}
           </button>
         </form>
-        {data.mode !== "mock" && !data.meta.enabled && (
-          <p className="notice">{t("sections.accounts.oauthDisabled")}</p>
-        )}
+        {data.mode !== "mock" &&
+          !data.meta.enabled &&
+          !data.linkedin.enabled && (
+            <p className="notice">{t("sections.accounts.oauthDisabled")}</p>
+          )}
         <div className="button-row">
           <button
             type="button"
@@ -126,6 +128,21 @@ export function Accounts({
             <Link2 size={16} />
             {t("sections.accounts.connectMeta")}
           </button>
+          {data.linkedin.enabled && (
+            <button
+              type="button"
+              className="primary"
+              disabled={busy}
+              onClick={() =>
+                mutate("account.oauth.start", { provider: "linkedin" })
+                  .then((result) => window.location.assign(result.url))
+                  .catch(() => {})
+              }
+            >
+              <Link2 size={16} />
+              {t("sections.accounts.connectLinkedIn")}
+            </button>
+          )}
         </div>
         {!data.meta.enabled && (
           <p className="panel-note">{t("sections.accounts.metaNote")}</p>

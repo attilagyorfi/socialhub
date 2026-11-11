@@ -101,14 +101,18 @@ function HubShell() {
   });
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const result = params.get("meta");
+    const linkedIn = params.has("linkedin");
+    const result = params.get("meta") ?? params.get("linkedin");
     if (!result) return;
     setView("Connected accounts");
     const code = params.get("code") ?? "OAUTH_FAILED";
-    if (result === "connected") setNotice(t("hub.meta.connected"));
+    if (result === "connected")
+      setNotice(t(linkedIn ? "hub.linkedin.connected" : "hub.meta.connected"));
     else
       setError(
-        t("hub.meta.failed", { reason: errorMessage(locale, code, code) }),
+        t(linkedIn ? "hub.linkedin.failed" : "hub.meta.failed", {
+          reason: errorMessage(locale, code, code),
+        }),
       );
     window.history.replaceState({}, "", window.location.pathname);
   }, []);
