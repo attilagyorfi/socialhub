@@ -142,9 +142,10 @@ export async function operationalSummary(c: Context) {
     analyticsJobs,
     publishReconciliations,
     webhookDeliveries,
-  ] = await Promise.all([
-    pool.query(
-      `SELECT
+  ] =
+    await Promise.all([
+      pool.query(
+        `SELECT
        count(*) FILTER (WHERE kind='publish' AND status IN ('PENDING','RETRY')) AS publish_waiting,
        count(*) FILTER (WHERE kind='publish' AND status='DEAD') AS publish_dead,
        count(*) FILTER (WHERE kind='publish' AND status='DEAD' AND last_error IN ('META_DELIVERY_UNCERTAIN','LINKEDIN_DELIVERY_UNCERTAIN')) AS publish_uncertain,
@@ -160,21 +161,21 @@ export async function operationalSummary(c: Context) {
          extract(epoch FROM now()-run_at) AS age_seconds
         FROM media_processing_jobs WHERE organization_id=$1 AND client_id=$2
        ) jobs`,
-      [c.organizationId, c.clientId],
-    ),
-    pool.query(
-      `SELECT count(*) FILTER (WHERE status='CONNECTED') AS connected,
+        [c.organizationId, c.clientId],
+      ),
+      pool.query(
+        `SELECT count(*) FILTER (WHERE status='CONNECTED') AS connected,
        count(*) FILTER (WHERE status='CONNECTED' AND token_health<>'HEALTHY') AS unhealthy_tokens
        FROM social_accounts
        WHERE organization_id=$1 AND client_id=$2 AND deleted_at IS NULL`,
-      [c.organizationId, c.clientId],
-    ),
-    pool.query(
-      `SELECT last_seen_at,metadata FROM service_heartbeats
+        [c.organizationId, c.clientId],
+      ),
+      pool.query(
+        `SELECT last_seen_at,metadata FROM service_heartbeats
        WHERE service_name='worker' ORDER BY last_seen_at DESC LIMIT 1`,
-    ),
-    pool.query(
-      `SELECT
+      ),
+      pool.query(
+        `SELECT
          count(*) FILTER (
            WHERE status IN ('PENDING','SENDING')
              OR (status='FAILED' AND attempts<3)
@@ -182,39 +183,39 @@ export async function operationalSummary(c: Context) {
          count(*) FILTER (WHERE status='FAILED' AND attempts>=3) AS failed
        FROM approval_automation_deliveries
        WHERE organization_id=$1 AND client_id=$2`,
-      [c.organizationId, c.clientId],
-    ),
-    pool.query(
-      `SELECT
+        [c.organizationId, c.clientId],
+      ),
+      pool.query(
+        `SELECT
          count(*) FILTER (WHERE status IN ('PENDING','RETRY','RUNNING')) AS waiting,
          count(*) FILTER (WHERE status='DEAD') AS dead,
          max(completed_at) FILTER (WHERE status='DONE') AS last_success_at
        FROM analytics_sync_jobs
        WHERE organization_id=$1 AND client_id=$2`,
-      [c.organizationId, c.clientId],
-    ),
-    pool.query(
-      `SELECT
+        [c.organizationId, c.clientId],
+      ),
+      pool.query(
+        `SELECT
          count(*) FILTER (WHERE status IN ('PENDING','RETRY','RUNNING')) AS waiting,
          count(*) FILTER (WHERE status='UNRESOLVED') AS unresolved,
          max(completed_at) FILTER (WHERE status='CONFIRMED') AS last_success_at
          FROM publish_reconciliation_jobs
          WHERE organization_id=$1 AND client_id=$2`,
-      [c.organizationId, c.clientId],
-    ),
-    // Webhook endpoints belong to the organization, so their deliveries are
-    // counted for the whole organization. Deliveries dropped because an
-    // administrator revoked the endpoint are not failures.
-    pool.query(
-      `SELECT
+        [c.organizationId, c.clientId],
+      ),
+      // Webhook endpoints belong to the organization, so their deliveries are
+      // counted for the whole organization. Deliveries dropped because an
+      // administrator revoked the endpoint are not failures.
+      pool.query(
+        `SELECT
          count(*) FILTER (WHERE status IN ('PENDING','RETRY','RUNNING')) AS waiting,
          count(*) FILTER (
            WHERE status='DEAD' AND last_error IS DISTINCT FROM 'ENDPOINT_REVOKED'
          ) AS dead
          FROM webhook_deliveries WHERE organization_id=$1`,
-      [c.organizationId],
-    ),
-  ]);
+        [c.organizationId],
+      ),
+    ]);
   const job = jobs.rows[0] ?? {};
   const account = accounts.rows[0] ?? {};
   const approvalDelivery = approvalDeliveries.rows[0] ?? {};
@@ -232,10 +233,13 @@ export async function operationalSummary(c: Context) {
     publishDead: integer(job.publish_dead),
     publishUncertain: integer(job.publish_uncertain),
     publishReconciliationWaiting: integer(publishReconciliation.waiting),
-    publishReconciliationUnresolved: integer(publishReconciliation.unresolved),
-    publishReconciliationLastSuccessAt: publishReconciliation.last_success_at
-      ? new Date(publishReconciliation.last_success_at).toISOString()
-      : null,
+    publishReconciliationUnresolved: integer(
+      publishReconciliation.unresolved,
+    ),
+    publishReconciliationLastSuccessAt:
+      publishReconciliation.last_success_at
+        ? new Date(publishReconciliation.last_success_at).toISOString()
+        : null,
     mediaWaiting: integer(job.media_waiting),
     mediaDead: integer(job.media_dead),
     oldestDueSeconds: Math.max(
