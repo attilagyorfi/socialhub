@@ -24,6 +24,8 @@ import { MediaThumb } from "./media";
 import { Composer } from "./composer";
 import { PasswordSettings } from "./password-settings";
 import { Calendar } from "./calendar";
+import { CalendarImport } from "./calendar-import";
+import { can, type Role } from "../../../packages/core/domain";
 import { Library, Accounts, Clients } from "./sections";
 import { Analytics } from "./analytics";
 import { Team } from "./team";
@@ -794,6 +796,17 @@ function HubShell() {
                       onReschedule={(post, scheduledAt) =>
                         reschedule(post, scheduledAt, false)
                       }
+                    />
+                  )}
+                  {view === "Calendar" && can(data.role as Role, "create") && (
+                    <CalendarImport
+                      clientId={data.clientId!}
+                      accounts={data.accounts}
+                      onImported={(count) => {
+                        setNotice(t("calendar.import.done", { count }));
+                        setCalendarRefresh((value) => value + 1);
+                        load();
+                      }}
                     />
                   )}
                   {(view === "Posts" || view === "Approvals") && (

@@ -30,6 +30,12 @@ const en = {
   FILE_SIZE: "The file size is invalid.",
   FILE_TYPE: "The file type is not supported.",
   FORBIDDEN: "You do not have permission for this action.",
+  IMPORT_ENCODING: "Save the file as UTF-8 and try again.",
+  IMPORT_FORMAT: "Upload a .csv or .json file.",
+  IMPORT_INVALID: "The file has errors, so nothing was imported.",
+  IMPORT_REQUEST: "The import request is invalid. Reload the page.",
+  IMPORT_TOO_LARGE: "The file is too large: 1 MB at most.",
+  IMPORT_TOO_MANY_ROWS: "Import at most 200 rows at once.",
   INVALID_ACCOUNT: "Choose a connected account from this client.",
   INVALID_CURSOR: "The post list cursor is invalid.",
   INVALID_IMAGE: "The image is damaged, unsupported or exceeds 25 megapixels.",
@@ -142,6 +148,13 @@ const hu = {
   EXPIRED: "Ez a jóváhagyási link érvénytelen vagy lejárt.",
   FILE_NAME: "A fájlnév legfeljebb 200 karakter lehet.",
   FILE_REQUIRED: "Válassz egy fájlt.",
+  IMPORT_ENCODING:
+    "A fájl nem UTF-8 kódolású. Mentsd el UTF-8-ként (Excelben: CSV UTF-8), és próbáld újra.",
+  IMPORT_FORMAT: "Csak .csv vagy .json fájlt tölthetsz fel.",
+  IMPORT_INVALID: "A fájlban hibák vannak, ezért semmit sem importáltunk.",
+  IMPORT_REQUEST: "Hibás importkérés. Töltsd újra az oldalt.",
+  IMPORT_TOO_LARGE: "A fájl túl nagy: legfeljebb 1 MB lehet.",
+  IMPORT_TOO_MANY_ROWS: "Egyszerre legfeljebb 200 sort importálhatsz.",
   FILE_SIZE:
     "A fájl mérete nem megfelelő (1 bájt és 20 MB között kell lennie).",
   FILE_TYPE:
