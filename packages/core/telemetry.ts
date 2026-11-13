@@ -2,7 +2,7 @@
 // contain bearer tokens (invitations, client approvals, password resets,
 // Meta deletion codes, OAuth callbacks).
 const SECRET_PATH =
-  /(\/(?:invite|approve|meta\/deletion|api\/approval|api\/invitation|api\/auth\/reset-password)\/)[^/?#]+/g;
+  /(\/(?:invite|approve\/bundle|approve|meta\/deletion|api\/approval-bundle|api\/approval|api\/invitation|api\/auth\/reset-password)\/)[^/?#]+/g;
 const SECRET_QUERY =
   /([?&](?:token|code|state|access_token|signed_request|callbackURL)=)[^&#]*/gi;
 

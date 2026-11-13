@@ -60,6 +60,10 @@
 - [x] LinkedIn adapter, personal profile: `w_member_social` OAuth, text and single-image posts, receipts, manual reconciliation of uncertain deliveries.
 - [ ] LinkedIn company pages (Community Management API), later round.
 
+### SOCIAL_HUB_TERV F2
+
+- [x] Monthly approval ("Havi jóváhagyás"): the client sees the whole period on one secret link and approves all posts at once or decides post by post (migration 029, `/approve/bundle/[token]`).
+
 ### Delivery priority
 
 1. **Completed locally:** team administration, invitations, role/client assignment, access revocation and audit coverage.

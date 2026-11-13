@@ -11,6 +11,12 @@ describe("error report scrubbing", () => {
     expect(scrubUrl(`https://hub.example/approve/${token}?x=1`)).toBe(
       "https://hub.example/approve/[Filtered]?x=1",
     );
+    expect(scrubUrl(`https://hub.example/approve/bundle/${token}`)).toBe(
+      "https://hub.example/approve/bundle/[Filtered]",
+    );
+    expect(
+      scrubUrl(`https://hub.example/api/approval-bundle/${token}/media/1/0-0`),
+    ).toBe("https://hub.example/api/approval-bundle/[Filtered]/media/1/0-0");
     expect(
       scrubUrl(`https://hub.example/reset-password?token=${token}&lang=hu`),
     ).toBe("https://hub.example/reset-password?token=[Filtered]&lang=hu");
