@@ -25,9 +25,16 @@ to `/api/health/live`. `NEXT_PUBLIC_SENTRY_DSN` and
 `NEXT_PUBLIC_SENTRY_ENVIRONMENT` must exist as service variables before the
 build because they are inlined into the browser bundle. The custom domain
 `hub.g2amarketing.hu` is attached to this service (CNAME + TXT record from the
-Railway domain settings at the DNS provider). Run migrations against the
-production database before the first release and after every release that adds
-one: `npx tsx --env-file=<production env file> scripts/migrate.ts`.
+Railway domain settings at the DNS provider); the web service listens on
+Railway's `PORT` (8080), which is the domain's target port.
+
+Migrations run automatically: the production `worker` service has the
+pre-deploy command `./node_modules/.bin/tsx scripts/migrate.ts`, so every
+release applies pending migrations over the private network before the new
+worker starts. The script holds an advisory lock and skips migrations that are
+already recorded, so reruns are safe. Migrations must stay backward compatible
+with the previous web release, because the web service may roll out before the
+worker's pre-deploy step finishes.
 
 ## Web
 
