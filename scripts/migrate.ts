@@ -34,6 +34,7 @@ try {
     "026_client_external_ref.sql",
     "027_brand_profile_sync.sql",
     "028_webhooks.sql",
+    "029_approval_bundles.sql",
   ]) {
     const exists = await conn.query(
       "SELECT 1 FROM schema_migrations WHERE name=$1",

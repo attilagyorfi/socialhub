@@ -1,6 +1,6 @@
 # Security
 
-Implemented controls include Better Auth email/password and magic-link authentication, Redis-backed authentication throttling, separate server-side RBAC and client membership checks, validation with Zod, same-origin mutation enforcement, UUID-scoped database relations, random expiring approval tokens stored as SHA-256 hashes, and AES-256-GCM encryption for social credentials with organization/client/account authenticated context.
+Implemented controls include Better Auth email/password and magic-link authentication, Redis-backed authentication throttling, separate server-side RBAC and client membership checks, validation with Zod, same-origin mutation enforcement, UUID-scoped database relations, random expiring approval tokens stored as SHA-256 hashes (per-post links and revocable monthly approval bundles, both rate-limited by token hash), and AES-256-GCM encryption for social credentials with organization/client/account authenticated context.
 
 Access tokens and client secrets are not returned by the application API. Approval and team invitation links are bearer capabilities: share them only with the intended recipient. They expire after seven days and their raw tokens are never stored in the database. Invitation acceptance requires an authenticated account with the invited email and cannot be replayed. Successful approval decisions also cannot be replayed to change the result. Media URLs expire after five minutes.
 

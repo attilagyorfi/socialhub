@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import type { Context } from "./context";
 import { transaction, audit } from "./transaction";
 import { AppError, hashToken } from "../core/security";
@@ -507,124 +508,145 @@ export async function decideApproval(
         "EXPIRED",
         "This approval link is invalid or expired.",
       );
-    if (actor && request.assigned_to && request.assigned_to !== actor.userId)
-      throw new AppError(
-        403,
-        "ASSIGNEE_REQUIRED",
-        "This review is assigned to another reviewer.",
-      );
-    const post = (
-      await tx.query("SELECT * FROM posts WHERE id=$1 FOR UPDATE", [
-        request.post_id,
-      ])
-    ).rows[0];
-    if (
-      request.status !== "PENDING" ||
-      post.status !== "PENDING_APPROVAL" ||
-      request.revision !== post.revision
-    )
-      throw new AppError(
-        409,
-        "STALE_APPROVAL",
-        "This request has already been decided or the post has changed.",
-      );
-    if (actor && action !== "comment")
-      await assertNotSelfReview(tx, actor, actor.userId, post.author_id);
-    if (action !== "approve" && !comment.trim())
-      throw new AppError(
-        422,
-        "COMMENT_REQUIRED",
-        "Please explain the requested changes or enter a comment.",
-      );
-    if (comment.trim())
-      await tx.query(
-        `INSERT INTO approval_comments(
-           organization_id,client_id,approval_request_id,author,body,author_user_id
-         ) VALUES($1,$2,$3,$4,$5,$6)`,
-        [
-          request.organization_id,
-          request.client_id,
-          request.id,
-          actor ? "Internal reviewer" : "External reviewer",
-          comment,
-          actor?.userId ?? null,
-        ],
-      );
-    let next: { url: string | null; kind: string } | undefined;
-    if (action !== "comment") {
-      await tx.query(
-        "UPDATE approval_requests SET status=$1,updated_at=now() WHERE id=$2",
-        [action === "approve" ? "APPROVED" : "CHANGES_REQUESTED", request.id],
-      );
-      if (action === "approve" && request.remaining_steps.length)
-        next = await insertReview(tx, request, request.remaining_steps);
-      await tx.query(
-        "UPDATE posts SET status=$1,updated_at=now() WHERE id=$2",
-        [
-          action === "approve"
-            ? next
-              ? "PENDING_APPROVAL"
-              : "APPROVED"
-            : "DRAFT",
-          post.id,
-        ],
-      );
-      // Only the final approval and change requests notify integrations;
-      // intermediate steps of a multi-step workflow do not.
-      if (action === "changes" || !next)
-        await enqueueWebhookEvent(
-          tx,
-          action === "approve" ? "post.approved" : "post.changes_requested",
-          {
-            organizationId: request.organization_id,
-            clientId: request.client_id,
-            postId: post.id,
-            status: action === "approve" ? "APPROVED" : "CHANGES_REQUESTED",
-          },
-        );
-    }
+    return applyApprovalDecision(tx, request, action, comment, actor);
+  });
+}
+
+export type ApprovalDecision = {
+  status: "APPROVED" | "PENDING_APPROVAL" | "CHANGES_REQUESTED" | "PENDING";
+  url: string | null | undefined;
+};
+
+// The decision itself, shared by the per-post link, the internal reviewer and
+// the monthly approval bundle. The caller has already found and locked the
+// approval request row inside `tx`; bundle decisions pass their bundle ID so
+// the audit log shows where the decision came from.
+export async function applyApprovalDecision(
+  tx: PoolClient,
+  request: any,
+  action: "approve" | "changes" | "comment",
+  comment: string,
+  actor?: Context,
+  origin?: { bundleId: string },
+): Promise<ApprovalDecision> {
+  if (actor && request.assigned_to && request.assigned_to !== actor.userId)
+    throw new AppError(
+      403,
+      "ASSIGNEE_REQUIRED",
+      "This review is assigned to another reviewer.",
+    );
+  const post = (
+    await tx.query("SELECT * FROM posts WHERE id=$1 FOR UPDATE", [
+      request.post_id,
+    ])
+  ).rows[0];
+  if (
+    request.status !== "PENDING" ||
+    post.status !== "PENDING_APPROVAL" ||
+    request.revision !== post.revision
+  )
+    throw new AppError(
+      409,
+      "STALE_APPROVAL",
+      "This request has already been decided or the post has changed.",
+    );
+  if (actor && action !== "comment")
+    await assertNotSelfReview(tx, actor, actor.userId, post.author_id);
+  if (action !== "approve" && !comment.trim())
+    throw new AppError(
+      422,
+      "COMMENT_REQUIRED",
+      "Please explain the requested changes or enter a comment.",
+    );
+  if (comment.trim())
     await tx.query(
-      "INSERT INTO audit_logs(organization_id,client_id,action,resource_id,metadata,actor_id) VALUES($1,$2,$3,$4,$5,$6)",
+      `INSERT INTO approval_comments(
+         organization_id,client_id,approval_request_id,author,body,author_user_id
+       ) VALUES($1,$2,$3,$4,$5,$6)`,
       [
         request.organization_id,
         request.client_id,
-        `approval.${action}`,
-        post.id,
-        JSON.stringify({
-          actor: actor?.userId ?? "external-reviewer",
-          approvalRequestId: request.id,
-          revision: request.revision,
-        }),
+        request.id,
+        actor ? "Internal reviewer" : "External reviewer",
+        comment,
         actor?.userId ?? null,
       ],
     );
+  let next: { url: string | null; kind: string } | undefined;
+  if (action !== "comment") {
     await tx.query(
-      "INSERT INTO notifications(organization_id,client_id,message,resource_id) VALUES($1,$2,$3,$4)",
-      [
-        request.organization_id,
-        request.client_id,
-        next
-          ? "Internal approval complete; client approval is required"
-          : action === "approve"
-            ? "Post approved"
-            : action === "changes"
-              ? "Changes requested"
-              : "Reviewer commented",
-        post.id,
-      ],
+      "UPDATE approval_requests SET status=$1,updated_at=now() WHERE id=$2",
+      [action === "approve" ? "APPROVED" : "CHANGES_REQUESTED", request.id],
     );
-    return {
-      status:
+    if (action === "approve" && request.remaining_steps.length)
+      next = await insertReview(tx, request, request.remaining_steps);
+    await tx.query(
+      "UPDATE posts SET status=$1,updated_at=now() WHERE id=$2",
+      [
         action === "approve"
           ? next
             ? "PENDING_APPROVAL"
             : "APPROVED"
+          : "DRAFT",
+        post.id,
+      ],
+    );
+    // Only the final approval and change requests notify integrations;
+    // intermediate steps of a multi-step workflow do not.
+    if (action === "changes" || !next)
+      await enqueueWebhookEvent(
+        tx,
+        action === "approve" ? "post.approved" : "post.changes_requested",
+        {
+          organizationId: request.organization_id,
+          clientId: request.client_id,
+          postId: post.id,
+          status: action === "approve" ? "APPROVED" : "CHANGES_REQUESTED",
+        },
+      );
+  }
+  await tx.query(
+    "INSERT INTO audit_logs(organization_id,client_id,action,resource_id,metadata,actor_id) VALUES($1,$2,$3,$4,$5,$6)",
+    [
+      request.organization_id,
+      request.client_id,
+      `approval.${action}`,
+      post.id,
+      JSON.stringify({
+        actor: actor?.userId ?? "external-reviewer",
+        approvalRequestId: request.id,
+        revision: request.revision,
+        ...(origin ? { bundleId: origin.bundleId } : {}),
+      }),
+      actor?.userId ?? null,
+    ],
+  );
+  await tx.query(
+    "INSERT INTO notifications(organization_id,client_id,message,resource_id) VALUES($1,$2,$3,$4)",
+    [
+      request.organization_id,
+      request.client_id,
+      next
+        ? "Internal approval complete; client approval is required"
+        : action === "approve"
+          ? "Post approved"
           : action === "changes"
-            ? "CHANGES_REQUESTED"
-            : "PENDING",
-      url: next?.url,
-    };
-  });
+            ? "Changes requested"
+            : "Reviewer commented",
+      post.id,
+    ],
+  );
+  return {
+    status:
+      action === "approve"
+        ? next
+          ? "PENDING_APPROVAL"
+          : "APPROVED"
+        : action === "changes"
+          ? "CHANGES_REQUESTED"
+          : "PENDING",
+    url: next?.url,
+  };
 }
 
 function requireReviewManager(c: Context, message: string) {

@@ -36,6 +36,7 @@ import { PrivacySettings } from "./privacy-settings";
 import { LanguageSettings } from "./language-settings";
 import { ApiKeySettings } from "./api-key-settings";
 import { WebhookSettings } from "./webhook-settings";
+import { ApprovalBundles } from "./approval-bundles";
 import { TourButton, TourProvider, useTourSetup } from "./tour/tour";
 import {
   apiError,
@@ -813,6 +814,16 @@ function HubShell() {
                       }}
                     />
                   )}
+                  {view === "Approvals" &&
+                    ["OWNER", "ADMIN", "SOCIAL_MANAGER"].includes(
+                      data.role,
+                    ) && (
+                      <ApprovalBundles
+                        key={data.clientId}
+                        clientId={data.clientId!}
+                        timeZone={timeZone}
+                      />
+                    )}
                   {(view === "Posts" || view === "Approvals") && (
                     <PostList
                       key={`${data.clientId}-${view}-${filter}`}
