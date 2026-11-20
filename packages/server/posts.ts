@@ -3,7 +3,9 @@ import { transaction, audit } from "./transaction";
 import {
   inMediaOrder,
   MEDIA_ERRORS,
+  mediaErrorText,
   mediaSetErrors,
+  supportsFirstComment,
   validatePost,
   type Platform,
 } from "../core/domain";
@@ -16,7 +18,11 @@ import type { PoolClient } from "pg";
 // attachment with a raw database error.
 export function assertUniqueMedia(mediaIds: string[]) {
   if (new Set(mediaIds).size !== mediaIds.length)
-    throw new AppError(422, "DUPLICATE_MEDIA", MEDIA_ERRORS.duplicate);
+    throw new AppError(
+      422,
+      "DUPLICATE_MEDIA",
+      mediaErrorText(MEDIA_ERRORS.duplicate),
+    );
 }
 
 // Attachment count and type limits per network, enforced when a draft is
@@ -30,8 +36,20 @@ export function assertMediaSet(
     throw new AppError(
       422,
       "MEDIA_UNSUPPORTED",
-      `${networkNames[platform]}: ${errors.join(" ")}`,
+      `${networkNames[platform]}: ${errors.map(mediaErrorText).join(" ")}`,
     );
+}
+// The stored first comment: blank means none. Networks whose adapter cannot
+// post a comment reject it instead of silently dropping approved text.
+export function firstCommentFor(platform: Platform, value?: string | null) {
+  const text = value?.trim() ? value : null;
+  if (text && !supportsFirstComment(platform))
+    throw new AppError(
+      422,
+      "FIRST_COMMENT_UNSUPPORTED",
+      `${networkNames[platform]}: a first comment is not available on this network.`,
+    );
+  return text;
 }
 const networkNames: Record<Platform, string> = {
   facebook: "Facebook",
@@ -82,7 +100,7 @@ export async function publishabilityErrors(
       link: post.link,
       media,
     }))
-      errors.push(`${target.platform}: ${message}`);
+      errors.push(`${target.platform}: ${mediaErrorText(message)}`);
   }
   return { targets, errors };
 }
@@ -161,7 +179,7 @@ export async function insertDraftPost(
       assertMediaSet(account.platform, media);
     }
     await tx.query(
-      "INSERT INTO post_targets(organization_id,client_id,post_id,social_account_id,caption,media_ids) VALUES($1,$2,$3,$4,$5,$6)",
+      "INSERT INTO post_targets(organization_id,client_id,post_id,social_account_id,caption,media_ids,first_comment) VALUES($1,$2,$3,$4,$5,$6,$7)",
       [
         scope.organizationId,
         scope.clientId,
@@ -169,6 +187,7 @@ export async function insertDraftPost(
         account.id,
         target.caption,
         target.mediaIds,
+        firstCommentFor(account.platform, target.firstComment),
       ],
     );
   }

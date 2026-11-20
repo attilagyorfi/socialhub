@@ -31,6 +31,7 @@ type Item = {
     platform: string | null;
     name: string | null;
     caption: string;
+    firstComment?: string | null;
     media: { file: string; name: string; mime_type: string }[];
   }[];
   comments: { author: string; body: string; created_at: string }[];
@@ -199,11 +200,19 @@ export default function BundleApproval({
                     <div key={i}>
                       <p className="muted">
                         {version.platform
-                          ? t(`common.network.${version.platform}` as MessageKey)
+                          ? t(
+                              `common.network.${version.platform}` as MessageKey,
+                            )
                           : ""}
                         {version.name ? ` · ${version.name}` : ""}
                       </p>
                       <p className="caption-full">{version.caption}</p>
+                      {version.firstComment && (
+                        <p className="first-comment-text">
+                          <strong>{t("approve.firstComment")}</strong>{" "}
+                          {version.firstComment}
+                        </p>
+                      )}
                       <div className="approval-media">
                         {version.media.map((m) => {
                           const src = `/api/approval-bundle/${token}/media/${item.item}/${m.file}`;

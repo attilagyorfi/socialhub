@@ -1,12 +1,22 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { Sparkles, ImageIcon, Check, Send, ShieldCheck } from "lucide-react";
-import { type HubData, type Mutate, type Post, Network } from "./types";
 import {
+  type HashtagSet,
+  type HubData,
+  type Mutate,
+  type Post,
+  Network,
+} from "./types";
+import {
+  appendHashtags,
   capabilities,
+  FIRST_COMMENT_LIMIT,
   inMediaOrder,
   MEDIA_ERRORS,
+  MULTI_IMAGE_LIMIT,
   moveMedia,
+  supportsFirstComment,
   validatePost,
   type Platform,
 } from "../../../packages/core/domain";
@@ -77,11 +87,49 @@ function localizeValidation(
   t: (key: MessageKey, vars?: Vars) => string,
   message: string,
 ) {
-  if (VALIDATION[message]) return t(VALIDATION[message]);
+  if (VALIDATION[message])
+    return t(VALIDATION[message], { limit: MULTI_IMAGE_LIMIT });
   const tooLong = /^Caption exceeds (\d+) characters\.$/.exec(message);
   return tooLong
     ? t("composer.validation.tooLong", { limit: tooLong[1] })
     : message;
+}
+// One click appends the chosen client hashtag set to a text field.
+function HashtagInsert({
+  sets,
+  label,
+  onInsert,
+}: {
+  sets: HashtagSet[];
+  label: string;
+  onInsert: (hashtags: string[]) => void;
+}) {
+  const { t } = useT();
+  const [id, setId] = useState("");
+  if (!sets.length) return null;
+  const chosen = sets.find((set) => set.id === id) ?? sets[0]!;
+  return (
+    <span className="hashtag-insert">
+      <select
+        aria-label={t("composer.hashtags.choose")}
+        value={chosen.id}
+        onChange={(e) => setId(e.target.value)}
+      >
+        {sets.map((set) => (
+          <option key={set.id} value={set.id}>
+            {set.name}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className="text-button"
+        onClick={() => onInsert(chosen.hashtags)}
+      >
+        {label}
+      </button>
+    </span>
+  );
 }
 const supportsLinks = (platform: string) =>
   capabilities[platform as Platform]?.includes("LINK_POST") ?? false;
@@ -127,6 +175,13 @@ export function Composer({
         .map((t) => [t.accountId, t.caption]) ?? [],
     ),
   );
+  const [firstComments, setFirstComments] = useState<Record<string, string>>(
+    Object.fromEntries(
+      editing?.targets
+        .filter((t) => t.firstComment)
+        .map((t) => [t.accountId, t.firstComment!]) ?? [],
+    ),
+  );
   const [networkMedia, setNetworkMedia] = useState<Record<string, string[]>>(
     Object.fromEntries(
       editing?.targets.map((t) => [t.accountId, t.mediaIds]) ?? [],
@@ -167,11 +222,24 @@ export function Composer({
       caption: overrides[a.id] ?? caption,
       link,
       media: inMediaOrder(networkMedia[a.id] ?? mediaIds, data.media),
-    }).map(
-      (message) =>
-        `${networkName(a.platform)}: ${localizeValidation(t, message)}`,
-    ),
+    })
+      .map(
+        (message) =>
+          `${networkName(a.platform)}: ${localizeValidation(t, message)}`,
+      )
+      .concat(
+        (firstComments[a.id]?.length ?? 0) > FIRST_COMMENT_LIMIT
+          ? [
+              `${networkName(a.platform)}: ${t("composer.firstComment.tooLong", { limit: FIRST_COMMENT_LIMIT })}`,
+            ]
+          : [],
+      ),
   );
+  // Only networks whose adapter can comment send a first comment.
+  const firstCommentOf = (a: { id: string; platform: string }) =>
+    supportsFirstComment(a.platform) && firstComments[a.id]?.trim()
+      ? firstComments[a.id]
+      : undefined;
   // Instagram and TikTok captions cannot carry a link. Keep the field visible
   // while it still holds a value so the user can remove it.
   const showLink =
@@ -206,6 +274,7 @@ export function Composer({
           accountId: a.id,
           caption: overrides[a.id] ?? caption,
           mediaIds: networkMedia[a.id] ?? mediaIds,
+          firstComment: firstCommentOf(a),
         })),
       });
       const draft = {
@@ -216,6 +285,7 @@ export function Composer({
           caption: overrides[a.id] ?? caption,
           platform: a.platform,
           mediaIds: networkMedia[a.id] ?? mediaIds,
+          firstComment: firstCommentOf(a) ?? null,
           status: "DRAFT",
         })),
       };
@@ -284,6 +354,13 @@ export function Composer({
               {t("composer.caption.characters", { count: caption.length })}
             </span>
             <span>{t("composer.caption.base")}</span>
+            <HashtagInsert
+              sets={data.hashtagSets ?? []}
+              label={t("composer.hashtags.insertCaption")}
+              onInsert={(tags) =>
+                setCaption((text) => appendHashtags(text, tags))
+              }
+            />
           </div>
           <div className="ai-tools">
             <Sparkles size={18} />
@@ -496,6 +573,40 @@ export function Composer({
                 >
                   {t("composer.network.useBase")}
                 </button>
+                {supportsFirstComment(a.platform) ? (
+                  <label className="first-comment">
+                    <span>{t("composer.firstComment.label")}</span>
+                    <textarea
+                      aria-label={t("composer.firstComment.aria", {
+                        network: networkName(a.platform),
+                      })}
+                      rows={2}
+                      maxLength={FIRST_COMMENT_LIMIT}
+                      placeholder={t("composer.firstComment.placeholder")}
+                      value={firstComments[a.id] ?? ""}
+                      onChange={(e) =>
+                        setFirstComments({
+                          ...firstComments,
+                          [a.id]: e.target.value,
+                        })
+                      }
+                    />
+                    <HashtagInsert
+                      sets={data.hashtagSets ?? []}
+                      label={t("composer.hashtags.insertComment")}
+                      onInsert={(tags) =>
+                        setFirstComments((current) => ({
+                          ...current,
+                          [a.id]: appendHashtags(current[a.id] ?? "", tags),
+                        }))
+                      }
+                    />
+                  </label>
+                ) : (
+                  <p className="muted first-comment-unavailable">
+                    {t("composer.firstComment.unavailable")}
+                  </p>
+                )}
                 <details>
                   <summary>
                     {t("composer.media.customize", {

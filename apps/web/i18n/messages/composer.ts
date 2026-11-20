@@ -63,7 +63,17 @@ const en = {
   "validation.video": "Video is not supported on this network.",
   "validation.reelTooShort": "Instagram Reels must be at least 3 seconds long.",
   "validation.mediaDuplicate": "Add each image to a post only once.",
-  "validation.mediaTooMany": "A post can have at most 10 images.",
+  "validation.mediaTooMany": "A post can have at most {limit} images.",
+  "hashtags.choose": "Hashtag set",
+  "hashtags.insertCaption": "Add to the text",
+  "hashtags.insertComment": "Add to the first comment",
+  "firstComment.label": "First comment (optional)",
+  "firstComment.aria": "{network} first comment",
+  "firstComment.placeholder":
+    "Posted as the first comment right after publishing",
+  "firstComment.unavailable": "First comment: not available on this network.",
+  "firstComment.tooLong":
+    "The first comment can be at most {limit} characters.",
   "validation.mediaImagesOnly":
     "A post with several attachments can only contain images. Publish the video in a separate post.",
   "validation.mediaSingle":
@@ -158,7 +168,16 @@ const hu = {
     "Instagram Reelhez legalább 3 másodperces videó kell.",
   "validation.mediaDuplicate":
     "Ugyanazt a képet csak egyszer adhatod hozzá egy poszthoz.",
-  "validation.mediaTooMany": "Egy posztban legfeljebb 10 kép lehet.",
+  "validation.mediaTooMany": "Egy posztban legfeljebb {limit} kép lehet.",
+  "hashtags.choose": "Hashtag-készlet",
+  "hashtags.insertCaption": "Beszúrás a szövegbe",
+  "hashtags.insertComment": "Beszúrás az első kommentbe",
+  "firstComment.label": "Első komment (nem kötelező)",
+  "firstComment.aria": "{network} első komment",
+  "firstComment.placeholder":
+    "A közzététel után rögtön megjelenik első kommentként",
+  "firstComment.unavailable": "Első komment: ezen a hálózaton nem elérhető.",
+  "firstComment.tooLong": "Az első komment legfeljebb {limit} karakter lehet.",
   "validation.mediaImagesOnly":
     "Több elemből álló posztba csak képeket tehetsz. A videót külön posztban tedd közzé.",
   "validation.mediaSingle":

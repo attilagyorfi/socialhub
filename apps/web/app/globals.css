@@ -2808,3 +2808,30 @@ a.button {
     transition: none;
   }
 }
+
+/* First comment and hashtag sets */
+.hashtag-insert {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.first-comment {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+.first-comment-text {
+  white-space: pre-wrap;
+}
+.hashtag-set-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.hashtag-set-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}

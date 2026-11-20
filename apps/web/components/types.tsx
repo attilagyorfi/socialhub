@@ -23,7 +23,19 @@ export type Target = {
   mediaIds: string[];
   status: string;
   errorCode?: string;
+  firstComment?: string | null;
+  // first_comment_jobs status once the post is live.
+  firstCommentStatus?:
+    | "PENDING"
+    | "RETRY"
+    | "RUNNING"
+    | "SENT"
+    | "FAILED"
+    | "UNCERTAIN"
+    | null;
+  firstCommentError?: string | null;
 };
+export type HashtagSet = { id: string; name: string; hashtags: string[] };
 export type Post = {
   id: string;
   revision: number;
@@ -99,6 +111,7 @@ export type HubData = {
     metadata: Record<string, unknown>;
   }[];
   brand: Record<string, string>;
+  hashtagSets: HashtagSet[];
   // Brand profile synced from the Growth Engine; shown read-only.
   brandSync: {
     profile: {

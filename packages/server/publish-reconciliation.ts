@@ -5,6 +5,7 @@ import type { Context } from "./context";
 import { findMetaPublishedMatches } from "./meta";
 import { audit, transaction } from "./transaction";
 import { enqueueWebhookEvent } from "./webhooks";
+import { enqueueFirstComment } from "./first-comments";
 
 type ReconciliationJob = {
   id: string;
@@ -173,6 +174,8 @@ async function confirmMatch(
        WHERE id=$3`,
       [match.id, match.createdAt, input.target_id],
     );
+    // Only now is the post confirmed live, so the first comment may follow.
+    await enqueueFirstComment(tx, input.target_id);
     // Same transaction as the confirmation; this may follow an earlier
     // post.failed (META_DELIVERY_UNCERTAIN) for the same target.
     await enqueueWebhookEvent(tx, "post.published", {

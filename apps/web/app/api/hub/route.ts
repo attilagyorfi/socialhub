@@ -45,7 +45,12 @@ import {
   uuid,
   timeZoneInput,
   localeInput,
+  hashtagSetInput,
 } from "../../../../../packages/server/validation";
+import {
+  deleteHashtagSet,
+  saveHashtagSet,
+} from "../../../../../packages/server/hashtag-sets";
 import { rateLimit } from "../../../../../packages/server/queue";
 import { boundedForm } from "../../../../../packages/server/upload-validation";
 import {
@@ -149,6 +154,7 @@ export async function GET(request: Request) {
           audit: [],
           brand: {},
           brandSync: null,
+          hashtagSets: [],
           workflow: ["EXTERNAL"],
           approvalAutomation: {
             automaticReminders: false,
@@ -217,8 +223,10 @@ export async function GET(request: Request) {
          coalesce((SELECT jsonb_agg(jsonb_build_object(
            'id',t.id,'accountId',t.social_account_id,'platform',a.platform,
            'caption',t.caption,'status',t.status,'mediaIds',t.media_ids,
-           'errorCode',t.error_code
+           'errorCode',t.error_code,'firstComment',t.first_comment,
+           'firstCommentStatus',fc.status,'firstCommentError',fc.last_error
          )) FROM post_targets t JOIN social_accounts a ON a.id=t.social_account_id
+         LEFT JOIN first_comment_jobs fc ON fc.target_id=t.id
          WHERE t.post_id=p.id),'[]'::jsonb) AS targets
          FROM posts p
          LEFT JOIN LATERAL (
@@ -266,6 +274,10 @@ export async function GET(request: Request) {
                 escalate_after_hours,max_automatic_reminders
          FROM approval_workflows
          WHERE organization_id=$1 AND client_id=$2 AND is_default`,
+        values,
+      ),
+      pool.query(
+        "SELECT id,name,hashtags FROM client_hashtag_sets WHERE organization_id=$1 AND client_id=$2 ORDER BY lower(name)",
         values,
       ),
     ]);
@@ -324,6 +336,7 @@ export async function GET(request: Request) {
               escalateAfterHours: 72,
               maxAutomaticReminders: 2,
             },
+        hashtagSets: results[8].rows,
         reviewers,
         team: team.members,
         invitations: team.invitations,
@@ -406,6 +419,7 @@ export async function POST(request: Request) {
               action === "account.oauth.start" ||
               action === "account.disconnect" ||
               action === "brand.save" ||
+              action.startsWith("hashtags.") ||
               action === "workflow.save" ||
               action === "privacy.organization.erase.request" ||
               action === "privacy.retention.update" ||
@@ -546,6 +560,16 @@ export async function POST(request: Request) {
             z.iso.datetime({ offset: true }).parse(body.scheduledAt),
           ),
         );
+      case "hashtags.save":
+        return Response.json(
+          await saveHashtagSet(
+            c,
+            hashtagSetInput.parse(body),
+            body.id ? uuid.parse(body.id) : undefined,
+          ),
+        );
+      case "hashtags.delete":
+        return Response.json(await deleteHashtagSet(c, uuid.parse(body.id)));
       case "brand.save": {
         await saveLocalBrandProfile(c, body.brand);
         break;

@@ -22,6 +22,14 @@ const en = {
   "pagination.next": "Next",
   "pagination.page": "Page {page}",
   "error.load": "Unable to load posts.",
+  "firstComment.title": "First comment",
+  "firstComment.status.PENDING": "Waiting to be posted",
+  "firstComment.status.RETRY": "Will be retried shortly",
+  "firstComment.status.RUNNING": "Posting now",
+  "firstComment.status.SENT": "Posted",
+  "firstComment.status.FAILED": "Failed. The post itself is live.",
+  "firstComment.status.UNCERTAIN":
+    "Unconfirmed: check the post before adding it by hand.",
 } as const;
 
 const hu = {
@@ -48,6 +56,14 @@ const hu = {
   "pagination.next": "Következő",
   "pagination.page": "{page}. oldal",
   "error.load": "Nem sikerült betölteni a posztokat.",
+  "firstComment.title": "Első komment",
+  "firstComment.status.PENDING": "Közzétételre vár",
+  "firstComment.status.RETRY": "Hamarosan újra megpróbáljuk",
+  "firstComment.status.RUNNING": "Most kerül ki",
+  "firstComment.status.SENT": "Kint van",
+  "firstComment.status.FAILED": "Nem sikerült. Maga a poszt kint van.",
+  "firstComment.status.UNCERTAIN":
+    "Nem biztos, hogy kikerült: nézd meg a posztot, mielőtt kézzel hozzáadod.",
 } satisfies Record<keyof typeof en, string>;
 
 export default { en, hu };

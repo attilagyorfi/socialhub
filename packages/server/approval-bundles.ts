@@ -340,7 +340,12 @@ async function activeBundle(
 }
 
 type Snapshot = {
-  targets?: { accountId: string; caption: string; mediaIds: string[] }[];
+  targets?: {
+    accountId: string;
+    caption: string;
+    mediaIds: string[];
+    firstComment?: string;
+  }[];
 };
 
 // Latest content version of each post: what the client is asked to approve.
@@ -419,6 +424,9 @@ export async function bundleView(secret: string) {
             platform: account?.platform ?? null,
             name: account?.name ?? null,
             caption: target.caption,
+            firstComment: target.firstComment?.trim()
+              ? target.firstComment
+              : null,
             media: (target.mediaIds ?? []).flatMap((id, mediaIndex) => {
               const asset = assets.get(id);
               return asset
@@ -473,11 +481,12 @@ export async function bundleMedia(secret: string, item: number, file: string) {
       [bundle.id, item],
     )
   ).rows[0];
-  const target = match && row
-    ? (await snapshots([row.post_id])).get(row.post_id)?.targets?.[
-        Number(match[1])
-      ]
-    : undefined;
+  const target =
+    match && row
+      ? (await snapshots([row.post_id])).get(row.post_id)?.targets?.[
+          Number(match[1])
+        ]
+      : undefined;
   const mediaId = target?.mediaIds?.[Number(match?.[2])];
   const asset = mediaId
     ? (

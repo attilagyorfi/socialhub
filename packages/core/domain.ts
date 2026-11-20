@@ -99,14 +99,57 @@ export type Content = { caption: string; link?: string | null; media: Media[] };
 // post). Only images, in the order of the target's media_ids. Every other
 // network takes one attachment. Shared by saving, scheduling and the worker.
 export const MULTI_IMAGE_LIMIT = 10;
+// Stable error codes; the UI translates them (composer.validation.*).
 export const MEDIA_ERRORS = {
-  duplicate: "Ugyanazt a képet csak egyszer adhatod hozzá egy poszthoz.",
-  tooMany: `Egy posztban legfeljebb ${MULTI_IMAGE_LIMIT} kép lehet.`,
-  imagesOnly:
-    "Több elemből álló posztba csak képeket tehetsz. A videót külön posztban tedd közzé.",
-  single:
-    "Ezen a hálózaton egy posztban csak egy kép vagy videó lehet. Vegyél ki elemeket, vagy vedd ki ezt a fiókot.",
+  duplicate: "media.duplicate",
+  tooMany: "media.too_many",
+  imagesOnly: "media.images_only",
+  single: "media.single",
 } as const;
+export type MediaErrorCode = (typeof MEDIA_ERRORS)[keyof typeof MEDIA_ERRORS];
+// English text for server responses, in the style of the other messages.
+export const MEDIA_ERROR_TEXT: Record<MediaErrorCode, string> = {
+  "media.duplicate": "Add each image to a post only once.",
+  "media.too_many": `A post can have at most ${MULTI_IMAGE_LIMIT} images.`,
+  "media.images_only":
+    "A post with several attachments can only contain images. Publish the video in a separate post.",
+  "media.single":
+    "This network takes one image or video per post. Remove attachments or deselect this account.",
+};
+export const mediaErrorText = (error: string) =>
+  MEDIA_ERROR_TEXT[error as MediaErrorCode] ?? error;
+
+// First comment: posted after a confirmed publication where the provider
+// adapter supports it (Facebook Page posts and Instagram media).
+export const FIRST_COMMENT_LIMIT = 2200;
+export const FIRST_COMMENT_PLATFORMS: readonly Platform[] = [
+  "facebook",
+  "instagram",
+];
+export const supportsFirstComment = (platform: string) =>
+  FIRST_COMMENT_PLATFORMS.includes(platform as Platform);
+
+// Hashtag sets per client: "#tag" form, no whitespace, no duplicates.
+export const HASHTAG_SET_LIMIT = 30;
+export const HASHTAG_MAX_LENGTH = 100;
+export function normalizeHashtags(values: readonly string[]) {
+  const tags: string[] = [];
+  for (const value of values.flatMap((v) => v.split(/[\s,]+/))) {
+    const tag = value.replace(/^#+/, "");
+    if (!tag) continue;
+    const normalized = `#${tag}`;
+    if (!tags.some((t) => t.toLowerCase() === normalized.toLowerCase()))
+      tags.push(normalized);
+  }
+  return tags;
+}
+// Appends a set to a text, separated by a blank line or a space.
+export function appendHashtags(text: string, hashtags: readonly string[]) {
+  const tags = hashtags.join(" ");
+  if (!tags) return text;
+  const trimmed = text.replace(/\s+$/, "");
+  return trimmed ? `${trimmed}\n\n${tags}` : tags;
+}
 export function mediaSetErrors(
   platform: Platform,
   media: Pick<Media, "id" | "mime_type">[],

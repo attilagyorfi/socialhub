@@ -1,6 +1,14 @@
 import { PGlite } from "@electric-sql/pglite";
 import { readdir, readFile } from "node:fs/promises";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 const db = new PGlite();
 
@@ -146,7 +154,10 @@ async function bundleSecret(w: Workspace) {
 
 async function events(org: string) {
   return (
-    await db.query<{ event_type: string; payload: { data: { post_id: string } } }>(
+    await db.query<{
+      event_type: string;
+      payload: { data: { post_id: string } };
+    }>(
       "SELECT event_type,payload FROM webhook_deliveries WHERE organization_id=$1 ORDER BY created_at",
       [org],
     )
@@ -167,7 +178,11 @@ function get(secret: string) {
     { params: Promise.resolve({ token: secret }) },
   );
 }
-function post_(secret: string, body: unknown, origin = "http://localhost:3010") {
+function post_(
+  secret: string,
+  body: unknown,
+  origin = "http://localhost:3010",
+) {
   return route.POST(
     new Request(`http://localhost:3010/api/approval-bundle/${secret}`, {
       method: "POST",
@@ -265,9 +280,9 @@ describe("creating a bundle", () => {
     await expect(bundleStatus(foreign, bundle.id)).rejects.toMatchObject({
       status: 404,
     });
-    await expect(revokeApprovalBundle(foreign, bundle.id)).rejects.toMatchObject(
-      { status: 404 },
-    );
+    await expect(
+      revokeApprovalBundle(foreign, bundle.id),
+    ).rejects.toMatchObject({ status: 404 });
     await expect(
       revokeApprovalBundle(other.c, bundle.id),
     ).rejects.toMatchObject({ status: 404 });
@@ -286,9 +301,9 @@ describe("deciding on a bundle", () => {
     // One post is approved on its own link before the client opens the bundle.
     await decideApproval(posts[0].secret, "approve", "");
 
-    expect(await decideBundle(bundle.secret, { action: "approve_all" })).toEqual(
-      { approved: 2, skipped: 1 },
-    );
+    expect(
+      await decideBundle(bundle.secret, { action: "approve_all" }),
+    ).toEqual({ approved: 2, skipped: 1 });
     for (const p of posts) expect(await postStatus(p.id)).toBe("APPROVED");
     const recorded = await events(w.org);
     expect(recorded).toHaveLength(3);
@@ -302,14 +317,14 @@ describe("deciding on a bundle", () => {
         [w.org],
       )
     ).rows;
-    expect(audits.filter((a) => a.metadata.bundleId === bundle.id)).toHaveLength(
-      2,
-    );
+    expect(
+      audits.filter((a) => a.metadata.bundleId === bundle.id),
+    ).toHaveLength(2);
 
     // Nothing left to decide: no further events.
-    expect(await decideBundle(bundle.secret, { action: "approve_all" })).toEqual(
-      { approved: 0, skipped: 3 },
-    );
+    expect(
+      await decideBundle(bundle.secret, { action: "approve_all" }),
+    ).toEqual({ approved: 0, skipped: 3 });
     expect(await events(w.org)).toHaveLength(3);
     expect((await bundleStatus(w.c, bundle.id)).summary).toEqual({
       total: 3,
@@ -372,7 +387,11 @@ describe("deciding on a bundle", () => {
     await post(w, { at: "2026-12-04T09:00:00Z", caption: "Second" });
     await post(w, { at: "2026-12-05T09:00:00Z", caption: "Third" });
     const bundle = await bundleSecret(w);
-    await decideBundle(bundle.secret, { action: "approve", item: 2, comment: "" });
+    await decideBundle(bundle.secret, {
+      action: "approve",
+      item: 2,
+      comment: "",
+    });
     const view = await bundleView(bundle.secret);
     expect(
       view.items.map((item) => [item.item, item.caption, item.state]),
@@ -387,6 +406,7 @@ describe("deciding on a bundle", () => {
         platform: "facebook",
         name: "Client page",
         caption: "First",
+        firstComment: null,
         media: [],
       },
     ]);
@@ -398,7 +418,11 @@ describe("deciding on a bundle", () => {
     const viaLink = await post(w, { at: "2026-12-04T09:00:00Z" });
     const bundle = await bundleSecret(w);
 
-    await decideBundle(bundle.secret, { action: "approve", item: 1, comment: "" });
+    await decideBundle(bundle.secret, {
+      action: "approve",
+      item: 1,
+      comment: "",
+    });
     await expect(
       decideBundle(bundle.secret, { action: "approve", item: 1, comment: "" }),
     ).rejects.toMatchObject({ status: 409 });
@@ -536,9 +560,9 @@ describe("public bundle endpoint", () => {
       [1, "1-0"],
       [2, "0-0"],
     ] as const)
-      await expect(bundleMedia(bundle.secret, item, file)).rejects.toMatchObject(
-        { status: 404 },
-      );
+      await expect(
+        bundleMedia(bundle.secret, item, file),
+      ).rejects.toMatchObject({ status: 404 });
     await revokeApprovalBundle(w.c, bundle.id);
     await expect(bundleMedia(bundle.secret, 1, "0-0")).rejects.toMatchObject({
       status: 404,
@@ -568,16 +592,39 @@ describe("public bundle endpoint", () => {
     ]);
     const bundle = await bundleSecret(w);
     const view = await bundleView(bundle.secret);
-    expect(view.items[0].versions[0].media.map((m) => [m.file, m.name])).toEqual(
-      [
-        ["0-0", "first.jpg"],
-        ["0-1", "second.jpg"],
-        ["0-2", "third.jpg"],
-      ],
-    );
+    expect(
+      view.items[0].versions[0].media.map((m) => [m.file, m.name]),
+    ).toEqual([
+      ["0-0", "first.jpg"],
+      ["0-1", "second.jpg"],
+      ["0-2", "third.jpg"],
+    ]);
     expect((await bundleMedia(bundle.secret, 1, "0-2")).object_key).toBe(
       `${w.org}/${ids[2]}`,
     );
+  });
+
+  it("shows the approved first comment per account", async () => {
+    const w = await workspace();
+    const target = await post(w);
+    await db.query("UPDATE post_versions SET snapshot=$1 WHERE post_id=$2", [
+      JSON.stringify({
+        targets: [
+          {
+            accountId: w.account,
+            caption: "With comment",
+            mediaIds: [],
+            firstComment: "#first #comment",
+          },
+        ],
+      }),
+      target.id,
+    ]);
+    const view = await bundleView((await bundleSecret(w)).secret);
+    expect(view.items[0].versions[0]).toMatchObject({
+      caption: "With comment",
+      firstComment: "#first #comment",
+    });
   });
 
   it("checks origin and rate limits decisions by token hash", async () => {
@@ -585,8 +632,13 @@ describe("public bundle endpoint", () => {
     const target = await post(w);
     const bundle = await bundleSecret(w);
     expect(
-      (await post_(bundle.secret, { action: "approve_all" }, "https://evil.test"))
-        .status,
+      (
+        await post_(
+          bundle.secret,
+          { action: "approve_all" },
+          "https://evil.test",
+        )
+      ).status,
     ).toBe(403);
     rateLimit.mockImplementation(async () => false);
     expect((await post_(bundle.secret, { action: "approve_all" })).status).toBe(

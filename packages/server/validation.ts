@@ -1,5 +1,14 @@
 import { z } from "zod";
-import { MEDIA_ERRORS, MULTI_IMAGE_LIMIT, platforms } from "../core/domain";
+import {
+  FIRST_COMMENT_LIMIT,
+  HASHTAG_MAX_LENGTH,
+  HASHTAG_SET_LIMIT,
+  MEDIA_ERRORS,
+  mediaErrorText,
+  MULTI_IMAGE_LIMIT,
+  normalizeHashtags,
+  platforms,
+} from "../core/domain";
 import { canonicalTimeZone, validTimeZone } from "../core/timezones";
 export const uuid = z.string().uuid();
 export const localeInput = z.enum(["hu", "en"]);
@@ -36,11 +45,37 @@ export const postInput = z.object({
       z.object({
         accountId: uuid,
         caption: z.string().max(63206),
-        mediaIds: z.array(uuid).max(MULTI_IMAGE_LIMIT, MEDIA_ERRORS.tooMany),
+        mediaIds: z
+          .array(uuid)
+          .max(MULTI_IMAGE_LIMIT, mediaErrorText(MEDIA_ERRORS.tooMany)),
+        // Posted as the first comment after publishing (Facebook, Instagram).
+        firstComment: z
+          .string()
+          .max(
+            FIRST_COMMENT_LIMIT,
+            `The first comment can be at most ${FIRST_COMMENT_LIMIT} characters.`,
+          )
+          .optional(),
       }),
     )
     .min(1)
     .max(15),
+});
+export const hashtagSetInput = z.object({
+  name: z.string().trim().min(1).max(80),
+  hashtags: z
+    .array(z.string().max(HASHTAG_MAX_LENGTH))
+    .max(HASHTAG_SET_LIMIT * 2)
+    .transform(normalizeHashtags)
+    .pipe(
+      z
+        .array(z.string().max(HASHTAG_MAX_LENGTH + 1))
+        .min(1, "Add at least one hashtag.")
+        .max(
+          HASHTAG_SET_LIMIT,
+          `A set can have at most ${HASHTAG_SET_LIMIT} hashtags.`,
+        ),
+    ),
 });
 export const connectInput = z.object({
   clientId: uuid,

@@ -64,6 +64,7 @@
 
 - [x] Monthly approval ("Havi jóváhagyás"): the client sees the whole period on one secret link and approves all posts at once or decides post by post (migration 029, `/approve/bundle/[token]`).
 - [x] Instagram carousel and Facebook multi-photo post (2–10 images, kept in `media_ids` order, reorderable in the composer, shown in order on both approval pages); several images on LinkedIn/Google are rejected when saving. No migration. See SOCIAL_PROVIDERS.md.
+- [x] Automatic first comment and per-client hashtag sets: optional first comment per target (Facebook Page posts and Instagram; part of the approval snapshot), posted by a durable, idempotent worker job after confirmed publication; named hashtag sets in the client settings, inserted into the caption or first comment with one click (migration 030). See SOCIAL_PROVIDERS.md.
 
 ### Delivery priority
 
