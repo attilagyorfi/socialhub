@@ -33,55 +33,26 @@ CREATE TABLE first_comment_jobs (
  last_error text,
  created_at timestamptz NOT NULL DEFAULT now(),
  updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(organization_id,client_id,idempotency_key),
  FOREIGN KEY(organization_id,client_id,target_id)
   REFERENCES post_targets(organization_id,client_id,id) ON DELETE CASCADE
 );
 CREATE INDEX first_comment_jobs_due_idx
  ON first_comment_jobs(run_at) WHERE status IN ('PENDING','RETRY');
 
--- provider_receipts now also records first comments. A foreign key cannot
--- point at either of two tables, so the scope check (same organization and
--- client as the job) and the cascade become triggers.
-DO $$
-DECLARE r record;
-BEGIN
- FOR r IN
-  SELECT conname FROM pg_constraint
-  WHERE conrelid='provider_receipts'::regclass AND contype='f'
-    AND confrelid='publish_jobs'::regclass
- LOOP
-  EXECUTE format('ALTER TABLE provider_receipts DROP CONSTRAINT %I', r.conname);
- END LOOP;
-END $$;
-
-CREATE FUNCTION provider_receipt_scope() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF NOT EXISTS (
-   SELECT 1 FROM publish_jobs
-   WHERE idempotency_key=NEW.idempotency_key
-     AND organization_id=NEW.organization_id AND client_id=NEW.client_id
- ) AND NOT EXISTS (
-   SELECT 1 FROM first_comment_jobs
-   WHERE idempotency_key=NEW.idempotency_key
-     AND organization_id=NEW.organization_id AND client_id=NEW.client_id
- ) THEN
-  RAISE EXCEPTION 'provider receipt has no job in this scope'
-   USING ERRCODE='23503';
- END IF;
- RETURN NEW;
-END $$;
-CREATE TRIGGER provider_receipts_scope
- BEFORE INSERT OR UPDATE ON provider_receipts
- FOR EACH ROW EXECUTE FUNCTION provider_receipt_scope();
-
-CREATE FUNCTION provider_receipt_cleanup() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- DELETE FROM provider_receipts WHERE idempotency_key=OLD.idempotency_key;
- RETURN OLD;
-END $$;
-CREATE TRIGGER publish_jobs_receipt_cleanup
- AFTER DELETE ON publish_jobs
- FOR EACH ROW EXECUTE FUNCTION provider_receipt_cleanup();
-CREATE TRIGGER first_comment_jobs_receipt_cleanup
- AFTER DELETE ON first_comment_jobs
- FOR EACH ROW EXECUTE FUNCTION provider_receipt_cleanup();
+-- Receipts of posted first comments. A separate table, so provider_receipts
+-- keeps its foreign keys to publish_jobs unchanged. Same shape and the same
+-- guarantees: one receipt per job idempotency key, scoped to the job's
+-- organization and client, removed together with the job.
+CREATE TABLE first_comment_receipts (
+ idempotency_key uuid PRIMARY KEY,
+ organization_id uuid NOT NULL,
+ client_id uuid NOT NULL,
+ provider text NOT NULL,
+ remote_id text NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(organization_id,client_id)
+  REFERENCES clients(organization_id,id) ON DELETE CASCADE,
+ FOREIGN KEY(organization_id,client_id,idempotency_key)
+  REFERENCES first_comment_jobs(organization_id,client_id,idempotency_key) ON DELETE CASCADE
+);

@@ -82,7 +82,7 @@ export async function executeFirstComment(id: string, graph?: MetaGraphClient) {
       // Mock accounts: a local receipt only, nothing leaves the process.
       remoteId = `mock-comment-${job.idempotency_key}`;
       await pool.query(
-        `INSERT INTO provider_receipts(idempotency_key,organization_id,client_id,provider,remote_id)
+        `INSERT INTO first_comment_receipts(idempotency_key,organization_id,client_id,provider,remote_id)
          VALUES($1,$2,$3,$4,$5) ON CONFLICT(idempotency_key) DO NOTHING`,
         [
           job.idempotency_key,

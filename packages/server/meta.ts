@@ -1553,7 +1553,7 @@ export async function publishMetaFirstComment(
   const provider = `meta:${platform}:comment`;
   const prior = (
     await pool.query(
-      "SELECT remote_id FROM provider_receipts WHERE idempotency_key=$1 AND organization_id=$2 AND client_id=$3 AND provider=$4",
+      "SELECT remote_id FROM first_comment_receipts WHERE idempotency_key=$1 AND organization_id=$2 AND client_id=$3 AND provider=$4",
       [input.idempotencyKey, input.organizationId, input.clientId, provider],
     )
   ).rows[0]?.remote_id;
@@ -1566,7 +1566,7 @@ export async function publishMetaFirstComment(
   // Meta accepted the request, so the comment may be live without an id.
   if (!result.id) throw uncertainDelivery();
   await pool.query(
-    `INSERT INTO provider_receipts(idempotency_key,organization_id,client_id,provider,remote_id)
+    `INSERT INTO first_comment_receipts(idempotency_key,organization_id,client_id,provider,remote_id)
      VALUES($1,$2,$3,$4,$5) ON CONFLICT(idempotency_key) DO NOTHING`,
     [
       input.idempotencyKey,

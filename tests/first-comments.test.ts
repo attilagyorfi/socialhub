@@ -317,7 +317,7 @@ describe("first comment after publishing", () => {
       expect(commentPosts(graph.calls)).toHaveLength(1);
       const receipts = (
         await db.query<{ provider: string; remote_id: string }>(
-          "SELECT provider,remote_id FROM provider_receipts WHERE idempotency_key=$1",
+          "SELECT provider,remote_id FROM first_comment_receipts WHERE idempotency_key=$1",
           [queued.idempotency_key],
         )
       ).rows;
@@ -626,8 +626,8 @@ describe("client hashtag sets", () => {
   });
 });
 
-describe("provider receipts without the publish_jobs foreign key", () => {
-  it("still cascades and rejects keys from another scope", async () => {
+describe("receipts", () => {
+  it("publish receipts keep their foreign keys to publish_jobs", async () => {
     const w = await workspace();
     const job = await publishJob(w, "facebook");
     const insert = (org: string, client: string, key = job.key) =>
@@ -652,6 +652,38 @@ describe("provider receipts without the publish_jobs foreign key", () => {
         await db.query(
           "SELECT 1 FROM provider_receipts WHERE idempotency_key=$1",
           [job.key],
+        )
+      ).rows,
+    ).toEqual([]);
+  });
+
+  it("first-comment receipts are scoped to their job and go with it", async () => {
+    const w = await workspace();
+    const job = await published(w, "facebook");
+    const [queued] = await commentJobs(job.targetId);
+    const insert = (org: string, client: string, key = queued.idempotency_key) =>
+      db.query(
+        "INSERT INTO first_comment_receipts(idempotency_key,organization_id,client_id,provider,remote_id) VALUES($1,$2,$3,'meta:facebook:comment','comment-1')",
+        [key, org, client],
+      );
+    const other = await workspace();
+    await expect(insert(other.org, other.client)).rejects.toMatchObject({
+      code: "23503",
+    });
+    await expect(insert(w.org, other.client)).rejects.toMatchObject({
+      code: "23503",
+    });
+    // A publish job's key is not a first-comment job: rejected.
+    await expect(insert(w.org, w.client, job.key)).rejects.toMatchObject({
+      code: "23503",
+    });
+    await insert(w.org, w.client);
+    await db.query("DELETE FROM first_comment_jobs WHERE id=$1", [queued.id]);
+    expect(
+      (
+        await db.query(
+          "SELECT 1 FROM first_comment_receipts WHERE idempotency_key=$1",
+          [queued.idempotency_key],
         )
       ).rows,
     ).toEqual([]);
