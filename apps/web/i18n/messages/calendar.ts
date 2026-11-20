@@ -54,6 +54,36 @@ const en = {
   "import.submit": "Import",
   "import.done": "{count} drafts imported.",
   "import.failed": "Couldn't process the file. Try again.",
+  "grid.title": "Instagram preview",
+  "grid.subtitle":
+    "How the profile will look: published posts and planned ones, newest first.",
+  "grid.planned": "Planned",
+  "grid.carousel": "Carousel",
+  "grid.noImage": "No image",
+  "grid.noInstagram": "This client has no Instagram account connected yet.",
+  "grid.empty": "No published or planned Instagram posts yet.",
+  "grid.loading": "Loading the preview…",
+  "grid.error": "Unable to load the Instagram preview.",
+  "export.title": "Download as PDF",
+  "export.subtitle":
+    "Every channel's posts in the chosen period, with text, first comment, thumbnail and approval state.",
+  "export.from": "From",
+  "export.to": "To",
+  "export.download": "Download PDF",
+  "export.invalid":
+    "Choose a period of at most 93 days that ends after it starts.",
+  "pdf.title": "Content calendar",
+  "pdf.period": "Period",
+  "pdf.generated": "Generated",
+  "pdf.channel": "Channel",
+  "pdf.firstComment": "First comment",
+  "pdf.status": "Status",
+  "pdf.approval": "Approval",
+  "pdf.noApproval": "Not requested",
+  "pdf.empty": "No posts are scheduled in this period.",
+  "pdf.truncated":
+    "Only the first {count} posts are shown. Choose a shorter period to see the rest.",
+  "pdf.page": "Page",
 } as const;
 
 const hu = {
@@ -112,6 +142,37 @@ const hu = {
   "import.submit": "Importálás",
   "import.done": "{count} vázlat importálva.",
   "import.failed": "Nem sikerült feldolgozni a fájlt. Próbáld újra.",
+  "grid.title": "Instagram-előnézet",
+  "grid.subtitle":
+    "Így fog kinézni a profil: a már megjelent és a tervezett posztok, a legújabb elöl.",
+  "grid.planned": "Tervezett",
+  "grid.carousel": "Karusszel",
+  "grid.noImage": "Nincs kép",
+  "grid.noInstagram":
+    "Ennek az ügyfélnek még nincs Instagram-fiókja csatlakoztatva.",
+  "grid.empty": "Még nincs megjelent vagy tervezett Instagram-poszt.",
+  "grid.loading": "Előnézet betöltése…",
+  "grid.error": "Nem sikerült betölteni az Instagram-előnézetet.",
+  "export.title": "Letöltés PDF-ben",
+  "export.subtitle":
+    "A kiválasztott időszak összes csatornájának posztjai szöveggel, első kommenttel, bélyegképpel és jóváhagyási állapottal.",
+  "export.from": "Kezdete",
+  "export.to": "Vége",
+  "export.download": "PDF letöltése",
+  "export.invalid":
+    "Legfeljebb 93 napos időszakot válassz, amelynek a vége nem korábbi a kezdeténél.",
+  "pdf.title": "Tartalomnaptár",
+  "pdf.period": "Időszak",
+  "pdf.generated": "Készült",
+  "pdf.channel": "Csatorna",
+  "pdf.firstComment": "Első komment",
+  "pdf.status": "Állapot",
+  "pdf.approval": "Jóváhagyás",
+  "pdf.noApproval": "Nem kértük",
+  "pdf.empty": "Ebben az időszakban nincs ütemezett poszt.",
+  "pdf.truncated":
+    "Csak az első {count} poszt látszik. A többihez válassz rövidebb időszakot.",
+  "pdf.page": "Oldal",
 } satisfies Record<keyof typeof en, string>;
 
 export default { en, hu };

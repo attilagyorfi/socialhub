@@ -44,6 +44,12 @@ const en = {
   "bundle.state.APPROVED": "Approved",
   "bundle.state.CHANGES_REQUESTED": "Changes requested",
   "bundle.state.UNAVAILABLE": "Cannot be decided",
+  "bundle.grid.title": "Your Instagram profile",
+  "bundle.grid.subtitle":
+    "Recent posts and the ones in this review, the way they will line up on your profile.",
+  "bundle.grid.planned": "Planned",
+  "bundle.grid.item": "Post {n} in this review",
+  "bundle.grid.published": "Already published",
   // Monthly approval links (agency side).
   "bundles.title": "Monthly approval links",
   "bundles.subtitle":
@@ -124,6 +130,12 @@ const hu = {
   "bundle.state.APPROVED": "Jóváhagytad",
   "bundle.state.CHANGES_REQUESTED": "Változtatást kértél",
   "bundle.state.UNAVAILABLE": "Nem dönthető",
+  "bundle.grid.title": "Az Instagram-profilod",
+  "bundle.grid.subtitle":
+    "A legutóbbi posztok és a mostani jóváhagyás posztjai abban a sorrendben, ahogy a profilodon megjelennek.",
+  "bundle.grid.planned": "Tervezett",
+  "bundle.grid.item": "A jóváhagyás {n}. posztja",
+  "bundle.grid.published": "Már megjelent",
   "bundles.title": "Havi jóváhagyási linkek",
   "bundles.subtitle":
     "Egy linken küldheted el az ügyfélnek egy időszak összes jóváhagyásra váró posztját.",

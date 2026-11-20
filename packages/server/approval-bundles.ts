@@ -4,6 +4,13 @@ import { transaction, audit } from "./transaction";
 import { AppError, hashToken, token } from "../core/security";
 import { pool } from "../db";
 import { applyApprovalDecision } from "./approvals";
+import { buildInstagramGrid } from "../core/instagram-grid";
+import {
+  gridMedia,
+  hasInstagram,
+  postGridRows,
+  publishedGridRows,
+} from "./instagram-grid";
 
 // Monthly approval bundles: the agency collects the posts of one client and
 // period that wait for client review, and the client decides on all of them
@@ -465,6 +472,89 @@ export async function bundleView(secret: string) {
     period_end: bundle.period_end,
     summary: summarize(rows),
     items,
+    grid: await bundleGrid(bundle, secret),
+  };
+}
+
+export const bundleGridPublishedLimit = 18;
+
+// Instagram preview on the public page: the client's newest published
+// Instagram posts and this bundle's own Instagram items that are still on
+// their way (waiting or approved). Other drafts, other bundles' posts and
+// items sent back for changes stay out. Both the page and the image endpoint
+// call this, so a grid number always resolves to the same post.
+async function bundleGridItems(bundle: {
+  id: string;
+  organization_id: string;
+  client_id: string;
+}) {
+  const scope = {
+    organizationId: bundle.organization_id,
+    clientId: bundle.client_id,
+  };
+  if (!(await hasInstagram(pool, scope)))
+    return {
+      hasInstagram: false,
+      items: [],
+      media: new Map(),
+      positions: new Map(),
+    };
+  const own = (await itemRows(pool, [bundle.id])).filter(
+    (row) => !row.deleted && ["PENDING", "APPROVED"].includes(itemState(row)),
+  );
+  const rows = [
+    ...(await publishedGridRows(pool, scope, bundleGridPublishedLimit)),
+    ...(await postGridRows(
+      pool,
+      scope,
+      own.map((row) => row.post_id),
+    )),
+  ];
+  const media = await gridMedia(pool, scope, rows);
+  const items = buildInstagramGrid(rows, media, {
+    published: bundleGridPublishedLimit,
+  });
+  return {
+    hasInstagram: true,
+    items,
+    media,
+    positions: new Map(own.map((row) => [row.post_id, row.position])),
+  };
+}
+
+// Grid entries are numbered 1..n in display order; the number is the only
+// reference the page gets, and images come from the bundle's grid endpoint.
+async function bundleGrid(
+  bundle: { id: string; organization_id: string; client_id: string },
+  secret: string,
+) {
+  const grid = await bundleGridItems(bundle);
+  return {
+    has_instagram: grid.hasInstagram,
+    items: grid.items.map((item, index) => ({
+      n: index + 1,
+      state: item.state,
+      at: item.at,
+      carousel: item.mediaCount > 1,
+      item: grid.positions.get(item.postId) ?? null,
+      image: item.cover
+        ? `/api/approval-bundle/${secret}/grid/${index + 1}`
+        : null,
+    })),
+  };
+}
+
+// Object key of a grid cover, for the grid image endpoint.
+export async function bundleGridMedia(secret: string, n: number) {
+  const bundle = await activeBundle(pool, secret);
+  const grid = await bundleGridItems(bundle);
+  const cover = grid.items[n - 1]?.cover;
+  const asset = cover ? grid.media.get(cover.id) : undefined;
+  if (!cover || !asset)
+    throw new AppError(404, "NOT_FOUND", "Media not found.");
+  return {
+    object_key: (cover.preview ? asset.previewKey : asset.objectKey) as string,
+    mime_type: cover.mimeType,
   };
 }
 

@@ -307,6 +307,54 @@ export default function BundleApproval({
           )}
         </div>
       </section>
+      {data?.grid?.has_instagram && data.grid.items.length > 0 && (
+        <section className="panel instagram-grid-panel">
+          <div className="panel-title">
+            <div>
+              <h2>{t("approve.bundle.grid.title")}</h2>
+              <p className="muted">{t("approve.bundle.grid.subtitle")}</p>
+            </div>
+          </div>
+          <ul className="instagram-grid">
+            {(data.grid.items as GridItem[]).map((cell) => (
+              <li
+                key={cell.n}
+                className={`instagram-cell ${cell.state}`}
+                title={`${date(cell.at)} · ${
+                  cell.item
+                    ? t("approve.bundle.grid.item", { n: cell.item })
+                    : t("approve.bundle.grid.published")
+                }`}
+              >
+                {cell.image ? (
+                  // Served by the bundle's grid endpoint, bound to this link.
+                  <img src={cell.image} alt="" loading="lazy" />
+                ) : (
+                  <span className="instagram-placeholder">
+                    {cell.item
+                      ? t("approve.bundle.item", { n: cell.item })
+                      : ""}
+                  </span>
+                )}
+                {cell.state === "planned" && (
+                  <span className="instagram-planned">
+                    {t("approve.bundle.grid.planned")}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </main>
   );
 }
+
+type GridItem = {
+  n: number;
+  state: "published" | "planned";
+  at: string;
+  carousel: boolean;
+  item: number | null;
+  image: string | null;
+};
