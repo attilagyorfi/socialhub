@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { platforms } from "../core/domain";
+import { MEDIA_ERRORS, MULTI_IMAGE_LIMIT, platforms } from "../core/domain";
 import { canonicalTimeZone, validTimeZone } from "../core/timezones";
 export const uuid = z.string().uuid();
 export const localeInput = z.enum(["hu", "en"]);
@@ -36,7 +36,7 @@ export const postInput = z.object({
       z.object({
         accountId: uuid,
         caption: z.string().max(63206),
-        mediaIds: z.array(uuid).max(10),
+        mediaIds: z.array(uuid).max(MULTI_IMAGE_LIMIT, MEDIA_ERRORS.tooMany),
       }),
     )
     .min(1)

@@ -567,7 +567,8 @@ describe("LinkedIn publishing", () => {
   });
 
   it.each([
-    ["several images", [image(), image()], "LINKEDIN_MEDIA_UNSUPPORTED"],
+    // The shared platform limits refuse it first (also when saving).
+    ["several images", [image(), image()], "VALIDATION"],
     ["a video", [image(undefined, "video/mp4")], "LINKEDIN_MEDIA_UNSUPPORTED"],
   ])("rejects %s without a network call", async (_name, media, code) => {
     const w = await workspace();

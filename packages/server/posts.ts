@@ -1,10 +1,45 @@
 import type { Context } from "./context";
 import { transaction, audit } from "./transaction";
-import { validatePost, type Platform } from "../core/domain";
+import {
+  inMediaOrder,
+  MEDIA_ERRORS,
+  mediaSetErrors,
+  validatePost,
+  type Platform,
+} from "../core/domain";
 import { AppError } from "../core/security";
 import { postInput } from "./validation";
 import type { z } from "zod";
 import type { PoolClient } from "pg";
+
+// Checked before any query: the 003 trigger would otherwise reject a repeated
+// attachment with a raw database error.
+export function assertUniqueMedia(mediaIds: string[]) {
+  if (new Set(mediaIds).size !== mediaIds.length)
+    throw new AppError(422, "DUPLICATE_MEDIA", MEDIA_ERRORS.duplicate);
+}
+
+// Attachment count and type limits per network, enforced when a draft is
+// saved so nothing is dropped silently later.
+export function assertMediaSet(
+  platform: Platform,
+  media: { id: string; mime_type: string }[],
+) {
+  const errors = mediaSetErrors(platform, media);
+  if (errors.length)
+    throw new AppError(
+      422,
+      "MEDIA_UNSUPPORTED",
+      `${networkNames[platform]}: ${errors.join(" ")}`,
+    );
+}
+const networkNames: Record<Platform, string> = {
+  facebook: "Facebook",
+  instagram: "Instagram",
+  linkedin: "LinkedIn",
+  tiktok: "TikTok",
+  google: "Google Cégprofil",
+};
 
 // Shared by approval submission and scheduling, so a post that cannot be
 // published is rejected before anyone reviews it, not after.
@@ -29,12 +64,15 @@ export async function publishabilityErrors(
       );
       continue;
     }
-    const media = (
-      await tx.query(
-        "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL",
-        [c.organizationId, c.clientId, target.media_ids],
-      )
-    ).rows;
+    const media = inMediaOrder(
+      target.media_ids,
+      (
+        await tx.query(
+          "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL",
+          [c.organizationId, c.clientId, target.media_ids],
+        )
+      ).rows,
+    );
     if (media.length !== target.media_ids.length) {
       errors.push(`${target.platform}: An attachment is missing.`);
       continue;
@@ -104,18 +142,23 @@ export async function insertDraftPost(
         "Choose a connected account from this client.",
       );
     if (target.mediaIds.length) {
-      const media = (
-        await tx.query(
-          "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND status='READY' AND deleted_at IS NULL",
-          [scope.organizationId, scope.clientId, target.mediaIds],
-        )
-      ).rows;
+      assertUniqueMedia(target.mediaIds);
+      const media = inMediaOrder(
+        target.mediaIds,
+        (
+          await tx.query(
+            "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND status='READY' AND deleted_at IS NULL",
+            [scope.organizationId, scope.clientId, target.mediaIds],
+          )
+        ).rows,
+      );
       if (media.length !== target.mediaIds.length)
         throw new AppError(
           422,
           "INVALID_MEDIA",
           "Media must belong to this client and be ready.",
         );
+      assertMediaSet(account.platform, media);
     }
     await tx.query(
       "INSERT INTO post_targets(organization_id,client_id,post_id,social_account_id,caption,media_ids) VALUES($1,$2,$3,$4,$5,$6)",
