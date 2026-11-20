@@ -25,6 +25,7 @@ import { Composer } from "./composer";
 import { PasswordSettings } from "./password-settings";
 import { Calendar } from "./calendar";
 import { CalendarImport } from "./calendar-import";
+import { CalendarExport, InstagramGrid } from "./instagram-grid";
 import { can, type Role } from "../../../packages/core/domain";
 import { Library, Accounts, Clients } from "./sections";
 import { Analytics } from "./analytics";
@@ -801,6 +802,21 @@ function HubShell() {
                       onReschedule={(post, scheduledAt) =>
                         reschedule(post, scheduledAt, false)
                       }
+                    />
+                  )}
+                  {view === "Calendar" && (
+                    <InstagramGrid
+                      key={data.clientId}
+                      clientId={data.clientId!}
+                      timeZone={timeZone}
+                      refreshKey={calendarRefresh}
+                    />
+                  )}
+                  {view === "Calendar" && (
+                    <CalendarExport
+                      key={data.clientId}
+                      clientId={data.clientId!}
+                      timeZone={timeZone}
                     />
                   )}
                   {view === "Calendar" && can(data.role as Role, "create") && (
