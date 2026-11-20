@@ -1202,6 +1202,33 @@ function HubShell() {
                       {errorMessage(locale, target.errorCode, target.errorCode)}
                     </p>
                   )}
+                  {target.firstComment && (
+                    <div className="first-comment-status">
+                      <strong>{t("posts.firstComment.title")}</strong>
+                      {target.firstCommentStatus && (
+                        <span
+                          className={
+                            ["FAILED", "UNCERTAIN"].includes(
+                              target.firstCommentStatus,
+                            )
+                              ? "alert"
+                              : "muted"
+                          }
+                        >
+                          {" "}
+                          {t(
+                            `posts.firstComment.status.${target.firstCommentStatus}` as MessageKey,
+                          )}
+                          {target.firstCommentStatus === "FAILED" &&
+                            target.firstCommentError &&
+                            ` · ${errorMessage(locale, target.firstCommentError, target.firstCommentError)}`}
+                        </span>
+                      )}
+                      <p className="first-comment-text">
+                        {target.firstComment}
+                      </p>
+                    </div>
+                  )}
                 </div>
               ))}
               {approvalUrl && (

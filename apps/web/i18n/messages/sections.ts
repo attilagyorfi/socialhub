@@ -94,6 +94,18 @@ const en = {
   "library.failed": "Processing failed",
   "library.processing": "Processing media…",
   "library.delete": "Delete file",
+  "hashtags.title": "Hashtag sets",
+  "hashtags.note":
+    "Named sets you can add to a post or its first comment with one click. At most {max} hashtags per set.",
+  "hashtags.empty": "No hashtag sets yet.",
+  "hashtags.name": "Name",
+  "hashtags.tags": "Hashtags",
+  "hashtags.count": "{count} / {max} hashtags",
+  "hashtags.add": "Add set",
+  "hashtags.update": "Save changes",
+  "hashtags.edit": "Edit",
+  "hashtags.delete": "Delete",
+  "hashtags.cancel": "Cancel",
 } as const;
 
 const hu = {
@@ -193,6 +205,18 @@ const hu = {
   "library.failed": "Sikertelen feldolgozás",
   "library.processing": "Média feldolgozása…",
   "library.delete": "Fájl törlése",
+  "hashtags.title": "Hashtag-készletek",
+  "hashtags.note":
+    "Elnevezett készletek, amelyeket egy kattintással beszúrhatsz a posztba vagy az első kommentbe. Egy készletben legfeljebb {max} hashtag lehet.",
+  "hashtags.empty": "Még nincs hashtag-készleted.",
+  "hashtags.name": "Név",
+  "hashtags.tags": "Hashtagek",
+  "hashtags.count": "{count} / {max} hashtag",
+  "hashtags.add": "Készlet hozzáadása",
+  "hashtags.update": "Módosítások mentése",
+  "hashtags.edit": "Szerkesztés",
+  "hashtags.delete": "Törlés",
+  "hashtags.cancel": "Mégse",
 } satisfies Record<keyof typeof en, string>;
 
 export default { en, hu };

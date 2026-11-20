@@ -426,6 +426,7 @@ export async function approvalView(secret: string) {
         accountId: string;
         caption: string;
         mediaIds: string[];
+        firstComment?: string;
       }) => {
         const account = (
           await pool.query(
@@ -447,6 +448,9 @@ export async function approvalView(secret: string) {
           platform: account?.platform,
           name: account?.name,
           caption: target.caption,
+          firstComment: target.firstComment?.trim()
+            ? target.firstComment
+            : null,
           media: await Promise.all(
             assets.map(async (a) => ({ ...a, url: await mediaUrl(c, a.id) })),
           ),
@@ -584,17 +588,10 @@ export async function applyApprovalDecision(
     );
     if (action === "approve" && request.remaining_steps.length)
       next = await insertReview(tx, request, request.remaining_steps);
-    await tx.query(
-      "UPDATE posts SET status=$1,updated_at=now() WHERE id=$2",
-      [
-        action === "approve"
-          ? next
-            ? "PENDING_APPROVAL"
-            : "APPROVED"
-          : "DRAFT",
-        post.id,
-      ],
-    );
+    await tx.query("UPDATE posts SET status=$1,updated_at=now() WHERE id=$2", [
+      action === "approve" ? (next ? "PENDING_APPROVAL" : "APPROVED") : "DRAFT",
+      post.id,
+    ]);
     // Only the final approval and change requests notify integrations;
     // intermediate steps of a multi-step workflow do not.
     if (action === "changes" || !next)

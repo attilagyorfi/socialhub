@@ -35,6 +35,7 @@ import {
 import { processPrivacyMaintenance } from "../../../packages/server/privacy";
 import { syncPublishReconciliations } from "../../../packages/server/publish-reconciliation";
 import { processWebhookDeliveries } from "../../../packages/server/webhooks";
+import { processFirstComments } from "../../../packages/server/first-comments";
 import { cleanupExpiredIdempotencyKeys } from "../../../packages/server/api-v1-posts";
 
 // Error reporting; disabled unless SENTRY_DSN is set.
@@ -199,6 +200,16 @@ async function dispatch() {
         webhooks.skipped
       )
         console.log(JSON.stringify({ event: "webhook_delivery", ...webhooks }));
+    });
+    await periodic("firstComments", 5_000, async () => {
+      const comments = await processFirstComments();
+      if (
+        comments.sent ||
+        comments.retried ||
+        comments.failed ||
+        comments.uncertain
+      )
+        console.log(JSON.stringify({ event: "first_comments", ...comments }));
     });
     await periodic("approvalAutomation", 60_000, async () => {
       const automation = await processApprovalAutomations();

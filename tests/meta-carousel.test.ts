@@ -50,8 +50,14 @@ const { editDraft } = await import("../packages/server/post-lifecycle");
 const { postInput } = await import("../packages/server/validation");
 const { approvalView } = await import("../packages/server/approvals");
 const { encrypt, hashToken, token } = await import("../packages/core/security");
-const { capabilities, inMediaOrder, MEDIA_ERRORS, moveMedia, validatePost } =
-  await import("../packages/core/domain");
+const {
+  capabilities,
+  inMediaOrder,
+  MEDIA_ERRORS,
+  mediaErrorText,
+  moveMedia,
+  validatePost,
+} = await import("../packages/core/domain");
 
 const config = {
   appId: "app-123",
@@ -310,7 +316,7 @@ describe("multi-image platform limits", () => {
     },
   );
 
-  it("refuses more than ten attachments in the request schema in Hungarian", () => {
+  it("refuses more than ten attachments in the request schema", () => {
     const result = postInput.safeParse({
       clientId: crypto.randomUUID(),
       caption: "x",
@@ -323,7 +329,9 @@ describe("multi-image platform limits", () => {
       ],
     });
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.message).toBe(MEDIA_ERRORS.tooMany);
+    expect(result.error?.issues[0]?.message).toBe(
+      mediaErrorText(MEDIA_ERRORS.tooMany),
+    );
   });
 
   it("keeps media_ids order whatever order rows come back in", () => {
@@ -377,7 +385,7 @@ describe("saving and scheduling several images", () => {
       await expect(createPost(w.c, draft(id, ids))).rejects.toMatchObject({
         status: 422,
         code: "MEDIA_UNSUPPORTED",
-        message: expect.stringContaining(MEDIA_ERRORS.single),
+        message: expect.stringContaining(mediaErrorText(MEDIA_ERRORS.single)),
       });
       const post = await createPost(w.c, draft(id, ids.slice(0, 1)));
       await expect(
@@ -395,14 +403,14 @@ describe("saving and scheduling several images", () => {
       createPost(w.c, draft(facebook, [image!, video])),
     ).rejects.toMatchObject({
       code: "MEDIA_UNSUPPORTED",
-      message: `Facebook: ${MEDIA_ERRORS.imagesOnly}`,
+      message: `Facebook: ${mediaErrorText(MEDIA_ERRORS.imagesOnly)}`,
     });
     await expect(
       createPost(w.c, draft(facebook, [image!, image!])),
     ).rejects.toMatchObject({
       status: 422,
       code: "DUPLICATE_MEDIA",
-      message: MEDIA_ERRORS.duplicate,
+      message: mediaErrorText(MEDIA_ERRORS.duplicate),
     });
   });
 
@@ -421,7 +429,7 @@ describe("saving and scheduling several images", () => {
       schedulePost(w.c, post.id, new Date(Date.now() + 3600_000).toISOString()),
     ).rejects.toMatchObject({
       code: "VALIDATION",
-      message: expect.stringContaining(MEDIA_ERRORS.single),
+      message: expect.stringContaining(mediaErrorText(MEDIA_ERRORS.single)),
     });
   });
 });

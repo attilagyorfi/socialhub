@@ -112,6 +112,12 @@ export default function Approval({
                     {version.name}
                   </strong>
                   <p>{version.caption}</p>
+                  {version.firstComment && (
+                    <p className="first-comment-text">
+                      <strong>{t("approve.firstComment")}</strong>{" "}
+                      {version.firstComment}
+                    </p>
+                  )}
                   <div className="approval-media">
                     {version.media.map((m: any) => (
                       <div key={m.id}>

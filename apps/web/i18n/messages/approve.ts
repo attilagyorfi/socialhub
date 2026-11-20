@@ -19,12 +19,16 @@ const en = {
   saveFailed: "Unable to save response",
   // Monthly approval bundle (public page).
   "bundle.title": "Monthly review",
-  "bundle.intro": "These are the posts for {period}. Approve them all at once, or decide post by post.",
-  "bundle.summary": "{approved} of {total} approved · {changes} with change requests · {pending} waiting",
+  "bundle.intro":
+    "These are the posts for {period}. Approve them all at once, or decide post by post.",
+  "bundle.summary":
+    "{approved} of {total} approved · {changes} with change requests · {pending} waiting",
   "bundle.approveAll": "Approve all",
-  "bundle.approveAllConfirm": "Approve all {count} posts that are still waiting?",
+  "bundle.approveAllConfirm":
+    "Approve all {count} posts that are still waiting?",
   "bundle.approveAllDone": "You approved {approved} posts.",
-  "bundle.approveAllSkipped": "{skipped} posts were already decided or can no longer be decided.",
+  "bundle.approveAllSkipped":
+    "{skipped} posts were already decided or can no longer be decided.",
   "bundle.item": "Post {n}",
   "bundle.noDate": "No date yet",
   "bundle.approveItem": "Approve",
@@ -34,14 +38,16 @@ const en = {
   "bundle.sendChanges": "Send",
   "bundle.cancel": "Cancel",
   "bundle.allDecided": "You decided on every post. Thank you!",
-  "bundle.unavailable": "This post changed or its review expired, so it cannot be decided here.",
+  "bundle.unavailable":
+    "This post changed or its review expired, so it cannot be decided here.",
   "bundle.state.PENDING": "Waiting for you",
   "bundle.state.APPROVED": "Approved",
   "bundle.state.CHANGES_REQUESTED": "Changes requested",
   "bundle.state.UNAVAILABLE": "Cannot be decided",
   // Monthly approval links (agency side).
   "bundles.title": "Monthly approval links",
-  "bundles.subtitle": "Send the client every post of a period that waits for their approval, on one link.",
+  "bundles.subtitle":
+    "Send the client every post of a period that waits for their approval, on one link.",
   "bundles.from": "From",
   "bundles.to": "To",
   "bundles.expiresIn": "Link valid for (days)",
@@ -55,19 +61,24 @@ const en = {
   "bundles.linkWarning": "You can see this link only now. Copy it:",
   "bundles.copy": "Copy link",
   "bundles.copied": "Copied",
-  "bundles.status": "{approved}/{total} approved · {changes} change requests · {pending} waiting · {unavailable} cannot be decided",
+  "bundles.status":
+    "{approved}/{total} approved · {changes} change requests · {pending} waiting · {unavailable} cannot be decided",
   "bundles.period": "{from} – {to}",
   "bundles.expires": "Expires {date}",
   "bundles.state.ACTIVE": "Active",
   "bundles.state.EXPIRED": "Expired",
   "bundles.state.REVOKED": "Revoked",
   "bundles.revoke": "Revoke",
-  "bundles.revokeConfirm": "Revoke this link? The client will no longer be able to decide on it.",
+  "bundles.revokeConfirm":
+    "Revoke this link? The client will no longer be able to decide on it.",
   "bundles.empty": "No monthly approval links yet.",
   "bundles.failed": "That did not work. Please try again.",
-  "bundles.emptyPeriod": "No post in this period is waiting for client approval.",
+  "bundles.emptyPeriod":
+    "No post in this period is waiting for client approval.",
   "bundles.tooLarge": "Too many posts (at most 200). Choose a shorter period.",
-  "bundles.invalidPeriod": "Choose a period of at most 62 days that ends after it starts.",
+  "bundles.invalidPeriod":
+    "Choose a period of at most 62 days that ends after it starts.",
+  firstComment: "First comment:",
 } as const;
 
 const hu = {
@@ -89,12 +100,15 @@ const hu = {
   "status.CANCELLED": "visszavonva",
   saveFailed: "Nem sikerült elmenteni a válaszodat.",
   "bundle.title": "Havi jóváhagyás",
-  "bundle.intro": "Itt látod ennek az időszaknak a posztjait: {period}. Jóváhagyhatod egyben az összeset, vagy posztonként is dönthetsz.",
-  "bundle.summary": "{total} posztból {approved} jóváhagyva · {changes} módosítást kér · {pending} vár",
+  "bundle.intro":
+    "Itt látod ennek az időszaknak a posztjait: {period}. Jóváhagyhatod egyben az összeset, vagy posztonként is dönthetsz.",
+  "bundle.summary":
+    "{total} posztból {approved} jóváhagyva · {changes} módosítást kér · {pending} vár",
   "bundle.approveAll": "Mindet jóváhagyom",
   "bundle.approveAllConfirm": "Jóváhagyod mind a(z) {count} még váró posztot?",
   "bundle.approveAllDone": "{approved} posztot jóváhagytál.",
-  "bundle.approveAllSkipped": "{skipped} posztról már döntöttek, vagy már nem dönthető.",
+  "bundle.approveAllSkipped":
+    "{skipped} posztról már döntöttek, vagy már nem dönthető.",
   "bundle.item": "{n}. poszt",
   "bundle.noDate": "Még nincs időpont",
   "bundle.approveItem": "Jóváhagyom",
@@ -104,13 +118,15 @@ const hu = {
   "bundle.sendChanges": "Elküldöm",
   "bundle.cancel": "Mégse",
   "bundle.allDecided": "Minden posztról döntöttél. Köszönjük!",
-  "bundle.unavailable": "Ez a poszt közben megváltozott, vagy lejárt a jóváhagyása, ezért itt már nem tudsz róla dönteni.",
+  "bundle.unavailable":
+    "Ez a poszt közben megváltozott, vagy lejárt a jóváhagyása, ezért itt már nem tudsz róla dönteni.",
   "bundle.state.PENDING": "Rád vár",
   "bundle.state.APPROVED": "Jóváhagytad",
   "bundle.state.CHANGES_REQUESTED": "Változtatást kértél",
   "bundle.state.UNAVAILABLE": "Nem dönthető",
   "bundles.title": "Havi jóváhagyási linkek",
-  "bundles.subtitle": "Egy linken küldheted el az ügyfélnek egy időszak összes jóváhagyásra váró posztját.",
+  "bundles.subtitle":
+    "Egy linken küldheted el az ügyfélnek egy időszak összes jóváhagyásra váró posztját.",
   "bundles.from": "Kezdete",
   "bundles.to": "Vége",
   "bundles.expiresIn": "A link ennyi napig él",
@@ -124,19 +140,25 @@ const hu = {
   "bundles.linkWarning": "A linket csak most látod, másold ki:",
   "bundles.copy": "Link másolása",
   "bundles.copied": "Kimásolva",
-  "bundles.status": "{total} posztból {approved} jóváhagyva · {changes} módosítást kér · {pending} vár · {unavailable} nem dönthető",
+  "bundles.status":
+    "{total} posztból {approved} jóváhagyva · {changes} módosítást kér · {pending} vár · {unavailable} nem dönthető",
   "bundles.period": "{from} – {to}",
   "bundles.expires": "Lejár: {date}",
   "bundles.state.ACTIVE": "Aktív",
   "bundles.state.EXPIRED": "Lejárt",
   "bundles.state.REVOKED": "Visszavonva",
   "bundles.revoke": "Visszavonás",
-  "bundles.revokeConfirm": "Visszavonod a linket? Utána az ügyfél már nem tud rajta dönteni.",
+  "bundles.revokeConfirm":
+    "Visszavonod a linket? Utána az ügyfél már nem tud rajta dönteni.",
   "bundles.empty": "Még nincs havi jóváhagyási link.",
   "bundles.failed": "Ez most nem sikerült. Próbáld újra.",
-  "bundles.emptyPeriod": "Ebben az időszakban nincs ügyfél-jóváhagyásra váró poszt.",
-  "bundles.tooLarge": "Túl sok a poszt (legfeljebb 200 fér bele). Válassz rövidebb időszakot.",
-  "bundles.invalidPeriod": "Legfeljebb 62 napos időszakot válassz, és a vége legyen a kezdete után.",
+  "bundles.emptyPeriod":
+    "Ebben az időszakban nincs ügyfél-jóváhagyásra váró poszt.",
+  "bundles.tooLarge":
+    "Túl sok a poszt (legfeljebb 200 fér bele). Válassz rövidebb időszakot.",
+  "bundles.invalidPeriod":
+    "Legfeljebb 62 napos időszakot válassz, és a vége legyen a kezdete után.",
+  firstComment: "Első komment:",
 } satisfies Record<keyof typeof en, string>;
 
 export default { en, hu };

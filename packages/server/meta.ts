@@ -229,6 +229,9 @@ export class MetaGraphClient {
       token?: string;
       params?: Record<string, string>;
       delivery?: boolean;
+      // Only a lost response is uncertain; an HTTP error answer means Meta
+      // did not act, so it keeps its retryable code (first comments).
+      lostResponseUncertain?: boolean;
     } = {},
   ): Promise<T> {
     const method = options.method ?? "GET";
@@ -252,7 +255,8 @@ export class MetaGraphClient {
     try {
       response = await this.fetchImpl(url, init);
     } catch {
-      if (options.delivery) throw uncertainDelivery();
+      if (options.delivery || options.lostResponseUncertain)
+        throw uncertainDelivery();
       throw new AppError(
         503,
         "META_UNAVAILABLE",
@@ -831,6 +835,18 @@ export class MetaGraphClient {
         : `${commentId}/replies`,
       { method: "POST", token: accessToken, params: { message } },
     );
+  }
+
+  // POST /{post-id}/comments (Page post) or /{ig-media-id}/comments. A lost
+  // response (timeout, dropped connection) may still have created the
+  // comment, so it is uncertain; 429 and 5xx answers stay retryable.
+  publishComment(objectId: string, accessToken: string, message: string) {
+    return this.request<{ id?: string }>(`${objectId}/comments`, {
+      method: "POST",
+      token: accessToken,
+      params: { message },
+      lostResponseUncertain: true,
+    });
   }
 
   setCommentHidden(
@@ -1521,6 +1537,46 @@ export async function replyMetaComment(
       "Meta did not return the reply.",
     );
   return { remoteId: result.id, authorRemoteId: selfId };
+}
+
+// The first comment under a published post. The receipt is keyed by the
+// first_comment_jobs idempotency key, so a repeated run never posts twice.
+export async function publishMetaFirstComment(
+  input: MetaAccountRef & {
+    objectId: string;
+    message: string;
+    idempotencyKey: string;
+  },
+  graph = new MetaGraphClient(metaConfig()),
+) {
+  const { platform, credential } = await metaAccountIdentity(input);
+  const provider = `meta:${platform}:comment`;
+  const prior = (
+    await pool.query(
+      "SELECT remote_id FROM first_comment_receipts WHERE idempotency_key=$1 AND organization_id=$2 AND client_id=$3 AND provider=$4",
+      [input.idempotencyKey, input.organizationId, input.clientId, provider],
+    )
+  ).rows[0]?.remote_id;
+  if (prior) return { remoteId: prior as string };
+  const result = await graph.publishComment(
+    input.objectId,
+    credential.pageAccessToken,
+    input.message,
+  );
+  // Meta accepted the request, so the comment may be live without an id.
+  if (!result.id) throw uncertainDelivery();
+  await pool.query(
+    `INSERT INTO first_comment_receipts(idempotency_key,organization_id,client_id,provider,remote_id)
+     VALUES($1,$2,$3,$4,$5) ON CONFLICT(idempotency_key) DO NOTHING`,
+    [
+      input.idempotencyKey,
+      input.organizationId,
+      input.clientId,
+      provider,
+      result.id,
+    ],
+  );
+  return { remoteId: result.id };
 }
 
 export async function hideMetaComment(

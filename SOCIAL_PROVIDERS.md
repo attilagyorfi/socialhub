@@ -24,7 +24,7 @@ Limits live in one place, `mediaSetErrors` in `packages/core/domain.ts` (called 
 | Facebook | multi-photo post of 2–10 images |
 | LinkedIn, Google Business, TikTok | not supported: one image or video per post |
 
-Mixing images and videos in one post is not supported on any network, and the same attachment cannot appear twice in a target. Violations are rejected with a Hungarian message (`MEDIA_UNSUPPORTED`, `DUPLICATE_MEDIA` or `VALIDATION`); attachments are never dropped silently. One image or one video keeps the single-media route (Instagram image or Reel, Facebook photo or video).
+Mixing images and videos in one post is not supported on any network, and the same attachment cannot appear twice in a target. `mediaSetErrors` returns stable codes (`MEDIA_ERRORS`: `media.duplicate`, `media.too_many`, `media.images_only`, `media.single`). Server responses (`MEDIA_UNSUPPORTED`, `DUPLICATE_MEDIA` or `VALIDATION`) carry the English text from `MEDIA_ERROR_TEXT`; the composer translates the codes through `composer.validation.*`, and the image limit in both texts comes from `MULTI_IMAGE_LIMIT`. Attachments are never dropped silently. One image or one video keeps the single-media route (Instagram image or Reel, Facebook photo or video).
 
 The order is `post_targets.media_ids`. Every read by `id=ANY(...)` is reordered with `inMediaOrder`, so the worker, validation and the approval pages (per post and monthly bundle) use and show the attachments in that order. The composer numbers the selected attachments and lets the user reorder them with up/down buttons.
 
@@ -42,6 +42,29 @@ Meta delivery responses are persisted in `provider_receipts` under the publish j
 Disconnecting one Page/Instagram card revokes the associated Meta user grant, then removes every local Facebook/Instagram credential in that client that shares the grant. This avoids presenting a local-only disconnect as provider revocation.
 
 `npm run meta:verify` is the staging launch check. It validates the public HTTPS configuration, connected identity, actual granted scopes, publication listing, profile insights, a recent receipt-backed post created through this application and that post's insights. The report omits credentials and raw provider payloads. A local mock environment is expected to fail its preflight.
+
+### First comment
+
+Each target can carry an optional first comment (`post_targets.first_comment`, at most 2200 characters, the Instagram comment limit). It is part of the post input and therefore of the `post_versions` snapshot: both approval pages (per post and monthly bundle) show it per account, and changing it after approval works like changing the caption (back to draft, new revision, new approval).
+
+| Network | First comment |
+| --- | --- |
+| Facebook Page post | supported: `POST /{page-post-id}/comments` |
+| Instagram | supported: `POST /{ig-media-id}/comments` |
+| LinkedIn, Google Business, TikTok | not available; the composer says so in place of the field and the server rejects a non-blank text with `FIRST_COMMENT_UNSUPPORTED` (422) |
+
+- **Only after a confirmed publication.** `enqueueFirstComment` runs in the transaction that marks the target `PUBLISHED` (direct delivery or reconciliation of an uncertain delivery). An uncertain post gets no comment job until reconciliation confirms it.
+- **Durable and idempotent.** One `first_comment_jobs` row per target (`UNIQUE(target_id)`); its idempotency key is `md5(target_id || ':first_comment')::uuid`, so a duplicate enqueue is a no-op. The comment ID is stored in `first_comment_receipts` (provider `meta:facebook:comment` / `meta:instagram:comment`), a table of its own so the publish receipts keep their foreign keys; a job that finds a receipt never calls Graph again. The worker processes due jobs every 5 seconds (`processFirstComments`).
+- **Retries.** Rate limits (`META_RATE_LIMIT`) and 5xx answers (`META_UNAVAILABLE`) are retried with exponential backoff, at most 5 attempts.
+- **Uncertain delivery.** A lost response (timeout or dropped connection after sending) or a success without an ID is `META_DELIVERY_UNCERTAIN`: the job becomes `UNCERTAIN` and is never resent automatically. A job left `RUNNING` by a dead worker for 15 minutes also becomes `UNCERTAIN`. Check the post and add the comment by hand if needed.
+- **Failures stay on the comment.** A final error (`FAILED`, e.g. `META_REJECTED`) or an uncertain comment never changes the target or post status; the post view shows the comment status and error, and a notification is created.
+- **Mock accounts** only write a local receipt (`mock:{platform}:comment`); nothing leaves the process.
+
+Production use needs `pages_manage_engagement` (Facebook) and `instagram_manage_comments` (Instagram) approved in Meta App Review. The OAuth flow already requests both; the App Review submission is handled by the owner (see APP_REVIEW.md).
+
+### Hashtag sets
+
+Each client has named hashtag sets (`client_hashtag_sets`), managed in the client settings by users with `manage` permission on that client (`hashtags.save` / `hashtags.delete` on `/api/hub`). Hashtags are stored as `#tag` without whitespace, duplicates removed, at most 30 per set; names are unique per client (case-insensitive). The composer inserts a chosen set with one click into the caption or a target's first comment.
 
 ## LinkedIn (personal profile)
 

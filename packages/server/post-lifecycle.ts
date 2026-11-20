@@ -4,7 +4,7 @@ import { transaction, audit } from "./transaction";
 import { postInput } from "./validation";
 import { AppError } from "../core/security";
 import { inMediaOrder } from "../core/domain";
-import { assertMediaSet, assertUniqueMedia } from "./posts";
+import { assertMediaSet, assertUniqueMedia, firstCommentFor } from "./posts";
 
 export async function editDraft(
   c: Context,
@@ -34,6 +34,7 @@ export async function editDraft(
         "DUPLICATE_TARGET",
         "Choose each account only once.",
       );
+    const firstComments: (string | null)[] = [];
     for (const target of input.targets) {
       const account = (
         await tx.query(
@@ -64,11 +65,14 @@ export async function editDraft(
           "Media must be ready and belong to this client.",
         );
       assertMediaSet(account.platform, media);
+      firstComments.push(
+        firstCommentFor(account.platform, target.firstComment),
+      );
     }
     await tx.query("DELETE FROM post_targets WHERE post_id=$1", [id]);
-    for (const target of input.targets)
+    for (const [index, target] of input.targets.entries())
       await tx.query(
-        "INSERT INTO post_targets(organization_id,client_id,post_id,social_account_id,caption,media_ids) VALUES($1,$2,$3,$4,$5,$6)",
+        "INSERT INTO post_targets(organization_id,client_id,post_id,social_account_id,caption,media_ids,first_comment) VALUES($1,$2,$3,$4,$5,$6,$7)",
         [
           c.organizationId,
           c.clientId,
@@ -76,6 +80,7 @@ export async function editDraft(
           target.accountId,
           target.caption,
           target.mediaIds,
+          firstComments[index],
         ],
       );
     const updated = (

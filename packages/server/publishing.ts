@@ -12,6 +12,7 @@ import { AppError } from "../core/security";
 import { metaProviderError, publishMeta } from "./meta";
 import { publishLinkedIn } from "./linkedin";
 import { enqueueWebhookEvent } from "./webhooks";
+import { enqueueFirstComment } from "./first-comments";
 // Direct deliveries that may be live although the provider did not confirm
 // them; they go to reconciliation instead of being retried.
 export const UNCERTAIN_DELIVERY_CODES = [
@@ -262,6 +263,7 @@ async function recordOutcome(
       "UPDATE post_targets SET status='PUBLISHED',remote_id=$1,published_at=now(),error_code=NULL,updated_at=now() WHERE id=$2",
       [remoteId, target.id],
     );
+    await enqueueFirstComment(tx, target.id);
     await tx.query(
       "UPDATE publish_attempts SET status='SUCCEEDED',provider_request_id=$1,finished_at=now() WHERE id=$2",
       [remoteId, trace],

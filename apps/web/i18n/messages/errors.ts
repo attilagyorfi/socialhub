@@ -25,6 +25,9 @@ const en = {
   DUPLICATE_TARGET: "Choose each account only once.",
   EMAIL_MISMATCH: "Sign in with the invited email address.",
   EXPIRED: "This approval link is invalid or expired.",
+  FIRST_COMMENT_UNSUPPORTED:
+    "A first comment is not available on this network.",
+  HASHTAG_SET_EXISTS: "This client already has a hashtag set with this name.",
   FILE_NAME: "Use a file name up to 200 characters.",
   FILE_REQUIRED: "Choose a file.",
   FILE_SIZE: "The file size is invalid.",
@@ -160,6 +163,8 @@ const hu = {
   DUPLICATE_TARGET: "Minden fiókot csak egyszer válassz ki.",
   EMAIL_MISMATCH: "A meghívott e-mail-címmel jelentkezz be.",
   EXPIRED: "Ez a jóváhagyási link érvénytelen vagy lejárt.",
+  FIRST_COMMENT_UNSUPPORTED: "Ezen a hálózaton az első komment nem elérhető.",
+  HASHTAG_SET_EXISTS: "Ennek az ügyfélnek már van ilyen nevű hashtag-készlete.",
   FILE_NAME: "A fájlnév legfeljebb 200 karakter lehet.",
   FILE_REQUIRED: "Válassz egy fájlt.",
   IMPORT_ENCODING:
