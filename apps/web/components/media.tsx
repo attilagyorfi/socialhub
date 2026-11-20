@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Check, Plus, Video } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Plus, Video } from "lucide-react";
 import type { Asset, Mutate } from "./types";
 import { apiError, useT } from "../i18n";
 
@@ -187,7 +187,11 @@ export function MediaPicker({
             <MediaThumb clientId={clientId} asset={asset} />
             {isSelected && (
               <span className="media-tile-check">
-                <Check size={14} />
+                {selected.length > 1 ? (
+                  selected.indexOf(asset.id) + 1
+                ) : (
+                  <Check size={14} />
+                )}
               </span>
             )}
             <small>
@@ -196,6 +200,65 @@ export function MediaPicker({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// Selected attachments in publishing order (carousel / multi-photo order),
+// with keyboard-reachable up/down buttons.
+export function MediaOrder({
+  clientId,
+  media,
+  selected,
+  onMove,
+}: {
+  clientId: string;
+  media: Asset[];
+  selected: string[];
+  onMove: (index: number, by: -1 | 1) => void;
+}) {
+  const { t } = useT();
+  const byId = new Map(media.map((asset) => [asset.id, asset]));
+  if (selected.length < 2) return null;
+  return (
+    <div className="media-order">
+      <strong>{t("media.order.title")}</strong>
+      <p className="muted">{t("media.order.hint")}</p>
+      <ol aria-label={t("media.order.title")}>
+        {selected.map((id, index) => {
+          const asset = byId.get(id);
+          const name = asset?.name ?? id;
+          return (
+            <li key={id} className="media-order-item">
+              <span className="media-order-position" aria-hidden="true">
+                {index + 1}.
+              </span>
+              {asset && <MediaThumb clientId={clientId} asset={asset} />}
+              <span className="media-order-name">{name}</span>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={t("media.order.up", { name })}
+                title={t("media.order.up", { name })}
+                disabled={index === 0}
+                onClick={() => onMove(index, -1)}
+              >
+                <ArrowUp size={16} />
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={t("media.order.down", { name })}
+                title={t("media.order.down", { name })}
+                disabled={index === selected.length - 1}
+                onClick={() => onMove(index, 1)}
+              >
+                <ArrowDown size={16} />
+              </button>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }

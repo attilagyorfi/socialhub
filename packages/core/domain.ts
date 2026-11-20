@@ -77,7 +77,6 @@ export const capabilities: Record<Platform, Capability[]> = {
   linkedin: [
     "TEXT_POST",
     "IMAGE_POST",
-    "MULTI_IMAGE",
     "VIDEO",
     "LINK_POST",
     "HASHTAGS",
@@ -95,6 +94,57 @@ export type Media = {
   duration_seconds?: number | null;
 };
 export type Content = { caption: string; link?: string | null; media: Media[] };
+
+// Posts with several attachments (Instagram carousel, Facebook multi-photo
+// post). Only images, in the order of the target's media_ids. Every other
+// network takes one attachment. Shared by saving, scheduling and the worker.
+export const MULTI_IMAGE_LIMIT = 10;
+export const MEDIA_ERRORS = {
+  duplicate: "Ugyanazt a képet csak egyszer adhatod hozzá egy poszthoz.",
+  tooMany: `Egy posztban legfeljebb ${MULTI_IMAGE_LIMIT} kép lehet.`,
+  imagesOnly:
+    "Több elemből álló posztba csak képeket tehetsz. A videót külön posztban tedd közzé.",
+  single:
+    "Ezen a hálózaton egy posztban csak egy kép vagy videó lehet. Vegyél ki elemeket, vagy vedd ki ezt a fiókot.",
+} as const;
+export function mediaSetErrors(
+  platform: Platform,
+  media: Pick<Media, "id" | "mime_type">[],
+) {
+  const errors: string[] = [];
+  if (new Set(media.map((m) => m.id)).size !== media.length)
+    errors.push(MEDIA_ERRORS.duplicate);
+  if (media.length < 2) return errors;
+  if (!capabilities[platform].includes("MULTI_IMAGE"))
+    return [...errors, MEDIA_ERRORS.single];
+  if (media.length > MULTI_IMAGE_LIMIT) errors.push(MEDIA_ERRORS.tooMany);
+  if (media.some((m) => !m.mime_type.startsWith("image/")))
+    errors.push(MEDIA_ERRORS.imagesOnly);
+  return errors;
+}
+
+// Database reads by id=ANY(...) return rows in any order; attachments must
+// follow media_ids. Missing ids are dropped, so callers can compare lengths.
+export function inMediaOrder<T extends { id: string }>(
+  ids: readonly string[],
+  rows: readonly T[],
+) {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
+  });
+}
+
+// The composer's up/down buttons; out-of-range moves leave the list as is.
+export function moveMedia(ids: readonly string[], index: number, by: -1 | 1) {
+  const to = index + by;
+  if (index < 0 || to < 0 || to >= ids.length) return [...ids];
+  const next = [...ids];
+  [next[index], next[to]] = [next[to]!, next[index]!];
+  return next;
+}
+
 export function validatePost(platform: Platform, content: Content) {
   const errors: string[] = [];
   const limit = {
@@ -138,10 +188,6 @@ export function validatePost(platform: Platform, content: Content) {
     )
       errors.push("Instagram Reels must be at least 3 seconds long.");
   }
-  if (
-    content.media.length > 1 &&
-    !capabilities[platform].includes("MULTI_IMAGE")
-  )
-    errors.push("Multiple media attachments are not supported.");
+  errors.push(...mediaSetErrors(platform, content.media));
   return errors;
 }

@@ -3,6 +3,8 @@ import type { Context } from "./context";
 import { transaction, audit } from "./transaction";
 import { postInput } from "./validation";
 import { AppError } from "../core/security";
+import { inMediaOrder } from "../core/domain";
+import { assertMediaSet, assertUniqueMedia } from "./posts";
 
 export async function editDraft(
   c: Context,
@@ -33,29 +35,35 @@ export async function editDraft(
         "Choose each account only once.",
       );
     for (const target of input.targets) {
-      if (
-        !(
-          await tx.query(
-            "SELECT 1 FROM social_accounts WHERE organization_id=$1 AND client_id=$2 AND id=$3 AND status='CONNECTED' AND deleted_at IS NULL",
-            [c.organizationId, c.clientId, target.accountId],
-          )
-        ).rowCount
-      )
+      const account = (
+        await tx.query(
+          "SELECT platform FROM social_accounts WHERE organization_id=$1 AND client_id=$2 AND id=$3 AND status='CONNECTED' AND deleted_at IS NULL",
+          [c.organizationId, c.clientId, target.accountId],
+        )
+      ).rows[0];
+      if (!account)
         throw new AppError(
           422,
           "INVALID_ACCOUNT",
           "Choose a connected account from this client.",
         );
-      const media = await tx.query(
-        "SELECT id FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND status='READY' AND deleted_at IS NULL",
-        [c.organizationId, c.clientId, target.mediaIds],
+      assertUniqueMedia(target.mediaIds);
+      const media = inMediaOrder(
+        target.mediaIds,
+        (
+          await tx.query(
+            "SELECT id,mime_type FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND status='READY' AND deleted_at IS NULL",
+            [c.organizationId, c.clientId, target.mediaIds],
+          )
+        ).rows,
       );
-      if (media.rowCount !== target.mediaIds.length)
+      if (media.length !== target.mediaIds.length)
         throw new AppError(
           422,
           "INVALID_MEDIA",
           "Media must be ready and belong to this client.",
         );
+      assertMediaSet(account.platform, media);
     }
     await tx.query("DELETE FROM post_targets WHERE post_id=$1", [id]);
     for (const target of input.targets)

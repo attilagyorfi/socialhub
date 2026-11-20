@@ -2,7 +2,12 @@ import type { PoolClient, QueryResultRow } from "pg";
 import { pool } from "../db";
 import { transaction } from "./transaction";
 import { provider } from "../core/providers";
-import { aggregateStatus, type Status, type Platform } from "../core/domain";
+import {
+  aggregateStatus,
+  inMediaOrder,
+  type Status,
+  type Platform,
+} from "../core/domain";
 import { AppError } from "../core/security";
 import { metaProviderError, publishMeta } from "./meta";
 import { publishLinkedIn } from "./linkedin";
@@ -95,12 +100,16 @@ export async function executePublish(id: string) {
       "UPDATE post_targets SET status='PUBLISHING',updated_at=now() WHERE id=$1",
       [target.id],
     );
-    const media = (
-      await tx.query(
-        "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL",
-        [job.organization_id, job.client_id, target.media_ids],
-      )
-    ).rows;
+    // Carousel and multi-photo order is the order of media_ids.
+    const media = inMediaOrder(
+      target.media_ids as string[],
+      (
+        await tx.query(
+          "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL",
+          [job.organization_id, job.client_id, target.media_ids],
+        )
+      ).rows,
+    );
     return { job, target, media, attempt, trace };
   });
   if (!claim) return;

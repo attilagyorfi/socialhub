@@ -546,6 +546,40 @@ describe("public bundle endpoint", () => {
     });
   });
 
+  it("shows every image of a carousel in media_ids order", async () => {
+    const w = await workspace();
+    const ids: string[] = [];
+    // Inserted in reverse so the database order differs from media_ids.
+    for (const name of ["third.jpg", "second.jpg", "first.jpg"]) {
+      const id = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO media_assets(id,organization_id,client_id,name,object_key,mime_type,size_bytes,status)
+         VALUES($1,$2,$3,$4,$5,'image/jpeg',10,'READY')`,
+        [id, w.org, w.client, name, `${w.org}/${id}`],
+      );
+      ids.unshift(id);
+    }
+    const target = await post(w);
+    await db.query("UPDATE post_versions SET snapshot=$1 WHERE post_id=$2", [
+      JSON.stringify({
+        targets: [{ accountId: w.account, caption: "Carousel", mediaIds: ids }],
+      }),
+      target.id,
+    ]);
+    const bundle = await bundleSecret(w);
+    const view = await bundleView(bundle.secret);
+    expect(view.items[0].versions[0].media.map((m) => [m.file, m.name])).toEqual(
+      [
+        ["0-0", "first.jpg"],
+        ["0-1", "second.jpg"],
+        ["0-2", "third.jpg"],
+      ],
+    );
+    expect((await bundleMedia(bundle.secret, 1, "0-2")).object_key).toBe(
+      `${w.org}/${ids[2]}`,
+    );
+  });
+
   it("checks origin and rate limits decisions by token hash", async () => {
     const w = await workspace();
     const target = await post(w);

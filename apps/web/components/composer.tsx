@@ -4,12 +4,16 @@ import { Sparkles, ImageIcon, Check, Send, ShieldCheck } from "lucide-react";
 import { type HubData, type Mutate, type Post, Network } from "./types";
 import {
   capabilities,
+  inMediaOrder,
+  MEDIA_ERRORS,
+  moveMedia,
   validatePost,
   type Platform,
 } from "../../../packages/core/domain";
 import { useT, type MessageKey, type Vars } from "../i18n";
 import {
   FramedImage,
+  MediaOrder,
   MediaPicker,
   instagramFrame,
   signedMedia,
@@ -64,8 +68,10 @@ const VALIDATION: Record<string, MessageKey> = {
   "Video is not supported on this network.": "composer.validation.video",
   "Instagram Reels must be at least 3 seconds long.":
     "composer.validation.reelTooShort",
-  "Multiple media attachments are not supported.":
-    "composer.validation.multiMedia",
+  [MEDIA_ERRORS.duplicate]: "composer.validation.mediaDuplicate",
+  [MEDIA_ERRORS.tooMany]: "composer.validation.mediaTooMany",
+  [MEDIA_ERRORS.imagesOnly]: "composer.validation.mediaImagesOnly",
+  [MEDIA_ERRORS.single]: "composer.validation.mediaSingle",
 };
 function localizeValidation(
   t: (key: MessageKey, vars?: Vars) => string,
@@ -160,9 +166,7 @@ export function Composer({
     validatePost(a.platform as Platform, {
       caption: overrides[a.id] ?? caption,
       link,
-      media: data.media.filter((m) =>
-        (networkMedia[a.id] ?? mediaIds).includes(m.id),
-      ),
+      media: inMediaOrder(networkMedia[a.id] ?? mediaIds, data.media),
     }).map(
       (message) =>
         `${networkName(a.platform)}: ${localizeValidation(t, message)}`,
@@ -450,6 +454,14 @@ export function Composer({
               })
             }
           />
+          <MediaOrder
+            clientId={data.clientId!}
+            media={data.media}
+            selected={mediaIds}
+            onMove={(index, by) =>
+              setMediaIds((current) => moveMedia(current, index, by))
+            }
+          />
         </div>
         {!!selected.length && (
           <div className="form-section">
@@ -501,6 +513,17 @@ export function Composer({
                       setNetworkMedia((current) => ({
                         ...current,
                         [a.id]: toggle(current[a.id] ?? mediaIds, id),
+                      }))
+                    }
+                  />
+                  <MediaOrder
+                    clientId={data.clientId!}
+                    media={data.media}
+                    selected={networkMedia[a.id] ?? mediaIds}
+                    onMove={(index, by) =>
+                      setNetworkMedia((current) => ({
+                        ...current,
+                        [a.id]: moveMedia(current[a.id] ?? mediaIds, index, by),
                       }))
                     }
                   />

@@ -20,7 +20,7 @@ import {
 import { checkBrandGuardrails } from "../core/brand-guardrails";
 import { loadEffectiveBrand } from "./brand-profile";
 import { publishabilityErrors } from "./posts";
-import type { Platform } from "../core/domain";
+import { inMediaOrder, type Platform } from "../core/domain";
 import { enqueueWebhookEvent } from "./webhooks";
 export async function requestApproval(
   c: Context,
@@ -433,12 +433,16 @@ export async function approvalView(secret: string) {
             [target.accountId, c.organizationId, c.clientId],
           )
         ).rows[0];
-        const assets = (
-          await pool.query(
-            "SELECT id,name,mime_type FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL",
-            [c.organizationId, c.clientId, target.mediaIds],
-          )
-        ).rows;
+        // Shown in the order the post will publish them.
+        const assets = inMediaOrder(
+          target.mediaIds,
+          (
+            await pool.query(
+              "SELECT id,name,mime_type FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL",
+              [c.organizationId, c.clientId, target.mediaIds],
+            )
+          ).rows,
+        );
         return {
           platform: account?.platform,
           name: account?.name,

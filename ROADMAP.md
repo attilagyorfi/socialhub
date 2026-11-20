@@ -63,6 +63,7 @@
 ### SOCIAL_HUB_TERV F2
 
 - [x] Monthly approval ("Havi jóváhagyás"): the client sees the whole period on one secret link and approves all posts at once or decides post by post (migration 029, `/approve/bundle/[token]`).
+- [x] Instagram carousel and Facebook multi-photo post (2–10 images, kept in `media_ids` order, reorderable in the composer, shown in order on both approval pages); several images on LinkedIn/Google are rejected when saving. No migration. See SOCIAL_PROVIDERS.md.
 
 ### Delivery priority
 

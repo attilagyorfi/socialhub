@@ -2275,6 +2275,40 @@ td {
   cursor: pointer;
   text-align: left;
 }
+.media-order {
+  margin-top: 12px;
+}
+.media-order ol {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.media-order-item {
+  display: grid;
+  grid-template-columns: 24px 48px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+.media-order-item > :nth-child(2) {
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+}
+.media-order-position {
+  font-weight: 600;
+  text-align: right;
+}
+.media-order-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .media-tile.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-light);
