@@ -858,6 +858,7 @@ function HubShell() {
                       clientId={data.clientId!}
                       timeZone={timeZone}
                       refreshKey={calendarRefresh}
+                      templates={data.replyTemplates ?? []}
                       onOpenPost={(id) => void openPostById(id)}
                       onCountChange={setCommentsOpen}
                     />

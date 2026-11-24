@@ -2,6 +2,11 @@ import type { PoolClient } from "pg";
 import { pool } from "../db";
 import { can } from "../core/domain";
 import { AppError } from "../core/security";
+import {
+  assignableMembers,
+  assignableRoles,
+  assignmentJoin,
+} from "./comment-assignments";
 import type { Context } from "./context";
 import {
   fetchMetaComments,
@@ -391,6 +396,8 @@ type ThreadRow = {
   status: "OPEN" | "DONE";
   post_id: string | null;
   caption: string | null;
+  assignee_id?: string | null;
+  assignee_name?: string | null;
 };
 
 export async function openCommentCount(c: Context) {
@@ -410,9 +417,20 @@ export async function listComments(
   input: {
     status: "OPEN" | "DONE" | "ALL";
     platform?: "facebook" | "instagram";
+    assignee?: "all" | "me" | "none";
     before?: string;
   },
 ) {
+  // Who works on a comment is the team's business: without create rights
+  // neither the members nor the assignments are read at all.
+  const canAssign = can(c.role, "create");
+  const assignee = input.assignee ?? "all";
+  if (assignee !== "all" && !canAssign)
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You do not have permission for this action.",
+    );
   const values: unknown[] = [c.organizationId, c.clientId];
   const filters = [
     "sc.organization_id=$1",
@@ -421,13 +439,34 @@ export async function listComments(
     "NOT sc.deleted",
     "NOT sc.from_page",
   ];
-  if (input.status !== "ALL") {
-    values.push(input.status);
-    filters.push(`sc.status=$${values.length}`);
+  let assignment = "";
+  if (canAssign) {
+    values.push(assignableRoles);
+    assignment = assignmentJoin(`$${values.length}`);
   }
   if (input.platform) {
     values.push(input.platform);
     filters.push(`sc.platform=$${values.length}`);
+  }
+  if (assignee === "me") {
+    values.push(c.userId);
+    filters.push(`ca.user_id=$${values.length}`);
+  } else if (assignee === "none") filters.push("ca.user_id IS NULL");
+  // Open threads of the filtered view, whatever page is being loaded.
+  const openCount = await openCommentCount(c);
+  const filteredOpenCount =
+    input.platform || assignee !== "all"
+      ? ((
+          await pool.query(
+            `SELECT count(*)::int AS open FROM social_comments sc ${assignment}
+             WHERE ${filters.join(" AND ")} AND sc.status='OPEN'`,
+            values,
+          )
+        ).rows[0].open as number)
+      : openCount;
+  if (input.status !== "ALL") {
+    values.push(input.status);
+    filters.push(`sc.status=$${values.length}`);
   }
   if (input.before) {
     values.push(new Date(input.before));
@@ -440,10 +479,13 @@ export async function listComments(
               a.name AS account_name,sc.author_name,sc.message,
               sc.remote_created_at,sc.like_count,sc.hidden,sc.status,
               p.id AS post_id,p.caption
+              ${canAssign ? ",au.id AS assignee_id,au.name AS assignee_name" : ""}
        FROM social_comments sc
        JOIN social_accounts a ON a.id=sc.social_account_id
        LEFT JOIN post_targets t ON t.id=sc.post_target_id
        LEFT JOIN posts p ON p.id=t.post_id
+       ${assignment}
+       ${canAssign ? `LEFT JOIN "user" au ON au.id=ca.user_id` : ""}
        WHERE ${filters.join(" AND ")}
        ORDER BY sc.remote_created_at DESC,sc.id DESC
        LIMIT $${values.length}`,
@@ -511,12 +553,22 @@ export async function listComments(
           fromPage: reply.from_page,
           hidden: reply.hidden,
         })),
+      ...(canAssign
+        ? {
+            assignee: row.assignee_id
+              ? { id: row.assignee_id, name: row.assignee_name ?? "" }
+              : null,
+          }
+        : {}),
     })),
     nextBefore:
       rows.length > PAGE_SIZE
         ? new Date(page.at(-1)!.remote_created_at).toISOString()
         : null,
-    openCount: await openCommentCount(c),
+    // Every open thread of the client; the menu badge shows this one.
+    openCount,
+    filteredOpenCount,
+    ...(canAssign ? { assignableMembers: await assignableMembers(c) } : {}),
     canReply: can(c.role, "publish"),
     lastSyncedAt: synced?.synced ? new Date(synced.synced).toISOString() : null,
   };

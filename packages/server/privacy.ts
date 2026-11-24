@@ -342,6 +342,7 @@ export async function exportUserData(userId: string) {
     events,
     invitations,
     requests,
+    assignedComments,
   ] = await Promise.all([
     pool.query(
       `SELECT id,"accountId","providerId",scope,"createdAt","updatedAt"
@@ -407,6 +408,12 @@ export async function exportUserData(userId: string) {
          ORDER BY created_at`,
       [userId],
     ),
+    // References only: the comments belong to the people who wrote them.
+    pool.query(
+      `SELECT organization_id,client_id,comment_id,created_at,updated_at
+         FROM comment_assignments WHERE user_id=$1 ORDER BY created_at`,
+      [userId],
+    ),
   ]);
   await pool.query(
     `INSERT INTO audit_logs(
@@ -428,6 +435,7 @@ export async function exportUserData(userId: string) {
     authoredPosts: posts.rows,
     aiGenerations: generations.rows,
     assignedApprovals: approvals.rows,
+    assignedComments: assignedComments.rows,
     approvalDeliveries: approvalDeliveries.rows,
     approvalComments: comments.rows,
     auditEvents: events.rows,
@@ -514,6 +522,15 @@ async function eraseUser(request: PrivacyRequest) {
     await tx.query(
       `UPDATE audit_logs SET metadata=metadata-'email'-'actor'-'assignedTo'
        WHERE actor_id=$1 OR resource_id=$1`,
+      [person.id],
+    );
+    // Entries written by others that point at this person.
+    await tx.query(
+      `UPDATE audit_logs SET metadata=metadata-ARRAY(
+         SELECT key FROM jsonb_each_text(metadata)
+         WHERE key IN ('assignedTo','previousAssignee') AND value=$1::text)
+       WHERE metadata->>'assignedTo'=$1::text
+          OR metadata->>'previousAssignee'=$1::text`,
       [person.id],
     );
     await auditForUser(

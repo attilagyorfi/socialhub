@@ -2610,6 +2610,21 @@ td {
   gap: 4px 18px;
   margin-top: 6px;
 }
+.comment-tool {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+.comment-tool select {
+  max-width: 100%;
+}
+.reply-template-body {
+  flex-basis: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 @media (max-width: 480px) {
   .comment-card {
     padding: 16px;
