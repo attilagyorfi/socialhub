@@ -36,6 +36,7 @@ export type Target = {
   firstCommentError?: string | null;
 };
 export type HashtagSet = { id: string; name: string; hashtags: string[] };
+export type ReplyTemplate = { id: string; name: string; body: string };
 export type Post = {
   id: string;
   revision: number;
@@ -112,6 +113,7 @@ export type HubData = {
   }[];
   brand: Record<string, string>;
   hashtagSets: HashtagSet[];
+  replyTemplates: ReplyTemplate[];
   // Brand profile synced from the Growth Engine; shown read-only.
   brandSync: {
     profile: {

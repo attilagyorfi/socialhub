@@ -106,6 +106,22 @@ const en = {
   "hashtags.edit": "Edit",
   "hashtags.delete": "Delete",
   "hashtags.cancel": "Cancel",
+  "templates.title": "Reply templates",
+  "templates.note":
+    "Ready-made texts you can insert when replying to a comment. {név} becomes the commenter's name. At most {max} templates.",
+  "templates.empty": "No reply templates yet.",
+  "templates.name": "Name",
+  "templates.body": "Text",
+  "templates.placeholder": "Hi {név}, thank you for your comment!",
+  "templates.limit":
+    "You have reached the limit. Delete a template to add a new one.",
+  "templates.add": "Add template",
+  "templates.update": "Save changes",
+  "templates.edit": "Edit",
+  "templates.edit.label": "Edit template: {name}",
+  "templates.delete": "Delete",
+  "templates.delete.label": "Delete template: {name}",
+  "templates.cancel": "Cancel",
 } as const;
 
 const hu = {
@@ -217,6 +233,21 @@ const hu = {
   "hashtags.edit": "Szerkesztés",
   "hashtags.delete": "Törlés",
   "hashtags.cancel": "Mégse",
+  "templates.title": "Válaszsablonok",
+  "templates.note":
+    "Kész szövegek, amelyeket beszúrhatsz, amikor egy kommentre válaszolsz. A {név} helyére a hozzászóló neve kerül. Legfeljebb {max} sablonod lehet.",
+  "templates.empty": "Még nincs válaszsablonod.",
+  "templates.name": "Név",
+  "templates.body": "Szöveg",
+  "templates.placeholder": "Szia {név}, köszönjük, hogy írtál!",
+  "templates.limit": "Elérted a felső határt. Új sablonhoz törölj egy régit.",
+  "templates.add": "Sablon hozzáadása",
+  "templates.update": "Módosítások mentése",
+  "templates.edit": "Szerkesztés",
+  "templates.edit.label": "Sablon szerkesztése: {name}",
+  "templates.delete": "Törlés",
+  "templates.delete.label": "Sablon törlése: {name}",
+  "templates.cancel": "Mégse",
 } satisfies Record<keyof typeof en, string>;
 
 export default { en, hu };

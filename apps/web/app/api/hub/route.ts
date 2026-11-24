@@ -46,11 +46,18 @@ import {
   timeZoneInput,
   localeInput,
   hashtagSetInput,
+  replyTemplateInput,
 } from "../../../../../packages/server/validation";
 import {
   deleteHashtagSet,
   saveHashtagSet,
 } from "../../../../../packages/server/hashtag-sets";
+import {
+  deleteReplyTemplate,
+  listReplyTemplates,
+  saveReplyTemplate,
+} from "../../../../../packages/server/reply-templates";
+import { visibleAuditRows } from "../../../../../packages/server/comment-assignments";
 import { rateLimit } from "../../../../../packages/server/queue";
 import { boundedForm } from "../../../../../packages/server/upload-validation";
 import {
@@ -155,6 +162,7 @@ export async function GET(request: Request) {
           brand: {},
           brandSync: null,
           hashtagSets: [],
+          replyTemplates: [],
           workflow: ["EXTERNAL"],
           approvalAutomation: {
             automaticReminders: false,
@@ -282,7 +290,7 @@ export async function GET(request: Request) {
       ),
     ]);
     const canManageTeam = ["OWNER", "ADMIN"].includes(c.role);
-    const [team, operations, reviewers, privacy, commentsOpen] =
+    const [team, operations, reviewers, privacy, commentsOpen, replyTemplates] =
       await Promise.all([
         canManageTeam
           ? listTeam(c)
@@ -291,6 +299,7 @@ export async function GET(request: Request) {
         c.role === "VIEWER" ? Promise.resolve([]) : reviewerCandidates(c),
         privacyStatus(actor.id, c.organizationId),
         openCommentCount(c),
+        listReplyTemplates(c),
       ]);
     return Response.json(
       {
@@ -308,7 +317,7 @@ export async function GET(request: Request) {
         accounts: results[1].rows,
         media: results[2].rows,
         notifications: results[3].rows,
-        audit: results[4].rows,
+        audit: visibleAuditRows(c.role, results[4].rows),
         brand: results[5].rows[0]?.profile ?? {},
         // Read-only in the UI: owned by the Growth Engine sync.
         brandSync: results[5].rows[0]?.synced_profile
@@ -337,6 +346,7 @@ export async function GET(request: Request) {
               maxAutomaticReminders: 2,
             },
         hashtagSets: results[8].rows,
+        replyTemplates,
         reviewers,
         team: team.members,
         invitations: team.invitations,
@@ -420,6 +430,7 @@ export async function POST(request: Request) {
               action === "account.disconnect" ||
               action === "brand.save" ||
               action.startsWith("hashtags.") ||
+              action.startsWith("templates.") ||
               action === "workflow.save" ||
               action === "privacy.organization.erase.request" ||
               action === "privacy.retention.update" ||
@@ -570,6 +581,16 @@ export async function POST(request: Request) {
         );
       case "hashtags.delete":
         return Response.json(await deleteHashtagSet(c, uuid.parse(body.id)));
+      case "templates.save":
+        return Response.json(
+          await saveReplyTemplate(
+            c,
+            replyTemplateInput.parse(body),
+            body.id ? uuid.parse(body.id) : undefined,
+          ),
+        );
+      case "templates.delete":
+        return Response.json(await deleteReplyTemplate(c, uuid.parse(body.id)));
       case "brand.save": {
         await saveLocalBrandProfile(c, body.brand);
         break;

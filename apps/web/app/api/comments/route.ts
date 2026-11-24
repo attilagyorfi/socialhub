@@ -8,7 +8,12 @@ import {
   setCommentStatus,
   syncClientComments,
 } from "../../../../../packages/server/comments";
+import { assignComment } from "../../../../../packages/server/comment-assignments";
 import { context } from "../../../../../packages/server/context";
+import {
+  commentAssigneeFilter,
+  commentAssignInput,
+} from "../../../../../packages/server/validation";
 
 export const runtime = "nodejs";
 
@@ -63,6 +68,10 @@ export async function GET(request: Request) {
           .enum(["facebook", "instagram"])
           .optional()
           .parse(url.searchParams.get("platform") || undefined),
+        // A mistyped filter must not look like a filtered list.
+        assignee: commentAssigneeFilter.parse(
+          url.searchParams.get("assignee") ?? "all",
+        ),
         before: z
           .string()
           .datetime()
@@ -81,7 +90,7 @@ export async function POST(request: Request) {
     sameOrigin(request);
     const body = await request.json();
     const action = z
-      .enum(["reply", "hide", "status", "sync"])
+      .enum(["reply", "hide", "status", "sync", "assign"])
       .parse(body.action);
     // Answering or hiding speaks for the client in public.
     const c = await context(
@@ -113,6 +122,10 @@ export async function POST(request: Request) {
             uuid.parse(body.id),
             z.enum(["OPEN", "DONE"]).parse(body.status),
           ),
+        );
+      case "assign":
+        return Response.json(
+          await assignComment(c, commentAssignInput.parse(body)),
         );
       case "sync":
         return Response.json(await syncClientComments(c));

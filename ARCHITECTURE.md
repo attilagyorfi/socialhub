@@ -25,6 +25,28 @@ policy into each new request. The worker materializes due emails in a PostgreSQL
 outbox, claims deliveries with row locks, retries transient SMTP failures three
 times and cancels unsent delivery when its review closes or is reassigned.
 
+Comment threads can be assigned to one member with `create` rights
+(`packages/server/comment-assignments.ts`). Assignable are the members whose
+resolved role on the client (`OWNER`/`ADMIN` in the organization, otherwise the
+client membership, as in `context()`) has `create` in `permissions`. One SQL
+condition decides this for the list, the filter, the counter and the write
+check, so the effective assignee is the stored user only while that user is
+still assignable; a removed or demoted member's thread counts as unassigned
+everywhere. `POST /api/comments` `action: "assign"` requires
+`expectedAssigneeId` (null for "nobody"). It locks the comment row first and
+compares the expected with the effective assignee; a difference is answered
+with 409 `COMMENT_ASSIGNMENT_CONFLICT` without writing. Replies and the page's
+own comments are rejected with 422, unknown, foreign and unsuitable assignees
+with the same 422. `GET /api/comments` accepts `assignee=all|me|none`, applied
+in SQL before paging; `filteredOpenCount` counts the open threads of the
+network and assignee filter, while `openCount` (the menu badge) ignores
+filters. Members (id and name only), assignees and the `me`/`none` filters are
+limited to `create` rights; other roles receive the assignment entries of the
+activity log without metadata. Reply templates
+(`packages/server/reply-templates.ts`) are changed with `manage` rights under a
+lock on the client row. Inserting one (`packages/core/reply-templates.ts`) is a
+local edit of the draft and never sends anything.
+
 ## Publishing consistency
 
 Scheduling writes a publish-job row per target in the same transaction as the post transition. A dispatcher repeatedly reconciles due durable rows into BullMQ using stable job IDs. Workers acquire row locks, recheck state and store attempts. Each target has a stable provider idempotency key. Mock and confirmed Meta delivery receipts persist in PostgreSQL. Partial success is aggregated from target states. Failed deliveries have bounded exponential retry and durable dead-letter state. Ambiguous Meta mutations stop as `META_DELIVERY_UNCERTAIN` and create a separate durable reconciliation job. That job searches recent provider content up to four times and confirms delivery only for one exact caption match inside the original attempt window. Missing or multiple matches remain unresolved for human review and are never automatically republished.

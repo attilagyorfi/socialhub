@@ -49,6 +49,24 @@ const en = {
   "error.load": "Unable to load comments.",
   "error.action": "Unable to update the comment.",
   "error.sync": "Unable to refresh comments.",
+  filteredOpenCount: "{count} open in this view",
+  "filter.assignee": "Filter comments by assignee",
+  "assignee.all": "Everyone",
+  "assignee.me": "Assigned to me",
+  "assignee.none": "Not assigned",
+  "assign.current": "Assigned to {name}",
+  "assign.label": "Who handles the comment from {author}",
+  "assign.save": "Assign",
+  "assign.save.label": "Save who handles the comment from {author}",
+  "notice.assigned": "Comment assigned.",
+  "notice.unassigned": "Assignment removed.",
+  "empty.filtered": "No comments match these filters.",
+  "template.label": "Reply template for {author}",
+  "template.choose": "Choose a template",
+  "template.insert": "Insert",
+  "template.insert.label": "Insert the template into the reply to {author}",
+  "template.tooLong":
+    "The reply would be longer than {max} characters, so nothing was inserted.",
 } as const;
 
 const hu = {
@@ -101,6 +119,24 @@ const hu = {
   "error.load": "Nem sikerült betölteni a kommenteket.",
   "error.action": "Nem sikerült módosítani a kommentet.",
   "error.sync": "Nem sikerült frissíteni a kommenteket.",
+  filteredOpenCount: "{count} nyitott ebben a nézetben",
+  "filter.assignee": "Kommentek szűrése felelős szerint",
+  "assignee.all": "Mindenki",
+  "assignee.me": "Hozzám rendelt",
+  "assignee.none": "Nincs hozzárendelve",
+  "assign.current": "Felelős: {name}",
+  "assign.label": "Ki foglalkozzon {author} kommentjével?",
+  "assign.save": "Hozzárendelés",
+  "assign.save.label": "{author} kommentjének hozzárendelése",
+  "notice.assigned": "Hozzárendelted a kommentet.",
+  "notice.unassigned": "Levetted a hozzárendelést.",
+  "empty.filtered": "Nincs a szűrésnek megfelelő komment.",
+  "template.label": "Válaszsablon {author} kommentjéhez",
+  "template.choose": "Válassz sablont",
+  "template.insert": "Beszúrás",
+  "template.insert.label": "Sablon beszúrása a válaszba ({author} kommentje)",
+  "template.tooLong":
+    "A válasz hosszabb lenne {max} karakternél, ezért nem szúrtuk be a sablont.",
 } satisfies Record<keyof typeof en, string>;
 
 export default { en, hu };

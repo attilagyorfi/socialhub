@@ -12,10 +12,14 @@ const en = {
   ANALYTICS_REMOTE_ID_MISSING: "Published target has no provider identifier.",
   ANALYTICS_SYNC_FAILED: "Analytics synchronization failed.",
   APPROVAL_REQUIRED: "Approval is required first.",
+  ASSIGNEE_NOT_ALLOWED: "This person cannot be assigned to the comment.",
   ASSIGNEE_REQUIRED: "This review is assigned to another reviewer.",
   BRAND_GUARDRAIL: "Brand review blocked approval.",
   CLIENT_INVALID: "A selected client is invalid.",
   CLIENT_REQUIRED: "Choose at least one client for this role.",
+  COMMENT_ASSIGNMENT_CONFLICT:
+    "Someone else has changed this assignment in the meantime.",
+  COMMENT_NOT_ASSIGNABLE: "Only comment threads can be assigned.",
   COMMENT_REQUIRED: "Please explain the requested changes or enter a comment.",
   CONFIRMATION_MISMATCH: "The confirmation does not match.",
   CREDENTIAL_REVOCATION_REQUIRED: "Provider credentials must be revoked first.",
@@ -112,6 +116,9 @@ const en = {
   PUBLISHING_STARTED: "Publishing has already started for this post.",
   RATE_LIMIT: "Too many requests. Try again shortly.",
   REMINDER_COOLDOWN: "A reminder was sent less than one hour ago.",
+  REPLY_TEMPLATE_EXISTS:
+    "This client already has a reply template with this name.",
+  REPLY_TEMPLATE_LIMIT: "This client has reached the reply template limit.",
   REQUEST_CLOSED: "This privacy request is already closed.",
   REQUEST_RUNNING: "This deletion is already being processed.",
   REVIEWER_REQUIRED: "Choose an internal reviewer.",
@@ -147,10 +154,15 @@ const hu = {
     "A közzétett tartalomnak nincs szolgáltatói azonosítója.",
   ANALYTICS_SYNC_FAILED: "Nem sikerült szinkronizálni az analitikát.",
   APPROVAL_REQUIRED: "Ehhez előbb jóváhagyás szükséges.",
+  ASSIGNEE_NOT_ALLOWED: "Ehhez a személyhez nem rendelheted a kommentet.",
   ASSIGNEE_REQUIRED: "Ezt az ellenőrzést másik jóváhagyóhoz rendelték.",
   BRAND_GUARDRAIL: "A márkaellenőrzés megakadályozta a jóváhagyást.",
   CLIENT_INVALID: "Az egyik kiválasztott ügyfél érvénytelen.",
   CLIENT_REQUIRED: "Ehhez a szerepkörhöz válassz legalább egy ügyfelet.",
+  COMMENT_ASSIGNMENT_CONFLICT:
+    "Közben valaki más módosította a hozzárendelést. Nézd meg a friss állapotot, és próbáld újra.",
+  COMMENT_NOT_ASSIGNABLE:
+    "Csak a beszélgetést indító kommentet rendelheted valakihez.",
   COMMENT_REQUIRED: "Írd le, milyen módosítást kérsz, vagy írj megjegyzést.",
   CONFIRMATION_MISMATCH:
     "A megerősítés nem egyezik. Pontosan írd be a kért szöveget.",
@@ -265,6 +277,9 @@ const hu = {
   PUBLISHING_STARTED: "Ennek a posztnak a közzététele már elindult.",
   RATE_LIMIT: "Túl sok kérés. Próbáld újra kicsit később.",
   REMINDER_COOLDOWN: "Egy órán belül már küldtünk emlékeztetőt.",
+  REPLY_TEMPLATE_EXISTS: "Ennek az ügyfélnek már van ilyen nevű válaszsablona.",
+  REPLY_TEMPLATE_LIMIT:
+    "Ennél az ügyfélnél nem fér el több válaszsablon. Törölj egyet, és próbáld újra.",
   REQUEST_CLOSED: "Ez az adatvédelmi kérelem már lezárult.",
   REQUEST_RUNNING: "Ez a törlés már folyamatban van.",
   REVIEWER_REQUIRED: "Válassz belső jóváhagyót.",

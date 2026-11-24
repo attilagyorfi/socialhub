@@ -36,6 +36,7 @@ try {
     "028_webhooks.sql",
     "029_approval_bundles.sql",
     "030_first_comments_hashtag_sets.sql",
+    "031_comment_templates_assignments.sql",
   ]) {
     const exists = await conn.query(
       "SELECT 1 FROM schema_migrations WHERE name=$1",

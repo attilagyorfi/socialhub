@@ -13,6 +13,7 @@ import { useT, type MessageKey } from "../i18n";
 import { MediaPreview } from "./composer";
 import { useMediaUpload } from "./media";
 import { HashtagSettings } from "./hashtag-settings";
+import { ReplyTemplateSettings } from "./reply-template-settings";
 
 const workflowFields = [
   ["firstReminderHours", "sections.workflow.firstReminderHours"],
@@ -455,6 +456,7 @@ export function Clients({
             </div>
           </form>
           <HashtagSettings data={data} mutate={mutate} busy={busy} />
+          <ReplyTemplateSettings data={data} mutate={mutate} busy={busy} />
         </section>
       )}
     </>

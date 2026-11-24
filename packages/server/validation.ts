@@ -9,6 +9,10 @@ import {
   normalizeHashtags,
   platforms,
 } from "../core/domain";
+import {
+  REPLY_MAX_LENGTH,
+  REPLY_TEMPLATE_NAME_MAX,
+} from "../core/reply-templates";
 import { canonicalTimeZone, validTimeZone } from "../core/timezones";
 export const uuid = z.string().uuid();
 export const localeInput = z.enum(["hu", "en"]);
@@ -77,6 +81,26 @@ export const hashtagSetInput = z.object({
         ),
     ),
 });
+// PostgreSQL text cannot hold a NUL character.
+const storable = (max: number) =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(max)
+    .refine((value) => !value.includes("\0"), "Remove the invalid character.");
+export const replyTemplateInput = z.object({
+  name: storable(REPLY_TEMPLATE_NAME_MAX),
+  body: storable(REPLY_MAX_LENGTH),
+});
+// The expected value is required: null means "I saw nobody assigned".
+const memberId = uuid.transform((value) => value.toLowerCase()).nullable();
+export const commentAssignInput = z.object({
+  id: uuid,
+  assigneeId: memberId,
+  expectedAssigneeId: memberId,
+});
+export const commentAssigneeFilter = z.enum(["all", "me", "none"]);
 export const connectInput = z.object({
   clientId: uuid,
   platform: z.enum(platforms),

@@ -1,8 +1,15 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EyeOff, Heart, RefreshCw } from "lucide-react";
-import { formatDate, Network } from "./types";
+import { flushSync } from "react-dom";
+import { EyeOff, Heart, RefreshCw, UserRound } from "lucide-react";
+import { formatDate, Network, type ReplyTemplate } from "./types";
+import { ReplyTemplatePicker } from "./reply-template-picker";
 import { apiError, useT, type MessageKey } from "../i18n";
+import {
+  insertIntoDraft,
+  renderReplyTemplate,
+  REPLY_MAX_LENGTH,
+} from "../../../packages/core/reply-templates";
 
 type CommentStatus = "OPEN" | "DONE";
 type Reply = {
@@ -13,6 +20,7 @@ type Reply = {
   fromPage: boolean;
   hidden: boolean;
 };
+type Member = { id: string; name: string };
 type Thread = {
   id: string;
   platform: "facebook" | "instagram";
@@ -25,21 +33,27 @@ type Thread = {
   status: CommentStatus;
   post: { id: string; caption: string } | null;
   replies: Reply[];
+  // Only for roles that may assign comments, like assignableMembers.
+  assignee?: Member | null;
 };
 type CommentsResult = {
   threads: Thread[];
   nextBefore: string | null;
   openCount: number;
+  filteredOpenCount: number;
+  assignableMembers?: Member[];
   canReply: boolean;
   lastSyncedAt: string | null;
 };
 
 const statusFilters = ["OPEN", "DONE", "ALL"] as const;
+const assigneeFilters = ["all", "me", "none"] as const;
 const platforms = ["facebook", "instagram"] as const;
 const emptyResult: CommentsResult = {
   threads: [],
   nextBefore: null,
   openCount: 0,
+  filteredOpenCount: 0,
   canReply: false,
   lastSyncedAt: null,
 };
@@ -51,22 +65,35 @@ function truncate(value: string, length = 60) {
     : text;
 }
 
+class RequestError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
+
 export function Comments({
   clientId,
   timeZone,
   refreshKey,
+  templates,
   onOpenPost,
   onCountChange,
 }: {
   clientId: string;
   timeZone: string;
   refreshKey: number;
+  templates: ReplyTemplate[];
   onOpenPost: (postId: string) => void;
   onCountChange?: (open: number) => void;
 }) {
   const { t } = useT();
   const [status, setStatus] = useState<(typeof statusFilters)[number]>("OPEN");
   const [platform, setPlatform] = useState("all");
+  const [assignee, setAssignee] =
+    useState<(typeof assigneeFilters)[number]>("all");
   const [result, setResult] = useState<CommentsResult>(emptyResult);
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -76,7 +103,15 @@ export function Comments({
   const [syncing, setSyncing] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [templateChoice, setTemplateChoice] = useState<Record<string, string>>(
+    {},
+  );
+  const [memberChoice, setMemberChoice] = useState<Record<string, string>>({});
+  const [insertError, setInsertError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const fields = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  // Last caret per reply field; missing until the field was used.
+  const carets = useRef<Record<string, number>>({});
   const sequence = useRef(0);
   const countChange = useRef(onCountChange);
   useEffect(() => {
@@ -89,6 +124,7 @@ export function Comments({
         clientId,
         status,
         ...(platform !== "all" ? { platform } : {}),
+        ...(assignee !== "all" ? { assignee } : {}),
         ...(before ? { before } : {}),
       });
       const response = await fetch(`/api/comments?${params}`, {
@@ -99,7 +135,7 @@ export function Comments({
       if (!response.ok) throw new Error(apiError(body));
       return body as CommentsResult;
     },
-    [clientId, platform, status],
+    [assignee, clientId, platform, status],
   );
 
   useEffect(() => {
@@ -166,7 +202,7 @@ export function Comments({
       body: JSON.stringify({ clientId, ...fields }),
     });
     const body = await response.json();
-    if (!response.ok) throw new Error(apiError(body));
+    if (!response.ok) throw new RequestError(apiError(body), body?.code);
     return body;
   }
 
@@ -180,17 +216,60 @@ export function Comments({
     setNotice("");
     try {
       await post({ id, ...fields });
-      if (fields.action === "reply")
+      if (fields.action === "reply") {
         setDrafts((current) => ({ ...current, [id]: "" }));
+        delete carets.current[id];
+      }
       setNotice(t(success));
       reload();
     } catch (error) {
       setActionError(
         error instanceof Error ? error.message : t("comments.error.action"),
       );
+      // Someone else was faster: show the assignment as it is now.
+      if (
+        error instanceof RequestError &&
+        error.code === "COMMENT_ASSIGNMENT_CONFLICT"
+      )
+        reload();
     } finally {
       setBusyId("");
     }
+  }
+
+  async function assign(thread: Thread, assigneeId: string | null) {
+    await act(
+      thread.id,
+      {
+        action: "assign",
+        assigneeId,
+        expectedAssigneeId: thread.assignee?.id ?? null,
+      },
+      assigneeId ? "comments.notice.assigned" : "comments.notice.unassigned",
+    );
+    setMemberChoice((current) => {
+      const next = { ...current };
+      delete next[thread.id];
+      return next;
+    });
+  }
+
+  // Changes the local draft only; sending stays with the reply button.
+  function insertTemplate(thread: Thread, template: ReplyTemplate) {
+    const inserted = insertIntoDraft(
+      drafts[thread.id] ?? "",
+      renderReplyTemplate(template.body, thread.authorName),
+      carets.current[thread.id] ?? null,
+    );
+    setInsertError(inserted ? "" : thread.id);
+    if (!inserted) return;
+    flushSync(() =>
+      setDrafts((current) => ({ ...current, [thread.id]: inserted.value })),
+    );
+    const field = fields.current[thread.id];
+    field?.focus();
+    field?.setSelectionRange(inserted.caret, inserted.caret);
+    carets.current[thread.id] = inserted.caret;
   }
 
   async function sync() {
@@ -221,6 +300,8 @@ export function Comments({
       ? t(`comments.author.${network}`)
       : t("comments.author.fallback"));
 
+  const filtered = platform !== "all" || assignee !== "all";
+
   return (
     <section className="panel" aria-busy={loading}>
       <div className="panel-title">
@@ -228,7 +309,11 @@ export function Comments({
         <span className="muted">
           {loading
             ? t("comments.loading")
-            : t("comments.openCount", { count: result.openCount })}
+            : filtered
+              ? t("comments.filteredOpenCount", {
+                  count: result.filteredOpenCount,
+                })
+              : t("comments.openCount", { count: result.openCount })}
         </span>
       </div>
       <div className="post-toolbar comment-toolbar">
@@ -257,6 +342,23 @@ export function Comments({
             </option>
           ))}
         </select>
+        {result.assignableMembers && (
+          <select
+            aria-label={t("comments.filter.assignee")}
+            value={assignee}
+            onChange={(event) =>
+              setAssignee(
+                event.target.value as (typeof assigneeFilters)[number],
+              )
+            }
+          >
+            {assigneeFilters.map((value) => (
+              <option key={value} value={value}>
+                {t(`comments.assignee.${value}`)}
+              </option>
+            ))}
+          </select>
+        )}
         <button
           onClick={() => void sync()}
           disabled={syncing}
@@ -304,7 +406,11 @@ export function Comments({
       </div>
       {!loading && !loadError && !result.threads.length && (
         <div className="empty compact">
-          {status === "OPEN" ? t("comments.empty.open") : t("comments.empty")}
+          {filtered
+            ? t("comments.empty.filtered")
+            : status === "OPEN"
+              ? t("comments.empty.open")
+              : t("comments.empty")}
         </div>
       )}
       {loading && !result.threads.length && !loadError && (
@@ -319,6 +425,15 @@ export function Comments({
             const caption = thread.post
               ? truncate(thread.post.caption) || t("comments.post.media")
               : "";
+            const members = result.assignableMembers ?? [];
+            const assigned = thread.assignee?.id ?? "";
+            const member = memberChoice[thread.id] ?? assigned;
+            const rememberCaret = (
+              event: React.SyntheticEvent<HTMLTextAreaElement>,
+            ) => {
+              // The end of a selection, so inserting never replaces it.
+              carets.current[thread.id] = event.currentTarget.selectionEnd;
+            };
             const submitReply = () => {
               const message = draft.trim();
               if (!message || busy) return;
@@ -345,6 +460,14 @@ export function Comments({
                     </span>
                   </div>
                   <div className="comment-badges">
+                    {thread.assignee && (
+                      <span className="badge">
+                        <UserRound size={11} aria-hidden="true" />
+                        {t("comments.assign.current", {
+                          name: thread.assignee.name,
+                        })}
+                      </span>
+                    )}
                     {thread.hidden && (
                       <span className="badge comment-hidden">
                         <EyeOff size={11} aria-hidden="true" />
@@ -439,8 +562,69 @@ export function Comments({
                     })}
                   </ul>
                 )}
+                {thread.assignee !== undefined && (
+                  <div className="comment-tool">
+                    <select
+                      aria-label={t("comments.assign.label", { author })}
+                      value={member}
+                      disabled={busy}
+                      onChange={(event) =>
+                        setMemberChoice((current) => ({
+                          ...current,
+                          [thread.id]: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">{t("comments.assignee.none")}</option>
+                      {thread.assignee &&
+                        !members.some((item) => item.id === assigned) && (
+                          <option value={assigned}>
+                            {thread.assignee.name}
+                          </option>
+                        )}
+                      {members.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={busy || member === assigned}
+                      aria-label={t("comments.assign.save.label", { author })}
+                      onClick={() => void assign(thread, member || null)}
+                    >
+                      {t("comments.assign.save")}
+                    </button>
+                  </div>
+                )}
                 {result.canReply && (
                   <div className="comment-actions">
+                    {!!templates.length && (
+                      <ReplyTemplatePicker
+                        t={t}
+                        templates={templates}
+                        author={author}
+                        value={templateChoice[thread.id] ?? ""}
+                        disabled={busy}
+                        error={
+                          insertError === thread.id
+                            ? t("comments.template.tooLong", {
+                                max: REPLY_MAX_LENGTH,
+                              })
+                            : ""
+                        }
+                        onChoose={(id) =>
+                          setTemplateChoice((current) => ({
+                            ...current,
+                            [thread.id]: id,
+                          }))
+                        }
+                        onInsert={(template) =>
+                          insertTemplate(thread, template)
+                        }
+                      />
+                    )}
                     <form
                       className="comment-reply-form"
                       onSubmit={(event) => {
@@ -449,25 +633,35 @@ export function Comments({
                       }}
                     >
                       <textarea
+                        ref={(field) => {
+                          fields.current[thread.id] = field;
+                        }}
                         aria-label={t("comments.reply.label", { author })}
                         placeholder={t("comments.reply.placeholder")}
                         value={draft}
-                        maxLength={2000}
+                        maxLength={REPLY_MAX_LENGTH}
                         rows={2}
                         disabled={busy}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const { value } = event.target;
                           setDrafts((current) => ({
                             ...current,
-                            [thread.id]: event.target.value,
-                          }))
-                        }
+                            [thread.id]: value,
+                          }));
+                          rememberCaret(event);
+                          setInsertError("");
+                        }}
+                        onSelect={rememberCaret}
+                        onBlur={rememberCaret}
                         onKeyDown={(event) => {
                           if (
                             event.key === "Enter" &&
                             (event.ctrlKey || event.metaKey)
                           ) {
                             event.preventDefault();
-                            submitReply();
+                            // A key still held down after inserting a
+                            // template must not send the reply.
+                            if (!event.repeat) submitReply();
                           }
                         }}
                       />
