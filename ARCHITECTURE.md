@@ -47,6 +47,42 @@ activity log without metadata. Reply templates
 lock on the client row. Inserting one (`packages/core/reply-templates.ts`) is a
 local edit of the draft and never sends anything.
 
+## Client portal uploads
+
+`/api/client-uploads` is a separate endpoint because every action of the hub
+endpoint defaults to the team's `create` right. A `CLIENT_REVIEWER` prepares,
+completes and withdraws their own uploads there (the `permissions` matrix is not
+extended); users with the `create` right list and decide. Uploads reuse the
+direct upload path of the media library (types, 20 MB, 5-minute signed URL,
+worker checks). At most 50 undecided uploads per client and 100 uploads per
+person in 24 hours are allowed; the advisory locks (user, then client), the
+counting and the insert share one transaction.
+
+One SQL condition in `packages/server/client-media-rule.ts` decides what is
+usable: a portal upload only once it is `ACCEPTED`. Post creation and editing,
+approval submission, scheduling, publishing, the approval pages, the monthly
+bundle, the Instagram grid, the calendar PDF and the hub media list all add it.
+The integration API, the calendar import and AI never read stored media.
+Saving or scheduling a post first locks its portal rows `FOR SHARE` (ordered by
+ID) and reads media afterwards; a decision locks the asset, then the portal row,
+and checks use in posts after that, so at most one of the two succeeds. Expired
+rejections (organization retention) are soft-deleted under the same locks; the
+existing retention of deleted media removes their files one period later.
+
+Before migration 032 has run (`to_regclass` finds no table, asked before the
+real query and never cached when negative) no portal upload can exist: the
+condition is true, everything else works as before and the portal answers 503.
+Any other database error is thrown, so nothing is used unchecked.
+
+Deploying and rolling back: code from before this feature does not know the
+condition and would show undecided files in the media library and accept them in
+posts. Run 032 only once all old web and worker instances have been replaced.
+Before rolling the code back, make sure no undecided portal upload is left:
+stop uploads, then accept or delete every file listed by
+`SELECT m.id,m.name,u.status FROM client_media_uploads u JOIN media_assets m ON
+m.id=u.media_asset_id WHERE u.status<>'ACCEPTED' AND m.deleted_at IS NULL`.
+The table itself can stay.
+
 ## Publishing consistency
 
 Scheduling writes a publish-job row per target in the same transaction as the post transition. A dispatcher repeatedly reconciles due durable rows into BullMQ using stable job IDs. Workers acquire row locks, recheck state and store attempts. Each target has a stable provider idempotency key. Mock and confirmed Meta delivery receipts persist in PostgreSQL. Partial success is aggregated from target states. Failed deliveries have bounded exponential retry and durable dead-letter state. Ambiguous Meta mutations stop as `META_DELIVERY_UNCERTAIN` and create a separate durable reconciliation job. That job searches recent provider content up to four times and confirms delivery only for one exact caption match inside the original attempt window. Missing or multiple matches remain unresolved for human review and are never automatically republished.

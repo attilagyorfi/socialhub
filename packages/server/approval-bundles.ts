@@ -3,6 +3,7 @@ import type { Context } from "./context";
 import { transaction, audit } from "./transaction";
 import { AppError, hashToken, token } from "../core/security";
 import { pool } from "../db";
+import { usableMedia } from "./client-media-rule";
 import { applyApprovalDecision } from "./approvals";
 import { buildInstagramGrid } from "../core/instagram-grid";
 import {
@@ -389,9 +390,10 @@ export async function bundleView(secret: string) {
   const assets = new Map(
     (
       await pool.query(
-        `SELECT id,name,mime_type FROM media_assets
+        `SELECT id,name,mime_type FROM media_assets m
          WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[])
-           AND status='READY' AND deleted_at IS NULL`,
+           AND status='READY' AND deleted_at IS NULL
+           AND ${await usableMedia(pool, "m")}`,
         [bundle.organization_id, bundle.client_id, mediaIds],
       )
     ).rows.map((asset) => [asset.id, asset]),
@@ -581,9 +583,10 @@ export async function bundleMedia(secret: string, item: number, file: string) {
   const asset = mediaId
     ? (
         await pool.query(
-          `SELECT object_key,mime_type FROM media_assets
+          `SELECT object_key,mime_type FROM media_assets m
            WHERE organization_id=$1 AND client_id=$2 AND id=$3
-             AND status='READY' AND deleted_at IS NULL`,
+             AND status='READY' AND deleted_at IS NULL
+             AND ${await usableMedia(pool, "m")}`,
           [bundle.organization_id, bundle.client_id, mediaId],
         )
       ).rows[0]

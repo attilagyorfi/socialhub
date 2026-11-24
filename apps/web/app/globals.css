@@ -1365,6 +1365,41 @@ td {
   padding: 6px 9px;
   margin-top: 5px;
 }
+.material-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+.material-text {
+  margin: 6px 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.material-queue {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  margin-bottom: 25px;
+}
+.material-queue label,
+.material-reject label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+.material-queue > button {
+  justify-self: start;
+}
+.material-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.client-uploads {
+  margin-bottom: 30px;
+}
 .activity-row {
   display: flex;
   align-items: center;

@@ -10,6 +10,7 @@ import {
   type Platform,
 } from "../core/domain";
 import { AppError } from "../core/security";
+import { lockPortalMedia, usableMedia } from "./client-media-rule";
 import { postInput } from "./validation";
 import type { z } from "zod";
 import type { PoolClient } from "pg";
@@ -74,6 +75,9 @@ export async function publishabilityErrors(
   ).rows;
   if (!targets.length)
     return { targets, errors: ["Select at least one account."] };
+  const mediaIds: string[] = targets.flatMap((target) => target.media_ids);
+  await lockPortalMedia(tx, c, mediaIds);
+  const usable = mediaIds.length ? await usableMedia(tx, "m") : "TRUE";
   const errors: string[] = [];
   for (const target of targets) {
     if (target.account_status !== "CONNECTED") {
@@ -86,7 +90,7 @@ export async function publishabilityErrors(
       target.media_ids,
       (
         await tx.query(
-          "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL",
+          `SELECT * FROM media_assets m WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL AND ${usable}`,
           [c.organizationId, c.clientId, target.media_ids],
         )
       ).rows,
@@ -146,6 +150,9 @@ export async function insertDraftPost(
       ],
     )
   ).rows[0];
+  const mediaIds = input.targets.flatMap((target) => target.mediaIds);
+  await lockPortalMedia(tx, scope, mediaIds);
+  const usable = mediaIds.length ? await usableMedia(tx, "m") : "TRUE";
   for (const target of input.targets) {
     const account = (
       await tx.query(
@@ -165,7 +172,7 @@ export async function insertDraftPost(
         target.mediaIds,
         (
           await tx.query(
-            "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND status='READY' AND deleted_at IS NULL",
+            `SELECT * FROM media_assets m WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND status='READY' AND deleted_at IS NULL AND ${usable}`,
             [scope.organizationId, scope.clientId, target.mediaIds],
           )
         ).rows,

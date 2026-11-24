@@ -19,6 +19,7 @@ import {
   LogOut,
   UserRoundCog,
   MessageSquare,
+  Upload,
 } from "lucide-react";
 import { MediaThumb } from "./media";
 import { Composer } from "./composer";
@@ -28,6 +29,7 @@ import { CalendarImport } from "./calendar-import";
 import { CalendarExport, InstagramGrid } from "./instagram-grid";
 import { can, type Role } from "../../../packages/core/domain";
 import { Library, Accounts, Clients } from "./sections";
+import { Materials } from "./materials";
 import { Analytics } from "./analytics";
 import { Team } from "./team";
 import { PostList } from "./post-list";
@@ -54,6 +56,7 @@ const navigation = [
   ["Create", PenSquare],
   ["Posts", Files],
   ["Media", ImageIcon],
+  ["Materials", Upload],
   ["Analytics", ChartNoAxesCombined],
   ["Approvals", CheckCheck],
   ["Comments", MessageSquare],
@@ -322,6 +325,10 @@ function HubShell() {
         <nav data-tour="navigation">
           {navigation
             .filter(([label]) => label !== "Team" || data?.canManageTeam)
+            .filter(
+              ([label]) =>
+                label !== "Materials" || data?.role === "CLIENT_REVIEWER",
+            )
             .map(([label, Icon]) => (
               <button
                 key={label}
@@ -870,6 +877,9 @@ function HubShell() {
                       reload={load}
                       onError={setError}
                     />
+                  )}
+                  {view === "Materials" && data.role === "CLIENT_REVIEWER" && (
+                    <Materials key={data.clientId} data={data} />
                   )}
                   {view === "Connected accounts" && (
                     <Accounts data={data} mutate={mutate} busy={busy} />

@@ -69,7 +69,7 @@
 
 ### SOCIAL_HUB_TERV F3
 
-- [ ] Client portal: the partner uploads images and reference material into their own media library.
+- [x] Client portal: a signed-in client reviewer (`CLIENT_REVIEWER`) uploads images and videos with a note in their own "Materials" view; the files arrive undecided and the team accepts or rejects them in the media library ("From the client"). Undecided and rejected files cannot be used in any post (migration 032). No secret upload link, documents (PDF) or e-mail notification.
 - [ ] Second Meta App Review for `ads_read`, ad metrics in the `metrics` endpoint.
 - [x] Comments: reply templates per client (inserted into the local reply draft only, optional `{név}` placeholder; sending stays a separate action with publish rights) and assignment of a thread to one team member (assign, move, remove, `all`/`me`/`none` filter, conflict check, audit) (migration 031). No e-mail notification.
 

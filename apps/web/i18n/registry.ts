@@ -9,6 +9,7 @@ import composer from "./messages/composer";
 import errors from "./messages/errors";
 import hub from "./messages/hub";
 import legal from "./messages/legal";
+import materials from "./messages/materials";
 import media from "./messages/media";
 import posts from "./messages/posts";
 import sections from "./messages/sections";
@@ -30,6 +31,7 @@ export const namespaces = {
   errors,
   hub,
   legal,
+  materials,
   media,
   posts,
   sections,

@@ -11,7 +11,9 @@ import {
 } from "./types";
 import { useT, type MessageKey } from "../i18n";
 import { MediaPreview } from "./composer";
+import { ClientUploads } from "./materials";
 import { useMediaUpload } from "./media";
+import { can, type Role } from "../../../packages/core/domain";
 import { HashtagSettings } from "./hashtag-settings";
 import { ReplyTemplateSettings } from "./reply-template-settings";
 
@@ -489,6 +491,14 @@ export function Library({
   }, [data.media, reload]);
   return (
     <>
+      {can(data.role as Role, "create") && (
+        <ClientUploads
+          key={data.clientId}
+          data={data}
+          mutate={mutate}
+          reload={reload}
+        />
+      )}
       <div
         className="upload-zone"
         onDragOver={(e) => e.preventDefault()}

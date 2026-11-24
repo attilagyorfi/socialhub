@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Context } from "./context";
 import { transaction, audit } from "./transaction";
+import { lockPortalMedia, usableMedia } from "./client-media-rule";
 import { postInput } from "./validation";
 import { AppError } from "../core/security";
 import { inMediaOrder } from "../core/domain";
@@ -34,6 +35,9 @@ export async function editDraft(
         "DUPLICATE_TARGET",
         "Choose each account only once.",
       );
+    const mediaIds = input.targets.flatMap((target) => target.mediaIds);
+    await lockPortalMedia(tx, c, mediaIds);
+    const usable = mediaIds.length ? await usableMedia(tx, "m") : "TRUE";
     const firstComments: (string | null)[] = [];
     for (const target of input.targets) {
       const account = (
@@ -53,7 +57,7 @@ export async function editDraft(
         target.mediaIds,
         (
           await tx.query(
-            "SELECT id,mime_type FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND status='READY' AND deleted_at IS NULL",
+            `SELECT id,mime_type FROM media_assets m WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND status='READY' AND deleted_at IS NULL AND ${usable}`,
             [c.organizationId, c.clientId, target.mediaIds],
           )
         ).rows,
