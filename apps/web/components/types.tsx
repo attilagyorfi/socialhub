@@ -23,7 +23,20 @@ export type Target = {
   mediaIds: string[];
   status: string;
   errorCode?: string;
+  firstComment?: string | null;
+  // first_comment_jobs status once the post is live.
+  firstCommentStatus?:
+    | "PENDING"
+    | "RETRY"
+    | "RUNNING"
+    | "SENT"
+    | "FAILED"
+    | "UNCERTAIN"
+    | null;
+  firstCommentError?: string | null;
 };
+export type HashtagSet = { id: string; name: string; hashtags: string[] };
+export type ReplyTemplate = { id: string; name: string; body: string };
 export type Post = {
   id: string;
   revision: number;
@@ -75,6 +88,7 @@ export type Client = {
   role: string;
   organization_id: string;
   locale: "hu" | "en";
+  external_ref: string | null;
 };
 export type HubData = {
   user: {
@@ -98,6 +112,20 @@ export type HubData = {
     metadata: Record<string, unknown>;
   }[];
   brand: Record<string, string>;
+  hashtagSets: HashtagSet[];
+  replyTemplates: ReplyTemplate[];
+  // Brand profile synced from the Growth Engine; shown read-only.
+  brandSync: {
+    profile: {
+      voice: string | null;
+      required_phrases: string[];
+      forbidden_phrases: string[];
+      required_disclaimer: string | null;
+      pillars: { name: string; description: string | null }[];
+    };
+    source: string;
+    syncedAt: string;
+  } | null;
   workflow: string[];
   approvalAutomation: {
     automaticReminders: boolean;
@@ -115,6 +143,7 @@ export type HubData = {
   hasMore: boolean;
   mode: string;
   meta: { enabled: boolean };
+  linkedin: { enabled: boolean };
   operations: {
     publishWaiting: number;
     publishDead: number;
@@ -131,6 +160,8 @@ export type HubData = {
     approvalDeliveriesFailed: number;
     analyticsWaiting: number;
     analyticsDead: number;
+    webhookWaiting: number;
+    webhookDead: number;
     analyticsLastSuccessAt: string | null;
     worker: {
       healthy: boolean;

@@ -1104,6 +1104,30 @@ td {
 .brand-form label {
   font-size: 12px;
 }
+.brand-synced {
+  padding: 0 24px 20px;
+}
+.brand-synced h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.brand-synced .panel-note {
+  padding: 0;
+}
+.brand-synced dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 20px;
+  margin: 12px 0 24px;
+}
+.brand-synced dt {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.brand-synced dd {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+}
 .calendar-filters {
   display: flex;
   align-items: center;
@@ -1340,6 +1364,41 @@ td {
   font-size: 11px;
   padding: 6px 9px;
   margin-top: 5px;
+}
+.material-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+.material-text {
+  margin: 6px 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.material-queue {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  margin-bottom: 25px;
+}
+.material-queue label,
+.material-reject label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+.material-queue > button {
+  justify-self: start;
+}
+.material-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.client-uploads {
+  margin-bottom: 30px;
 }
 .activity-row {
   display: flex;
@@ -2251,6 +2310,40 @@ td {
   cursor: pointer;
   text-align: left;
 }
+.media-order {
+  margin-top: 12px;
+}
+.media-order ol {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.media-order-item {
+  display: grid;
+  grid-template-columns: 24px 48px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+.media-order-item > :nth-child(2) {
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+}
+.media-order-position {
+  font-weight: 600;
+  text-align: right;
+}
+.media-order-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .media-tile.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-light);
@@ -2552,6 +2645,21 @@ td {
   gap: 4px 18px;
   margin-top: 6px;
 }
+.comment-tool {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+.comment-tool select {
+  max-width: 100%;
+}
+.reply-template-body {
+  flex-basis: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 @media (max-width: 480px) {
   .comment-card {
     padding: 16px;
@@ -2749,4 +2857,92 @@ a.button {
   .tour-dots span {
     transition: none;
   }
+}
+
+/* First comment and hashtag sets */
+.hashtag-insert {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.first-comment {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+.first-comment-text {
+  white-space: pre-wrap;
+}
+.hashtag-set-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.hashtag-set-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* Instagram profile preview: three square cells per row, newest first.
+   Planned posts get a dashed frame and a label. */
+.instagram-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  max-width: 480px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.instagram-cell {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--canvas);
+}
+.instagram-cell img,
+.instagram-cell .media-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 0;
+}
+.instagram-cell.planned {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+.instagram-cell.planned img,
+.instagram-cell.planned .media-thumb {
+  opacity: 0.8;
+}
+.instagram-placeholder {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 6px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--muted, #6b7280);
+}
+.instagram-planned {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+.instagram-carousel {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  color: #fff;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
 }

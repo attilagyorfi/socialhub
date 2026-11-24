@@ -1,10 +1,64 @@
 import type { Context } from "./context";
 import { transaction, audit } from "./transaction";
-import { validatePost, type Platform } from "../core/domain";
+import {
+  inMediaOrder,
+  MEDIA_ERRORS,
+  mediaErrorText,
+  mediaSetErrors,
+  supportsFirstComment,
+  validatePost,
+  type Platform,
+} from "../core/domain";
 import { AppError } from "../core/security";
+import { lockPortalMedia, usableMedia } from "./client-media-rule";
 import { postInput } from "./validation";
 import type { z } from "zod";
 import type { PoolClient } from "pg";
+
+// Checked before any query: the 003 trigger would otherwise reject a repeated
+// attachment with a raw database error.
+export function assertUniqueMedia(mediaIds: string[]) {
+  if (new Set(mediaIds).size !== mediaIds.length)
+    throw new AppError(
+      422,
+      "DUPLICATE_MEDIA",
+      mediaErrorText(MEDIA_ERRORS.duplicate),
+    );
+}
+
+// Attachment count and type limits per network, enforced when a draft is
+// saved so nothing is dropped silently later.
+export function assertMediaSet(
+  platform: Platform,
+  media: { id: string; mime_type: string }[],
+) {
+  const errors = mediaSetErrors(platform, media);
+  if (errors.length)
+    throw new AppError(
+      422,
+      "MEDIA_UNSUPPORTED",
+      `${networkNames[platform]}: ${errors.map(mediaErrorText).join(" ")}`,
+    );
+}
+// The stored first comment: blank means none. Networks whose adapter cannot
+// post a comment reject it instead of silently dropping approved text.
+export function firstCommentFor(platform: Platform, value?: string | null) {
+  const text = value?.trim() ? value : null;
+  if (text && !supportsFirstComment(platform))
+    throw new AppError(
+      422,
+      "FIRST_COMMENT_UNSUPPORTED",
+      `${networkNames[platform]}: a first comment is not available on this network.`,
+    );
+  return text;
+}
+const networkNames: Record<Platform, string> = {
+  facebook: "Facebook",
+  instagram: "Instagram",
+  linkedin: "LinkedIn",
+  tiktok: "TikTok",
+  google: "Google Cégprofil",
+};
 
 // Shared by approval submission and scheduling, so a post that cannot be
 // published is rejected before anyone reviews it, not after.
@@ -21,6 +75,9 @@ export async function publishabilityErrors(
   ).rows;
   if (!targets.length)
     return { targets, errors: ["Select at least one account."] };
+  const mediaIds: string[] = targets.flatMap((target) => target.media_ids);
+  await lockPortalMedia(tx, c, mediaIds);
+  const usable = mediaIds.length ? await usableMedia(tx, "m") : "TRUE";
   const errors: string[] = [];
   for (const target of targets) {
     if (target.account_status !== "CONNECTED") {
@@ -29,12 +86,15 @@ export async function publishabilityErrors(
       );
       continue;
     }
-    const media = (
-      await tx.query(
-        "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL",
-        [c.organizationId, c.clientId, target.media_ids],
-      )
-    ).rows;
+    const media = inMediaOrder(
+      target.media_ids,
+      (
+        await tx.query(
+          `SELECT * FROM media_assets m WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL AND ${usable}`,
+          [c.organizationId, c.clientId, target.media_ids],
+        )
+      ).rows,
+    );
     if (media.length !== target.media_ids.length) {
       errors.push(`${target.platform}: An attachment is missing.`);
       continue;
@@ -44,73 +104,117 @@ export async function publishabilityErrors(
       link: post.link,
       media,
     }))
-      errors.push(`${target.platform}: ${message}`);
+      errors.push(`${target.platform}: ${mediaErrorText(message)}`);
   }
   return { targets, errors };
 }
-export async function createPost(c: Context, input: z.infer<typeof postInput>) {
-  return transaction(async (tx) => {
-    if (
-      new Set(input.targets.map((t) => t.accountId)).size !==
-      input.targets.length
+// Draft metadata that only the integration API sets today.
+export type DraftMetadata = {
+  suggestedAt: string | null;
+  pillar: string | null;
+  source: string | null;
+  mediaUrls: string[] | null;
+};
+
+// Creates a DRAFT post with its targets and first version. Shared by the UI
+// and the integration API so both keep the same invariants; the caller writes
+// the audit event and owns the transaction.
+export async function insertDraftPost(
+  tx: PoolClient,
+  scope: { organizationId: string; clientId: string; authorId: string | null },
+  input: Omit<z.infer<typeof postInput>, "clientId">,
+  snapshot: unknown,
+  metadata?: DraftMetadata,
+) {
+  if (
+    new Set(input.targets.map((t) => t.accountId)).size !== input.targets.length
+  )
+    throw new AppError(
+      422,
+      "DUPLICATE_TARGET",
+      "Choose each account only once.",
+    );
+  const post = (
+    await tx.query(
+      "INSERT INTO posts(organization_id,client_id,author_id,caption,link,suggested_at,pillar,source,media_urls) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
+      [
+        scope.organizationId,
+        scope.clientId,
+        scope.authorId,
+        input.caption,
+        input.link || null,
+        metadata?.suggestedAt ?? null,
+        metadata?.pillar ?? null,
+        metadata?.source ?? null,
+        metadata?.mediaUrls ? JSON.stringify(metadata.mediaUrls) : null,
+      ],
     )
-      throw new AppError(
-        422,
-        "DUPLICATE_TARGET",
-        "Choose each account only once.",
-      );
-    const post = (
+  ).rows[0];
+  const mediaIds = input.targets.flatMap((target) => target.mediaIds);
+  await lockPortalMedia(tx, scope, mediaIds);
+  const usable = mediaIds.length ? await usableMedia(tx, "m") : "TRUE";
+  for (const target of input.targets) {
+    const account = (
       await tx.query(
-        "INSERT INTO posts(organization_id,client_id,author_id,caption,link) VALUES($1,$2,$3,$4,$5) RETURNING *",
-        [
-          c.organizationId,
-          c.clientId,
-          c.userId,
-          input.caption,
-          input.link || null,
-        ],
+        "SELECT * FROM social_accounts WHERE organization_id=$1 AND client_id=$2 AND id=$3 AND status='CONNECTED' AND deleted_at IS NULL",
+        [scope.organizationId, scope.clientId, target.accountId],
       )
     ).rows[0];
-    for (const target of input.targets) {
-      const account = (
-        await tx.query(
-          "SELECT * FROM social_accounts WHERE organization_id=$1 AND client_id=$2 AND id=$3 AND status='CONNECTED' AND deleted_at IS NULL",
-          [c.organizationId, c.clientId, target.accountId],
-        )
-      ).rows[0];
-      if (!account)
-        throw new AppError(
-          422,
-          "INVALID_ACCOUNT",
-          "Choose a connected account from this client.",
-        );
-      const media = (
-        await tx.query(
-          "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND status='READY' AND deleted_at IS NULL",
-          [c.organizationId, c.clientId, target.mediaIds],
-        )
-      ).rows;
+    if (!account)
+      throw new AppError(
+        422,
+        "INVALID_ACCOUNT",
+        "Choose a connected account from this client.",
+      );
+    if (target.mediaIds.length) {
+      assertUniqueMedia(target.mediaIds);
+      const media = inMediaOrder(
+        target.mediaIds,
+        (
+          await tx.query(
+            `SELECT * FROM media_assets m WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND status='READY' AND deleted_at IS NULL AND ${usable}`,
+            [scope.organizationId, scope.clientId, target.mediaIds],
+          )
+        ).rows,
+      );
       if (media.length !== target.mediaIds.length)
         throw new AppError(
           422,
           "INVALID_MEDIA",
           "Media must belong to this client and be ready.",
         );
-      await tx.query(
-        "INSERT INTO post_targets(organization_id,client_id,post_id,social_account_id,caption,media_ids) VALUES($1,$2,$3,$4,$5,$6)",
-        [
-          c.organizationId,
-          c.clientId,
-          post.id,
-          account.id,
-          target.caption,
-          target.mediaIds,
-        ],
-      );
+      assertMediaSet(account.platform, media);
     }
     await tx.query(
-      "INSERT INTO post_versions(organization_id,client_id,post_id,revision,snapshot) VALUES($1,$2,$3,1,$4)",
-      [c.organizationId, c.clientId, post.id, JSON.stringify(input)],
+      "INSERT INTO post_targets(organization_id,client_id,post_id,social_account_id,caption,media_ids,first_comment) VALUES($1,$2,$3,$4,$5,$6,$7)",
+      [
+        scope.organizationId,
+        scope.clientId,
+        post.id,
+        account.id,
+        target.caption,
+        target.mediaIds,
+        firstCommentFor(account.platform, target.firstComment),
+      ],
+    );
+  }
+  await tx.query(
+    "INSERT INTO post_versions(organization_id,client_id,post_id,revision,snapshot) VALUES($1,$2,$3,1,$4)",
+    [scope.organizationId, scope.clientId, post.id, JSON.stringify(snapshot)],
+  );
+  return post;
+}
+export async function createPost(c: Context, input: z.infer<typeof postInput>) {
+  return transaction(async (tx) => {
+    const post = await insertDraftPost(
+      tx,
+      {
+        organizationId: c.organizationId,
+        clientId: c.clientId,
+        authorId: c.userId,
+      },
+      input,
+      input,
     );
     await audit(tx, c, "post.created", post.id);
     return post;

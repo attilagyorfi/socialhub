@@ -32,6 +32,13 @@
 - Authenticated personal-data export; cancellable 24-hour account and 72-hour organization erasure; provider-revocation guard; object cleanup; daily configurable retention; and durable privacy audit evidence.
 - Durable daily analytics jobs, seven-day automatic catch-up, administrator-triggered reconciliation, Operations visibility and current Facebook/Instagram metric normalization with retained raw source data.
 - Fail-closed Meta staging verifier for public configuration, granted scopes, connected identity, provider content, receipt-backed publication and live profile/post insights.
+- Integration API v1, first slice: organization API keys (SHA-256 hash only, shown once, revocable, audited) managed by owners/admins in Settings, Bearer-key authentication and read-only `GET /api/v1/clients`.
+- Integration API v1, second slice: `POST /api/v1/clients/{id}/drafts` (atomic batch of up to 50 DRAFT posts; suggested time, media URLs, pillar and source kept as metadata; required organization-scoped `Idempotency-Key` with stored replay) and `GET /api/v1/posts` (contract status categories plus raw status, per-target results, `client`/`since` filters, cursor paging).
+- Integration API v1, third slice: client `external_ref` (organization-unique, owner/admin-editable in Clients, audited, returned by `GET /api/v1/clients`) and read-only `GET /api/v1/clients/{id}/metrics` (stored daily account metrics and latest per-target post metrics for a required UTC range of at most 92 days; no provider calls).
+- Integration API v1, fourth slice: `PUT /api/v1/clients/{id}/brand-profile` (migration 027: `brand_profiles.synced_*` columns; Growth Engine owns the synced profile, local additions stay in `profile`; strict validation, full replacement, hash-based idempotency in one locked transaction, `brand.synced` audit with changed fields). Synced forbidden/required phrases, disclaimer, voice and pillars apply to AI generation and approval checks through one shared `effectiveBrandRules`; Clients shows them read-only with source and sync date. All Growth Engine → Social Hub endpoints of the v1 contract are done; signed webhooks (`post.approved`, `post.changes_requested`, `post.published`, `post.failed`) remain open.
+- Integration API v1, fifth slice: signed webhooks (migration 028: `webhook_endpoints`, `webhook_deliveries` outbox) for `post.approved`, `post.changes_requested`, `post.published` (including reconciled deliveries) and final `post.failed`, written in the state-change transaction; owner/admin endpoint management in Settings (HTTPS only, SSRF-checked, encrypted secret shown once, rotation, revocation, audit, 10 active per organization); HMAC-SHA256 signed worker delivery with exponential backoff, `DEAD` after 12 attempts and Operations visibility.
+- Integration API v1 hardening: webhook deliveries pinned to the checked public addresses (custom `lookup` on `node:https`, original SNI/Host, default TLS verification) against DNS rebinding; Redis rate limits on `/api/v1` (120 requests/min per key, 20 failed authentications/min per IP, `429 RATE_LIMITED` with `Retry-After`, `503` when Redis is down); 24-hour `Idempotency-Key` replay window with batched hourly cleanup in the worker.
+- Calendar import in the UI: a month's drafts from a JSON (the exact `POST /api/v1/clients/{id}/drafts` body) or CSV file (UTF-8 with or without BOM, `,`/`;` detected, RFC 4180 quoting), up to 1 MB and 200 rows. A server-side preview lists every row as OK or with a Hungarian error by line; only an error-free file imports, in one transaction, through the same validator and draft core as the API. Every post is a `DRAFT` with `source = "import"`, `post.created` audit per post plus one `calendar.imported`; no jobs or webhooks.
 - Fictional seed, domain/schema regression tests and browser workflow tests.
 
 ## Verification — 2026-09-30
@@ -45,6 +52,26 @@
 - This verifies the local mock workflow. Real social APIs and production hosting remain unverified.
 
 ## Outstanding requested scope
+
+### SOCIAL_HUB_TERV F1
+
+- [x] Integration API v1 (`/api/v1`): keys, clients, drafts, posts, metrics, brand profile, signed webhooks, hardening.
+- [x] JSON/CSV calendar import in the UI too ("JSON/CSV naptárimport a felületen is").
+- [x] LinkedIn adapter, personal profile: `w_member_social` OAuth, text and single-image posts, receipts, manual reconciliation of uncertain deliveries.
+- [ ] LinkedIn company pages (Community Management API), later round.
+
+### SOCIAL_HUB_TERV F2
+
+- [x] Monthly approval ("Havi jóváhagyás"): the client sees the whole period on one secret link and approves all posts at once or decides post by post (migration 029, `/approve/bundle/[token]`).
+- [x] Instagram carousel and Facebook multi-photo post (2–10 images, kept in `media_ids` order, reorderable in the composer, shown in order on both approval pages); several images on LinkedIn/Google are rejected when saving. No migration. See SOCIAL_PROVIDERS.md.
+- [x] Automatic first comment and per-client hashtag sets: optional first comment per target (Facebook Page posts and Instagram; part of the approval snapshot), posted by a durable, idempotent worker job after confirmed publication; named hashtag sets in the client settings, inserted into the caption or first comment with one click (migration 030). See SOCIAL_PROVIDERS.md.
+- [x] Instagram grid preview and calendar PDF export: a 3-column profile preview next to the calendar (published posts by `published_at`, planned ones by `scheduled_at`, newest first, planned posts marked, carousel cover = first image) built only from stored data, also on the public monthly approval page through a token-bound image endpoint; a PDF of one client's period (every channel: date, channel, text, first comment, JPEG/PNG thumbnail, status and approval) with the UI language, rendered in pure JavaScript (pdf-lib + embedded DejaVu Sans). No migration.
+
+### SOCIAL_HUB_TERV F3
+
+- [x] Client portal: a signed-in client reviewer (`CLIENT_REVIEWER`) uploads images and videos with a note in their own "Materials" view; the files arrive undecided and the team accepts or rejects them in the media library ("From the client"). Undecided and rejected files cannot be used in any post (migration 032). No secret upload link, documents (PDF) or e-mail notification.
+- [ ] Second Meta App Review for `ads_read`, ad metrics in the `metrics` endpoint.
+- [x] Comments: reply templates per client (inserted into the local reply draft only, optional `{név}` placeholder; sending stays a separate action with publish rights) and assignment of a thread to one team member (assign, move, remove, `all`/`me`/`none` filter, conflict check, audit) (migration 031). No e-mail notification.
 
 ### Delivery priority
 

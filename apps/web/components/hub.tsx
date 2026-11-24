@@ -19,12 +19,17 @@ import {
   LogOut,
   UserRoundCog,
   MessageSquare,
+  Upload,
 } from "lucide-react";
 import { MediaThumb } from "./media";
 import { Composer } from "./composer";
 import { PasswordSettings } from "./password-settings";
 import { Calendar } from "./calendar";
+import { CalendarImport } from "./calendar-import";
+import { CalendarExport, InstagramGrid } from "./instagram-grid";
+import { can, type Role } from "../../../packages/core/domain";
 import { Library, Accounts, Clients } from "./sections";
+import { Materials } from "./materials";
 import { Analytics } from "./analytics";
 import { Team } from "./team";
 import { PostList } from "./post-list";
@@ -32,6 +37,9 @@ import { Comments } from "./comments";
 import { TimeZoneSettings } from "./timezone-settings";
 import { PrivacySettings } from "./privacy-settings";
 import { LanguageSettings } from "./language-settings";
+import { ApiKeySettings } from "./api-key-settings";
+import { WebhookSettings } from "./webhook-settings";
+import { ApprovalBundles } from "./approval-bundles";
 import { TourButton, TourProvider, useTourSetup } from "./tour/tour";
 import {
   apiError,
@@ -48,6 +56,7 @@ const navigation = [
   ["Create", PenSquare],
   ["Posts", Files],
   ["Media", ImageIcon],
+  ["Materials", Upload],
   ["Analytics", ChartNoAxesCombined],
   ["Approvals", CheckCheck],
   ["Comments", MessageSquare],
@@ -97,14 +106,18 @@ function HubShell() {
   });
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const result = params.get("meta");
+    const linkedIn = params.has("linkedin");
+    const result = params.get("meta") ?? params.get("linkedin");
     if (!result) return;
     setView("Connected accounts");
     const code = params.get("code") ?? "OAUTH_FAILED";
-    if (result === "connected") setNotice(t("hub.meta.connected"));
+    if (result === "connected")
+      setNotice(t(linkedIn ? "hub.linkedin.connected" : "hub.meta.connected"));
     else
       setError(
-        t("hub.meta.failed", { reason: errorMessage(locale, code, code) }),
+        t(linkedIn ? "hub.linkedin.failed" : "hub.meta.failed", {
+          reason: errorMessage(locale, code, code),
+        }),
       );
     window.history.replaceState({}, "", window.location.pathname);
   }, []);
@@ -287,7 +300,8 @@ function HubShell() {
     ? data.operations.publishDead +
       data.operations.mediaDead +
       data.operations.approvalDeliveriesFailed +
-      data.operations.analyticsDead
+      data.operations.analyticsDead +
+      data.operations.webhookDead
     : 0;
   return (
     <div className="app-shell">
@@ -311,6 +325,10 @@ function HubShell() {
         <nav data-tour="navigation">
           {navigation
             .filter(([label]) => label !== "Team" || data?.canManageTeam)
+            .filter(
+              ([label]) =>
+                label !== "Materials" || data?.role === "CLIENT_REVIEWER",
+            )
             .map(([label, Icon]) => (
               <button
                 key={label}
@@ -793,6 +811,42 @@ function HubShell() {
                       }
                     />
                   )}
+                  {view === "Calendar" && (
+                    <InstagramGrid
+                      key={data.clientId}
+                      clientId={data.clientId!}
+                      timeZone={timeZone}
+                      refreshKey={calendarRefresh}
+                    />
+                  )}
+                  {view === "Calendar" && (
+                    <CalendarExport
+                      key={data.clientId}
+                      clientId={data.clientId!}
+                      timeZone={timeZone}
+                    />
+                  )}
+                  {view === "Calendar" && can(data.role as Role, "create") && (
+                    <CalendarImport
+                      clientId={data.clientId!}
+                      accounts={data.accounts}
+                      onImported={(count) => {
+                        setNotice(t("calendar.import.done", { count }));
+                        setCalendarRefresh((value) => value + 1);
+                        load();
+                      }}
+                    />
+                  )}
+                  {view === "Approvals" &&
+                    ["OWNER", "ADMIN", "SOCIAL_MANAGER"].includes(
+                      data.role,
+                    ) && (
+                      <ApprovalBundles
+                        key={data.clientId}
+                        clientId={data.clientId!}
+                        timeZone={timeZone}
+                      />
+                    )}
                   {(view === "Posts" || view === "Approvals") && (
                     <PostList
                       key={`${data.clientId}-${view}-${filter}`}
@@ -811,6 +865,7 @@ function HubShell() {
                       clientId={data.clientId!}
                       timeZone={timeZone}
                       refreshKey={calendarRefresh}
+                      templates={data.replyTemplates ?? []}
                       onOpenPost={(id) => void openPostById(id)}
                       onCountChange={setCommentsOpen}
                     />
@@ -822,6 +877,9 @@ function HubShell() {
                       reload={load}
                       onError={setError}
                     />
+                  )}
+                  {view === "Materials" && data.role === "CLIENT_REVIEWER" && (
+                    <Materials key={data.clientId} data={data} />
                   )}
                   {view === "Connected accounts" && (
                     <Accounts data={data} mutate={mutate} busy={busy} />
@@ -884,6 +942,22 @@ function HubShell() {
                         mutate={mutate}
                         busy={busy}
                       />
+                      {data.clientId && (
+                        <ApiKeySettings
+                          key={data.clientId}
+                          clientId={data.clientId}
+                          canManage={data.canManageTeam}
+                          timeZone={data.user.timezone}
+                        />
+                      )}
+                      {data.clientId && (
+                        <WebhookSettings
+                          key={`webhooks-${data.clientId}`}
+                          clientId={data.clientId}
+                          canManage={data.canManageTeam}
+                          timeZone={data.user.timezone}
+                        />
+                      )}
                       {data.operations && (
                         <section className="panel">
                           <div className="panel-title">
@@ -1029,6 +1103,16 @@ function HubShell() {
                                 {t("hub.operations.backfill")}
                               </button>
                             </div>
+                            <div>
+                              <small>{t("hub.operations.webhooks")}</small>
+                              <strong>
+                                {t("hub.operations.activeDead", {
+                                  active: data.operations.webhookWaiting,
+                                  dead: data.operations.webhookDead,
+                                })}
+                              </strong>
+                              <small>{t("hub.operations.webhooksHint")}</small>
+                            </div>
                           </div>
                           <p className="panel-note">
                             {t("hub.operations.liveness")}:{" "}
@@ -1144,6 +1228,33 @@ function HubShell() {
                     <p className="alert">
                       {errorMessage(locale, target.errorCode, target.errorCode)}
                     </p>
+                  )}
+                  {target.firstComment && (
+                    <div className="first-comment-status">
+                      <strong>{t("posts.firstComment.title")}</strong>
+                      {target.firstCommentStatus && (
+                        <span
+                          className={
+                            ["FAILED", "UNCERTAIN"].includes(
+                              target.firstCommentStatus,
+                            )
+                              ? "alert"
+                              : "muted"
+                          }
+                        >
+                          {" "}
+                          {t(
+                            `posts.firstComment.status.${target.firstCommentStatus}` as MessageKey,
+                          )}
+                          {target.firstCommentStatus === "FAILED" &&
+                            target.firstCommentError &&
+                            ` · ${errorMessage(locale, target.firstCommentError, target.firstCommentError)}`}
+                        </span>
+                      )}
+                      <p className="first-comment-text">
+                        {target.firstComment}
+                      </p>
+                    </div>
                   )}
                 </div>
               ))}

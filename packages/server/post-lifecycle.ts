@@ -1,8 +1,11 @@
 import { z } from "zod";
 import type { Context } from "./context";
 import { transaction, audit } from "./transaction";
+import { lockPortalMedia, usableMedia } from "./client-media-rule";
 import { postInput } from "./validation";
 import { AppError } from "../core/security";
+import { inMediaOrder } from "../core/domain";
+import { assertMediaSet, assertUniqueMedia, firstCommentFor } from "./posts";
 
 export async function editDraft(
   c: Context,
@@ -32,35 +35,48 @@ export async function editDraft(
         "DUPLICATE_TARGET",
         "Choose each account only once.",
       );
+    const mediaIds = input.targets.flatMap((target) => target.mediaIds);
+    await lockPortalMedia(tx, c, mediaIds);
+    const usable = mediaIds.length ? await usableMedia(tx, "m") : "TRUE";
+    const firstComments: (string | null)[] = [];
     for (const target of input.targets) {
-      if (
-        !(
-          await tx.query(
-            "SELECT 1 FROM social_accounts WHERE organization_id=$1 AND client_id=$2 AND id=$3 AND status='CONNECTED' AND deleted_at IS NULL",
-            [c.organizationId, c.clientId, target.accountId],
-          )
-        ).rowCount
-      )
+      const account = (
+        await tx.query(
+          "SELECT platform FROM social_accounts WHERE organization_id=$1 AND client_id=$2 AND id=$3 AND status='CONNECTED' AND deleted_at IS NULL",
+          [c.organizationId, c.clientId, target.accountId],
+        )
+      ).rows[0];
+      if (!account)
         throw new AppError(
           422,
           "INVALID_ACCOUNT",
           "Choose a connected account from this client.",
         );
-      const media = await tx.query(
-        "SELECT id FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND status='READY' AND deleted_at IS NULL",
-        [c.organizationId, c.clientId, target.mediaIds],
+      assertUniqueMedia(target.mediaIds);
+      const media = inMediaOrder(
+        target.mediaIds,
+        (
+          await tx.query(
+            `SELECT id,mime_type FROM media_assets m WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND status='READY' AND deleted_at IS NULL AND ${usable}`,
+            [c.organizationId, c.clientId, target.mediaIds],
+          )
+        ).rows,
       );
-      if (media.rowCount !== target.mediaIds.length)
+      if (media.length !== target.mediaIds.length)
         throw new AppError(
           422,
           "INVALID_MEDIA",
           "Media must be ready and belong to this client.",
         );
+      assertMediaSet(account.platform, media);
+      firstComments.push(
+        firstCommentFor(account.platform, target.firstComment),
+      );
     }
     await tx.query("DELETE FROM post_targets WHERE post_id=$1", [id]);
-    for (const target of input.targets)
+    for (const [index, target] of input.targets.entries())
       await tx.query(
-        "INSERT INTO post_targets(organization_id,client_id,post_id,social_account_id,caption,media_ids) VALUES($1,$2,$3,$4,$5,$6)",
+        "INSERT INTO post_targets(organization_id,client_id,post_id,social_account_id,caption,media_ids,first_comment) VALUES($1,$2,$3,$4,$5,$6,$7)",
         [
           c.organizationId,
           c.clientId,
@@ -68,6 +84,7 @@ export async function editDraft(
           target.accountId,
           target.caption,
           target.mediaIds,
+          firstComments[index],
         ],
       );
     const updated = (
@@ -147,7 +164,7 @@ export async function cancelPost(c: Context, id: string) {
     const uncertain = (
       await tx.query(
         `SELECT 1 FROM publish_jobs j JOIN post_targets t ON t.id=j.target_id
-         WHERE t.post_id=$1 AND j.last_error='META_DELIVERY_UNCERTAIN'
+         WHERE t.post_id=$1 AND j.last_error IN ('META_DELIVERY_UNCERTAIN','LINKEDIN_DELIVERY_UNCERTAIN')
            AND j.status<>'DONE' LIMIT 1`,
         [id],
       )
@@ -156,7 +173,7 @@ export async function cancelPost(c: Context, id: string) {
       throw new AppError(
         409,
         "DELIVERY_UNCERTAIN",
-        "Meta may already have published this post. It cannot be cancelled while that delivery is unconfirmed; recheck it in Settings → Operations.",
+        "The network may already have published this post. It cannot be cancelled while that delivery is unconfirmed; recheck it in Settings → Operations.",
       );
     if (post.status === "CANCELLED") return { id, status: "CANCELLED" };
     await tx.query(

@@ -77,7 +77,6 @@ export const capabilities: Record<Platform, Capability[]> = {
   linkedin: [
     "TEXT_POST",
     "IMAGE_POST",
-    "MULTI_IMAGE",
     "VIDEO",
     "LINK_POST",
     "HASHTAGS",
@@ -95,6 +94,100 @@ export type Media = {
   duration_seconds?: number | null;
 };
 export type Content = { caption: string; link?: string | null; media: Media[] };
+
+// Posts with several attachments (Instagram carousel, Facebook multi-photo
+// post). Only images, in the order of the target's media_ids. Every other
+// network takes one attachment. Shared by saving, scheduling and the worker.
+export const MULTI_IMAGE_LIMIT = 10;
+// Stable error codes; the UI translates them (composer.validation.*).
+export const MEDIA_ERRORS = {
+  duplicate: "media.duplicate",
+  tooMany: "media.too_many",
+  imagesOnly: "media.images_only",
+  single: "media.single",
+} as const;
+export type MediaErrorCode = (typeof MEDIA_ERRORS)[keyof typeof MEDIA_ERRORS];
+// English text for server responses, in the style of the other messages.
+export const MEDIA_ERROR_TEXT: Record<MediaErrorCode, string> = {
+  "media.duplicate": "Add each image to a post only once.",
+  "media.too_many": `A post can have at most ${MULTI_IMAGE_LIMIT} images.`,
+  "media.images_only":
+    "A post with several attachments can only contain images. Publish the video in a separate post.",
+  "media.single":
+    "This network takes one image or video per post. Remove attachments or deselect this account.",
+};
+export const mediaErrorText = (error: string) =>
+  MEDIA_ERROR_TEXT[error as MediaErrorCode] ?? error;
+
+// First comment: posted after a confirmed publication where the provider
+// adapter supports it (Facebook Page posts and Instagram media).
+export const FIRST_COMMENT_LIMIT = 2200;
+export const FIRST_COMMENT_PLATFORMS: readonly Platform[] = [
+  "facebook",
+  "instagram",
+];
+export const supportsFirstComment = (platform: string) =>
+  FIRST_COMMENT_PLATFORMS.includes(platform as Platform);
+
+// Hashtag sets per client: "#tag" form, no whitespace, no duplicates.
+export const HASHTAG_SET_LIMIT = 30;
+export const HASHTAG_MAX_LENGTH = 100;
+export function normalizeHashtags(values: readonly string[]) {
+  const tags: string[] = [];
+  for (const value of values.flatMap((v) => v.split(/[\s,]+/))) {
+    const tag = value.replace(/^#+/, "");
+    if (!tag) continue;
+    const normalized = `#${tag}`;
+    if (!tags.some((t) => t.toLowerCase() === normalized.toLowerCase()))
+      tags.push(normalized);
+  }
+  return tags;
+}
+// Appends a set to a text, separated by a blank line or a space.
+export function appendHashtags(text: string, hashtags: readonly string[]) {
+  const tags = hashtags.join(" ");
+  if (!tags) return text;
+  const trimmed = text.replace(/\s+$/, "");
+  return trimmed ? `${trimmed}\n\n${tags}` : tags;
+}
+export function mediaSetErrors(
+  platform: Platform,
+  media: Pick<Media, "id" | "mime_type">[],
+) {
+  const errors: string[] = [];
+  if (new Set(media.map((m) => m.id)).size !== media.length)
+    errors.push(MEDIA_ERRORS.duplicate);
+  if (media.length < 2) return errors;
+  if (!capabilities[platform].includes("MULTI_IMAGE"))
+    return [...errors, MEDIA_ERRORS.single];
+  if (media.length > MULTI_IMAGE_LIMIT) errors.push(MEDIA_ERRORS.tooMany);
+  if (media.some((m) => !m.mime_type.startsWith("image/")))
+    errors.push(MEDIA_ERRORS.imagesOnly);
+  return errors;
+}
+
+// Database reads by id=ANY(...) return rows in any order; attachments must
+// follow media_ids. Missing ids are dropped, so callers can compare lengths.
+export function inMediaOrder<T extends { id: string }>(
+  ids: readonly string[],
+  rows: readonly T[],
+) {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
+  });
+}
+
+// The composer's up/down buttons; out-of-range moves leave the list as is.
+export function moveMedia(ids: readonly string[], index: number, by: -1 | 1) {
+  const to = index + by;
+  if (index < 0 || to < 0 || to >= ids.length) return [...ids];
+  const next = [...ids];
+  [next[index], next[to]] = [next[to]!, next[index]!];
+  return next;
+}
+
 export function validatePost(platform: Platform, content: Content) {
   const errors: string[] = [];
   const limit = {
@@ -138,10 +231,6 @@ export function validatePost(platform: Platform, content: Content) {
     )
       errors.push("Instagram Reels must be at least 3 seconds long.");
   }
-  if (
-    content.media.length > 1 &&
-    !capabilities[platform].includes("MULTI_IMAGE")
-  )
-    errors.push("Multiple media attachments are not supported.");
+  errors.push(...mediaSetErrors(platform, content.media));
   return errors;
 }

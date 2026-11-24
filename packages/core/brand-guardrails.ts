@@ -22,12 +22,76 @@ const platformLimits: Record<Platform, number> = {
   google: 1500,
 };
 
+// A string (as the brand form stores it) is a list separated by commas,
+// semicolons or new lines. Array items are already separate terms and are kept
+// whole, so a synced phrase or disclaimer containing a comma is not split.
 function values(value: unknown) {
-  const source = Array.isArray(value) ? value : [value];
-  return source
-    .flatMap((item) => String(item ?? "").split(/[\n,;]+/))
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const source = Array.isArray(value)
+    ? value.map((item) => String(item ?? ""))
+    : String(value ?? "").split(/[\n,;]+/);
+  return source.map((item) => item.trim()).filter(Boolean);
+}
+
+// The local profile's list fields, split the way they always were: a string
+// and each item of an array at commas, semicolons and new lines.
+const localListKeys = [
+  "forbiddenTerminology",
+  "forbiddenClaims",
+  "requiredTerminology",
+  "requiredDisclaimer",
+  "preferredTerminology",
+] as const;
+const localTerms = (value: unknown) =>
+  (Array.isArray(value) ? value : [value]).flatMap(values);
+
+export type BrandPillar = { name: string; description: string | null };
+
+// Brand profile the Growth Engine owns, as stored in brand_profiles.synced_profile.
+export type SyncedBrandProfile = {
+  voice: string | null;
+  required_phrases: string[];
+  forbidden_phrases: string[];
+  required_disclaimer: string | null;
+  pillars: BrandPillar[];
+};
+
+function union(local: unknown, synced: string[]) {
+  const seen = new Set<string>();
+  return [...localTerms(local), ...synced].filter((term) => {
+    const key = term.toLocaleLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+// The brand rules in force for a client: the local profile edited in Social
+// Hub combined with the profile synced from the Growth Engine (the owner).
+// Phrase lists are unions; a synced voice or disclaimer replaces the local one.
+// Guardrail checks, AI prompts and AI brand snapshots all use this result.
+export function effectiveBrandRules(
+  local: Record<string, unknown> | null | undefined,
+  synced: SyncedBrandProfile | null | undefined,
+): Record<string, unknown> {
+  const brand = { ...(local ?? {}) };
+  // Local arrays are pre-split so the guardrails keep treating them as before.
+  for (const key of localListKeys)
+    if (Array.isArray(brand[key])) brand[key] = localTerms(brand[key]);
+  if (!synced) return brand;
+  brand.forbiddenTerminology = union(
+    brand.forbiddenTerminology,
+    synced.forbidden_phrases,
+  );
+  brand.requiredTerminology = union(
+    brand.requiredTerminology,
+    synced.required_phrases,
+  );
+  // An array keeps a disclaimer with commas in it as one required text.
+  if (synced.required_disclaimer)
+    brand.requiredDisclaimer = [synced.required_disclaimer];
+  if (synced.voice) brand.toneOfVoice = synced.voice;
+  if (synced.pillars.length) brand.contentPillars = synced.pillars;
+  return brand;
 }
 
 function includes(text: string, term: string) {

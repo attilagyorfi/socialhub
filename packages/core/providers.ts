@@ -162,11 +162,9 @@ export class InstagramProvider extends DirectProvider {
     super("instagram");
   }
 }
-export class LinkedInProvider extends DirectProvider {
-  constructor() {
-    super("linkedin");
-  }
-}
+// LinkedIn direct publishing (personal profiles) lives in
+// packages/server/linkedin.ts next to the Meta adapter, because it needs
+// stored credentials and durable receipts.
 export class TikTokProvider extends DirectProvider {
   constructor() {
     super("tiktok");

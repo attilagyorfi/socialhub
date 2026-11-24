@@ -178,6 +178,24 @@ function uncertainDelivery() {
   );
 }
 
+// A refused carousel item or unpublished photo names its position; rate
+// limits and outages keep their retryable codes.
+function rejectedItem(error: unknown, index: number) {
+  if (
+    !(error instanceof AppError) ||
+    !["META_REJECTED", "META_MEDIA_REJECTED"].includes(error.code)
+  )
+    return error;
+  return Object.assign(
+    new AppError(
+      422,
+      "META_MEDIA_REJECTED",
+      `Meta could not process image ${index + 1} of the post.`,
+    ),
+    { provider: metaProviderError(error) },
+  );
+}
+
 type FetchLike = typeof fetch;
 
 export type MetaPublishedContent = {
@@ -211,6 +229,9 @@ export class MetaGraphClient {
       token?: string;
       params?: Record<string, string>;
       delivery?: boolean;
+      // Only a lost response is uncertain; an HTTP error answer means Meta
+      // did not act, so it keeps its retryable code (first comments).
+      lostResponseUncertain?: boolean;
     } = {},
   ): Promise<T> {
     const method = options.method ?? "GET";
@@ -234,7 +255,8 @@ export class MetaGraphClient {
     try {
       response = await this.fetchImpl(url, init);
     } catch {
-      if (options.delivery) throw uncertainDelivery();
+      if (options.delivery || options.lostResponseUncertain)
+        throw uncertainDelivery();
       throw new AppError(
         503,
         "META_UNAVAILABLE",
@@ -571,17 +593,31 @@ export class MetaGraphClient {
         "META_RESPONSE_INVALID",
         "Meta did not return an Instagram container.",
       );
+    await this.waitForContainer(container.id, accessToken, video);
+    return this.request<{ id?: string }>(`${instagramId}/media_publish`, {
+      method: "POST",
+      token: accessToken,
+      delivery: true,
+      params: { creation_id: container.id },
+    });
+  }
+
+  private async waitForContainer(
+    containerId: string,
+    accessToken: string,
+    video: boolean,
+  ) {
     // Reels can take minutes to process; images are ready almost at once.
     const checks = video ? INSTAGRAM_VIDEO_CHECKS : 10;
     for (let check = 0; check < checks; check++) {
       const status = await this.request<{
         status_code?: string;
         status?: string;
-      }>(container.id, {
+      }>(containerId, {
         token: accessToken,
         params: { fields: "status_code,status" },
       });
-      if (status.status_code === "FINISHED") break;
+      if (status.status_code === "FINISHED") return;
       if (["ERROR", "EXPIRED"].includes(status.status_code ?? ""))
         throw new AppError(
           422,
@@ -598,11 +634,106 @@ export class MetaGraphClient {
         );
       await this.wait(video ? VIDEO_CHECK_INTERVAL_MS : 1000);
     }
+  }
+
+  // Carousel: one is_carousel_item container per image in media order, then
+  // a CAROUSEL parent listing them, then media_publish. Containers are never
+  // visible on the profile, so a failure before media_publish leaves nothing
+  // public and a retry simply creates new ones.
+  async publishInstagramCarousel(
+    instagramId: string,
+    accessToken: string,
+    caption: string,
+    imageUrls: string[],
+  ) {
+    const children: string[] = [];
+    for (const [index, imageUrl] of imageUrls.entries()) {
+      const child = await this.request<{ id?: string }>(
+        `${instagramId}/media`,
+        {
+          method: "POST",
+          token: accessToken,
+          params: { image_url: imageUrl, is_carousel_item: "true" },
+        },
+      ).catch((error) => {
+        throw rejectedItem(error, index);
+      });
+      if (!child.id)
+        throw new AppError(
+          502,
+          "META_RESPONSE_INVALID",
+          "Meta did not return an Instagram carousel item.",
+        );
+      await this.waitForContainer(child.id, accessToken, false).catch(
+        (error) => {
+          throw rejectedItem(error, index);
+        },
+      );
+      children.push(child.id);
+    }
+    const parent = await this.request<{ id?: string }>(`${instagramId}/media`, {
+      method: "POST",
+      token: accessToken,
+      params: {
+        media_type: "CAROUSEL",
+        children: children.join(","),
+        caption,
+      },
+    });
+    if (!parent.id)
+      throw new AppError(
+        502,
+        "META_RESPONSE_INVALID",
+        "Meta did not return an Instagram carousel container.",
+      );
+    await this.waitForContainer(parent.id, accessToken, false);
     return this.request<{ id?: string }>(`${instagramId}/media_publish`, {
       method: "POST",
       token: accessToken,
       delivery: true,
-      params: { creation_id: container.id },
+      params: { creation_id: parent.id },
+    });
+  }
+
+  // Multi-photo Page post: every image is uploaded with published=false (not
+  // visible anywhere on the Page), then one feed post attaches them in media
+  // order. The feed post id is the final remote id.
+  async publishFacebookMultiPhoto(
+    pageId: string,
+    accessToken: string,
+    caption: string,
+    imageUrls: string[],
+  ) {
+    const photos: string[] = [];
+    for (const [index, imageUrl] of imageUrls.entries()) {
+      const photo = await this.request<{ id?: string }>(`${pageId}/photos`, {
+        method: "POST",
+        token: accessToken,
+        params: { url: imageUrl, published: "false" },
+      }).catch((error) => {
+        throw rejectedItem(error, index);
+      });
+      if (!photo.id)
+        throw new AppError(
+          502,
+          "META_RESPONSE_INVALID",
+          "Meta did not return an uploaded photo.",
+        );
+      photos.push(photo.id);
+    }
+    return this.request<{ id?: string }>(`${pageId}/feed`, {
+      method: "POST",
+      token: accessToken,
+      delivery: true,
+      params: {
+        message: caption,
+        ...Object.fromEntries(
+          photos.map((id, index) => [
+            `attached_media[${index}]`,
+            JSON.stringify({ media_fbid: id }),
+          ]),
+        ),
+      },
     });
   }
 
@@ -704,6 +835,18 @@ export class MetaGraphClient {
         : `${commentId}/replies`,
       { method: "POST", token: accessToken, params: { message } },
     );
+  }
+
+  // POST /{post-id}/comments (Page post) or /{ig-media-id}/comments. A lost
+  // response (timeout, dropped connection) may still have created the
+  // comment, so it is uncertain; 429 and 5xx answers stay retryable.
+  publishComment(objectId: string, accessToken: string, message: string) {
+    return this.request<{ id?: string }>(`${objectId}/comments`, {
+      method: "POST",
+      token: accessToken,
+      params: { message },
+      lostResponseUncertain: true,
+    });
   }
 
   setCommentHidden(
@@ -1396,6 +1539,46 @@ export async function replyMetaComment(
   return { remoteId: result.id, authorRemoteId: selfId };
 }
 
+// The first comment under a published post. The receipt is keyed by the
+// first_comment_jobs idempotency key, so a repeated run never posts twice.
+export async function publishMetaFirstComment(
+  input: MetaAccountRef & {
+    objectId: string;
+    message: string;
+    idempotencyKey: string;
+  },
+  graph = new MetaGraphClient(metaConfig()),
+) {
+  const { platform, credential } = await metaAccountIdentity(input);
+  const provider = `meta:${platform}:comment`;
+  const prior = (
+    await pool.query(
+      "SELECT remote_id FROM first_comment_receipts WHERE idempotency_key=$1 AND organization_id=$2 AND client_id=$3 AND provider=$4",
+      [input.idempotencyKey, input.organizationId, input.clientId, provider],
+    )
+  ).rows[0]?.remote_id;
+  if (prior) return { remoteId: prior as string };
+  const result = await graph.publishComment(
+    input.objectId,
+    credential.pageAccessToken,
+    input.message,
+  );
+  // Meta accepted the request, so the comment may be live without an id.
+  if (!result.id) throw uncertainDelivery();
+  await pool.query(
+    `INSERT INTO first_comment_receipts(idempotency_key,organization_id,client_id,provider,remote_id)
+     VALUES($1,$2,$3,$4,$5) ON CONFLICT(idempotency_key) DO NOTHING`,
+    [
+      input.idempotencyKey,
+      input.organizationId,
+      input.clientId,
+      provider,
+      result.id,
+    ],
+  );
+  return { remoteId: result.id };
+}
+
 export async function hideMetaComment(
   input: MetaAccountRef & { commentId: string; hidden: boolean },
   graph = new MetaGraphClient(metaConfig()),
@@ -1518,31 +1701,28 @@ export async function publishMeta(input: {
       "PROVIDER_NOT_CONFIGURED",
       "Direct provider is not configured.",
     );
-  if (input.content.media.length > 1)
-    throw new AppError(
-      422,
-      "META_MEDIA_UNSUPPORTED",
-      "This Meta connection currently supports one media attachment per post.",
-    );
   const { credential } = await loadMetaCredential(
     input.organizationId,
     input.clientId,
     input.accountId,
   );
-  const media = input.content.media[0];
-  if (media) await assertStoredObject(media.object_key);
-  const objectKey =
-    media &&
-    input.platform === "instagram" &&
-    media.mime_type.startsWith("image/")
-      ? await instagramImageObjectKey({
-          ...media,
-          organization_id: input.organizationId,
-          client_id: input.clientId,
-        })
-      : media?.object_key;
-  const url = objectKey ? await signedObjectUrl(objectKey, 900) : undefined;
-  if (url) assertPublicMediaUrl(url);
+  // Fifteen-minute signed URLs, one per attachment, in media_ids order.
+  const urls: string[] = [];
+  for (const media of input.content.media) {
+    await assertStoredObject(media.object_key);
+    const objectKey =
+      input.platform === "instagram" && media.mime_type.startsWith("image/")
+        ? await instagramImageObjectKey({
+            ...media,
+            organization_id: input.organizationId,
+            client_id: input.clientId,
+          })
+        : media.object_key;
+    const url = await signedObjectUrl(objectKey, 900);
+    assertPublicMediaUrl(url);
+    urls.push(url);
+  }
+  const url = urls[0];
   const graph = new MetaGraphClient(metaConfig());
   if (
     input.platform === "instagram" &&
@@ -1553,20 +1733,35 @@ export async function publishMeta(input: {
       "META_INSTAGRAM_INVALID",
       "The Instagram account or media attachment is unavailable.",
     );
+  const multiple = urls.length > 1;
   const result =
     input.platform === "facebook"
-      ? await graph.publishFacebook(
-          credential.pageId,
-          credential.pageAccessToken,
-          input.content,
-          url,
-        )
-      : await graph.publishInstagram(
-          credential.instagramBusinessId!,
-          credential.pageAccessToken,
-          input.content,
-          url!,
-        );
+      ? multiple
+        ? await graph.publishFacebookMultiPhoto(
+            credential.pageId,
+            credential.pageAccessToken,
+            input.content.caption,
+            urls,
+          )
+        : await graph.publishFacebook(
+            credential.pageId,
+            credential.pageAccessToken,
+            input.content,
+            url,
+          )
+      : multiple
+        ? await graph.publishInstagramCarousel(
+            credential.instagramBusinessId!,
+            credential.pageAccessToken,
+            input.content.caption,
+            urls,
+          )
+        : await graph.publishInstagram(
+            credential.instagramBusinessId!,
+            credential.pageAccessToken,
+            input.content,
+            url!,
+          );
   // The mutation succeeded at HTTP level, so the content may be live.
   if (!result.id) throw uncertainDelivery();
   const inserted = (

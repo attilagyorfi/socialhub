@@ -10,6 +10,8 @@ import {
   connectMock,
   disconnect,
   updateClientLocale,
+  updateClientExternalRef,
+  saveLocalBrandProfile,
 } from "../../../../../packages/server/clients";
 import {
   editDraft,
@@ -41,11 +43,25 @@ import {
   connectInput,
   postInput,
   uuid,
-  brandInput,
   timeZoneInput,
   localeInput,
+  hashtagSetInput,
+  replyTemplateInput,
 } from "../../../../../packages/server/validation";
-import { transaction, audit } from "../../../../../packages/server/transaction";
+import {
+  deleteHashtagSet,
+  saveHashtagSet,
+} from "../../../../../packages/server/hashtag-sets";
+import {
+  deleteReplyTemplate,
+  listReplyTemplates,
+  saveReplyTemplate,
+} from "../../../../../packages/server/reply-templates";
+import {
+  usableMedia,
+  visibleAudit,
+} from "../../../../../packages/server/client-media-rule";
+import { visibleAuditRows } from "../../../../../packages/server/comment-assignments";
 import { rateLimit } from "../../../../../packages/server/queue";
 import { boundedForm } from "../../../../../packages/server/upload-validation";
 import {
@@ -66,6 +82,10 @@ import {
   metaIntegrationStatus,
   startMetaOAuth,
 } from "../../../../../packages/server/meta";
+import {
+  linkedInIntegrationStatus,
+  startLinkedInOAuth,
+} from "../../../../../packages/server/linkedin";
 import { operationalSummary } from "../../../../../packages/server/operations";
 import {
   updateUserLocale,
@@ -144,6 +164,9 @@ export async function GET(request: Request) {
           notifications: [],
           audit: [],
           brand: {},
+          brandSync: null,
+          hashtagSets: [],
+          replyTemplates: [],
           workflow: ["EXTERNAL"],
           approvalAutomation: {
             automaticReminders: false,
@@ -164,6 +187,7 @@ export async function GET(request: Request) {
           hasMore: false,
           mode: process.env.SOCIAL_PROVIDER_MODE ?? "mock",
           meta: metaIntegrationStatus(),
+          linkedin: linkedInIntegrationStatus(),
         },
         { headers: { "Cache-Control": "no-store" } },
       );
@@ -183,6 +207,8 @@ export async function GET(request: Request) {
       Math.min(10000, Number(url.searchParams.get("page")) || 0),
     );
     const values = [c.organizationId, c.clientId];
+    const usable = await usableMedia(pool, "m");
+    const auditScope = await visibleAudit(pool, c, "a", "$3");
     const results = await Promise.all([
       pool.query(
         `SELECT p.*,current_review.step_kind AS approval_kind,
@@ -211,8 +237,10 @@ export async function GET(request: Request) {
          coalesce((SELECT jsonb_agg(jsonb_build_object(
            'id',t.id,'accountId',t.social_account_id,'platform',a.platform,
            'caption',t.caption,'status',t.status,'mediaIds',t.media_ids,
-           'errorCode',t.error_code
+           'errorCode',t.error_code,'firstComment',t.first_comment,
+           'firstCommentStatus',fc.status,'firstCommentError',fc.last_error
          )) FROM post_targets t JOIN social_accounts a ON a.id=t.social_account_id
+         LEFT JOIN first_comment_jobs fc ON fc.target_id=t.id
          WHERE t.post_id=p.id),'[]'::jsonb) AS targets
          FROM posts p
          LEFT JOIN LATERAL (
@@ -236,7 +264,7 @@ export async function GET(request: Request) {
         values,
       ),
       pool.query(
-        "SELECT id,name,mime_type,size_bytes,width,height,duration_seconds,status FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 50",
+        `SELECT id,name,mime_type,size_bytes,width,height,duration_seconds,status FROM media_assets m WHERE organization_id=$1 AND client_id=$2 AND deleted_at IS NULL AND ${usable} ORDER BY created_at DESC LIMIT 50`,
         values,
       ),
       pool.query(
@@ -244,11 +272,11 @@ export async function GET(request: Request) {
         values,
       ),
       pool.query(
-        "SELECT action,resource_id,metadata,created_at FROM audit_logs WHERE organization_id=$1 AND client_id=$2 ORDER BY created_at DESC LIMIT 50",
-        values,
+        `SELECT action,resource_id,metadata,created_at FROM audit_logs a WHERE organization_id=$1 AND client_id=$2 AND ${auditScope.condition} ORDER BY created_at DESC LIMIT 50`,
+        [...values, ...auditScope.values],
       ),
       pool.query(
-        "SELECT profile FROM brand_profiles WHERE organization_id=$1 AND client_id=$2",
+        "SELECT profile,synced_profile,synced_at,synced_source FROM brand_profiles WHERE organization_id=$1 AND client_id=$2",
         values,
       ),
       pool.query(
@@ -262,9 +290,13 @@ export async function GET(request: Request) {
          WHERE organization_id=$1 AND client_id=$2 AND is_default`,
         values,
       ),
+      pool.query(
+        "SELECT id,name,hashtags FROM client_hashtag_sets WHERE organization_id=$1 AND client_id=$2 ORDER BY lower(name)",
+        values,
+      ),
     ]);
     const canManageTeam = ["OWNER", "ADMIN"].includes(c.role);
-    const [team, operations, reviewers, privacy, commentsOpen] =
+    const [team, operations, reviewers, privacy, commentsOpen, replyTemplates] =
       await Promise.all([
         canManageTeam
           ? listTeam(c)
@@ -273,6 +305,7 @@ export async function GET(request: Request) {
         c.role === "VIEWER" ? Promise.resolve([]) : reviewerCandidates(c),
         privacyStatus(actor.id, c.organizationId),
         openCommentCount(c),
+        listReplyTemplates(c),
       ]);
     return Response.json(
       {
@@ -290,8 +323,16 @@ export async function GET(request: Request) {
         accounts: results[1].rows,
         media: results[2].rows,
         notifications: results[3].rows,
-        audit: results[4].rows,
+        audit: visibleAuditRows(c.role, results[4].rows),
         brand: results[5].rows[0]?.profile ?? {},
+        // Read-only in the UI: owned by the Growth Engine sync.
+        brandSync: results[5].rows[0]?.synced_profile
+          ? {
+              profile: results[5].rows[0].synced_profile,
+              source: results[5].rows[0].synced_source,
+              syncedAt: results[5].rows[0].synced_at,
+            }
+          : null,
         workflow: results[6].rows.length
           ? results[6].rows.map((r) => r.kind)
           : ["EXTERNAL"],
@@ -310,6 +351,8 @@ export async function GET(request: Request) {
               escalateAfterHours: 72,
               maxAutomaticReminders: 2,
             },
+        hashtagSets: results[8].rows,
+        replyTemplates,
         reviewers,
         team: team.members,
         invitations: team.invitations,
@@ -321,6 +364,7 @@ export async function GET(request: Request) {
         hasMore: results[0].rows.length === 50,
         mode: process.env.SOCIAL_PROVIDER_MODE ?? "mock",
         meta: metaIntegrationStatus(),
+        linkedin: linkedInIntegrationStatus(),
       },
       { headers: { "Cache-Control": "no-store" } },
     );
@@ -391,11 +435,14 @@ export async function POST(request: Request) {
               action === "account.oauth.start" ||
               action === "account.disconnect" ||
               action === "brand.save" ||
+              action.startsWith("hashtags.") ||
+              action.startsWith("templates.") ||
               action === "workflow.save" ||
               action === "privacy.organization.erase.request" ||
               action === "privacy.retention.update" ||
               action === "analytics.backfill" ||
               action === "client.locale.update" ||
+              action === "client.external_ref.update" ||
               action === "publishing.reconcile" ||
               action === "operations.sentry-test" ||
               action.startsWith("team.")
@@ -404,7 +451,11 @@ export async function POST(request: Request) {
     );
     switch (action) {
       case "account.oauth.start":
-        return Response.json(await startMetaOAuth(c));
+        return Response.json(
+          body.provider === "linkedin"
+            ? await startLinkedInOAuth(c)
+            : await startMetaOAuth(c),
+        );
       case "privacy.organization.erase.request":
         return Response.json(
           await requestOrganizationErasure(
@@ -429,6 +480,10 @@ export async function POST(request: Request) {
       case "client.locale.update":
         return Response.json(
           await updateClientLocale(c, localeInput.parse(body.locale)),
+        );
+      case "client.external_ref.update":
+        return Response.json(
+          await updateClientExternalRef(c, body.externalRef ?? null),
         );
       case "operations.sentry-test":
         // Lets administrators confirm that error monitoring receives errors.
@@ -522,15 +577,28 @@ export async function POST(request: Request) {
             z.iso.datetime({ offset: true }).parse(body.scheduledAt),
           ),
         );
+      case "hashtags.save":
+        return Response.json(
+          await saveHashtagSet(
+            c,
+            hashtagSetInput.parse(body),
+            body.id ? uuid.parse(body.id) : undefined,
+          ),
+        );
+      case "hashtags.delete":
+        return Response.json(await deleteHashtagSet(c, uuid.parse(body.id)));
+      case "templates.save":
+        return Response.json(
+          await saveReplyTemplate(
+            c,
+            replyTemplateInput.parse(body),
+            body.id ? uuid.parse(body.id) : undefined,
+          ),
+        );
+      case "templates.delete":
+        return Response.json(await deleteReplyTemplate(c, uuid.parse(body.id)));
       case "brand.save": {
-        const brand = brandInput.parse(body.brand);
-        await transaction(async (tx) => {
-          await tx.query(
-            "UPDATE brand_profiles SET profile=$1,updated_at=now() WHERE organization_id=$2 AND client_id=$3",
-            [JSON.stringify(brand), c.organizationId, c.clientId],
-          );
-          await audit(tx, c, "brand.updated", c.clientId);
-        });
+        await saveLocalBrandProfile(c, body.brand);
         break;
       }
       case "team.invite":

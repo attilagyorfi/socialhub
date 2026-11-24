@@ -8,12 +8,17 @@ import {
   completeMetaOAuth,
   metaProviderError,
 } from "../../../../../../../packages/server/meta";
+import { handleLinkedInCallback } from "../../../../../../../packages/server/linkedin";
 
 export const runtime = "nodejs";
 
-function appRedirect(result: "connected" | "error", code?: string) {
+function appRedirect(
+  result: "connected" | "error",
+  code?: string,
+  provider: "meta" | "linkedin" = "meta",
+) {
   const url = new URL(process.env.APP_URL ?? "http://localhost:3010");
-  url.searchParams.set("meta", result);
+  url.searchParams.set(provider, result);
   if (code) url.searchParams.set("code", code);
   return Response.redirect(url, 303);
 }
@@ -25,6 +30,7 @@ export async function GET(
   const name = (await params).provider;
   if (!["meta", "linkedin", "tiktok", "google"].includes(name))
     return Response.json({ error: "Unknown provider" }, { status: 404 });
+  if (name === "linkedin") return linkedInCallback(request);
   if (name !== "meta")
     return Response.json(
       {
@@ -79,5 +85,31 @@ export async function GET(
       }),
     );
     return appRedirect("error", code);
+  }
+}
+
+async function linkedInCallback(request: Request) {
+  const url = new URL(request.url);
+  try {
+    await handleLinkedInCallback(
+      {
+        state: url.searchParams.get("state"),
+        code: url.searchParams.get("code"),
+        error: url.searchParams.get("error"),
+      },
+      (clientId) => context(request, clientId, "manage"),
+    );
+    return appRedirect("connected", undefined, "linkedin");
+  } catch (error) {
+    const code = error instanceof AppError ? error.code : "OAUTH_FAILED";
+    // Error codes only: provider messages and tokens are never logged.
+    console.error(
+      JSON.stringify({
+        event: "linkedin_oauth_failed",
+        code,
+        errorName: error instanceof Error ? error.name : "Unknown",
+      }),
+    );
+    return appRedirect("error", code, "linkedin");
   }
 }

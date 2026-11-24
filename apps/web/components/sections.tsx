@@ -11,7 +11,11 @@ import {
 } from "./types";
 import { useT, type MessageKey } from "../i18n";
 import { MediaPreview } from "./composer";
+import { ClientUploads } from "./materials";
 import { useMediaUpload } from "./media";
+import { can, type Role } from "../../../packages/core/domain";
+import { HashtagSettings } from "./hashtag-settings";
+import { ReplyTemplateSettings } from "./reply-template-settings";
 
 const workflowFields = [
   ["firstReminderHours", "sections.workflow.firstReminderHours"],
@@ -109,9 +113,11 @@ export function Accounts({
             {t("sections.accounts.connectMock")}
           </button>
         </form>
-        {data.mode !== "mock" && !data.meta.enabled && (
-          <p className="notice">{t("sections.accounts.oauthDisabled")}</p>
-        )}
+        {data.mode !== "mock" &&
+          !data.meta.enabled &&
+          !data.linkedin.enabled && (
+            <p className="notice">{t("sections.accounts.oauthDisabled")}</p>
+          )}
         <div className="button-row">
           <button
             type="button"
@@ -126,6 +132,21 @@ export function Accounts({
             <Link2 size={16} />
             {t("sections.accounts.connectMeta")}
           </button>
+          {data.linkedin.enabled && (
+            <button
+              type="button"
+              className="primary"
+              disabled={busy}
+              onClick={() =>
+                mutate("account.oauth.start", { provider: "linkedin" })
+                  .then((result) => window.location.assign(result.url))
+                  .catch(() => {})
+              }
+            >
+              <Link2 size={16} />
+              {t("sections.accounts.connectLinkedIn")}
+            </button>
+          )}
         </div>
         {!data.meta.enabled && (
           <p className="panel-note">{t("sections.accounts.metaNote")}</p>
@@ -253,6 +274,41 @@ export function Clients({
             <p className="panel-note">{t("sections.clients.languageHelp")}</p>
           </div>
         )}
+        {activeClient && canManage && (
+          <form
+            key={`${activeClient.id}:${activeClient.external_ref ?? ""}`}
+            className="client-locale"
+            onSubmit={(e) => {
+              e.preventDefault();
+              mutate("client.external_ref.update", {
+                externalRef: new FormData(e.currentTarget).get("externalRef"),
+              }).catch(() => {});
+            }}
+          >
+            <label>
+              {t("sections.clients.externalRef")}
+              <input
+                name="externalRef"
+                defaultValue={activeClient.external_ref ?? ""}
+                maxLength={64}
+                pattern="[a-z0-9\-]*"
+                placeholder={t("sections.clients.externalRefPlaceholder")}
+              />
+            </label>
+            <p className="panel-note">
+              {t("sections.clients.externalRefHelp")}
+            </p>
+            <button disabled={busy}>
+              {t("sections.clients.externalRefSave")}
+            </button>
+          </form>
+        )}
+        {activeClient && !canManage && activeClient.external_ref && (
+          <p className="panel-note">
+            {t("sections.clients.externalRef")}:{" "}
+            <code>{activeClient.external_ref}</code>
+          </p>
+        )}
       </section>
       {data.clientId && (
         <section className="panel">
@@ -333,6 +389,48 @@ export function Clients({
               {t("sections.brand.title", { name: activeClient?.name ?? "" })}
             </h2>
           </div>
+          {data.brandSync && (
+            <div className="brand-synced" aria-readonly="true">
+              <h3>
+                {t("sections.brand.synced.title", {
+                  date: formatDate(data.brandSync.syncedAt, data.user.timezone),
+                })}
+              </h3>
+              <p className="panel-note">{t("sections.brand.synced.note")}</p>
+              <dl>
+                {(
+                  [
+                    ["voice", data.brandSync.profile.voice],
+                    [
+                      "requiredPhrases",
+                      data.brandSync.profile.required_phrases.join(", "),
+                    ],
+                    [
+                      "forbiddenPhrases",
+                      data.brandSync.profile.forbidden_phrases.join(", "),
+                    ],
+                    ["disclaimer", data.brandSync.profile.required_disclaimer],
+                    [
+                      "pillars",
+                      data.brandSync.profile.pillars
+                        .map((p) =>
+                          p.description
+                            ? `${p.name}: ${p.description}`
+                            : p.name,
+                        )
+                        .join(" · "),
+                    ],
+                  ] as const
+                ).map(([key, value]) => (
+                  <div key={key}>
+                    <dt>{t(`sections.brand.synced.${key}`)}</dt>
+                    <dd>{value || t("sections.brand.synced.empty")}</dd>
+                  </div>
+                ))}
+              </dl>
+              <h3>{t("sections.brand.local.title")}</h3>
+            </div>
+          )}
           <form
             className="brand-form"
             onSubmit={(e) => {
@@ -359,6 +457,8 @@ export function Clients({
               </button>
             </div>
           </form>
+          <HashtagSettings data={data} mutate={mutate} busy={busy} />
+          <ReplyTemplateSettings data={data} mutate={mutate} busy={busy} />
         </section>
       )}
     </>
@@ -391,6 +491,14 @@ export function Library({
   }, [data.media, reload]);
   return (
     <>
+      {can(data.role as Role, "create") && (
+        <ClientUploads
+          key={data.clientId}
+          data={data}
+          mutate={mutate}
+          reload={reload}
+        />
+      )}
       <div
         className="upload-zone"
         onDragOver={(e) => e.preventDefault()}

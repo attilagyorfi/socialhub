@@ -1,10 +1,25 @@
 import type { PoolClient, QueryResultRow } from "pg";
 import { pool } from "../db";
+import { usableMedia } from "./client-media-rule";
 import { transaction } from "./transaction";
 import { provider } from "../core/providers";
-import { aggregateStatus, type Status, type Platform } from "../core/domain";
+import {
+  aggregateStatus,
+  inMediaOrder,
+  type Status,
+  type Platform,
+} from "../core/domain";
 import { AppError } from "../core/security";
 import { metaProviderError, publishMeta } from "./meta";
+import { publishLinkedIn } from "./linkedin";
+import { enqueueWebhookEvent } from "./webhooks";
+import { enqueueFirstComment } from "./first-comments";
+// Direct deliveries that may be live although the provider did not confirm
+// them; they go to reconciliation instead of being retried.
+export const UNCERTAIN_DELIVERY_CODES = [
+  "META_DELIVERY_UNCERTAIN",
+  "LINKEDIN_DELIVERY_UNCERTAIN",
+];
 export const receipts = {
   async get(key: string) {
     return (
@@ -87,12 +102,19 @@ export async function executePublish(id: string) {
       "UPDATE post_targets SET status='PUBLISHING',updated_at=now() WHERE id=$1",
       [target.id],
     );
-    const media = (
-      await tx.query(
-        "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL",
-        [job.organization_id, job.client_id, target.media_ids],
-      )
-    ).rows;
+    const usable = target.media_ids.length
+      ? await usableMedia(tx, "m")
+      : "TRUE";
+    // Carousel and multi-photo order is the order of media_ids.
+    const media = inMediaOrder(
+      target.media_ids as string[],
+      (
+        await tx.query(
+          `SELECT * FROM media_assets m WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL AND ${usable}`,
+          [job.organization_id, job.client_id, target.media_ids],
+        )
+      ).rows,
+    );
     return { job, target, media, attempt, trace };
   });
   if (!claim) return;
@@ -116,6 +138,16 @@ export async function executePublish(id: string) {
           clientId: job.client_id,
           accountId: target.social_account_id,
           platform: target.platform as Platform,
+          content,
+          idempotencyKey: job.idempotency_key,
+        })
+      ).remoteId;
+    else if (target.mode === "direct" && target.platform === "linkedin")
+      remoteId = (
+        await publishLinkedIn({
+          organizationId: job.organization_id,
+          clientId: job.client_id,
+          accountId: target.social_account_id,
           content,
           idempotencyKey: job.idempotency_key,
         })
@@ -192,7 +224,7 @@ async function recordOutcome(
         "UPDATE publish_attempts SET status='FAILED',error_code=$1,finished_at=now() WHERE id=$2",
         [failure.code, trace],
       );
-    if (failure.code === "META_DELIVERY_UNCERTAIN")
+    if (UNCERTAIN_DELIVERY_CODES.includes(failure.code))
       await tx.query(
         `INSERT INTO publish_reconciliation_jobs(
            organization_id,client_id,publish_job_id,run_at
@@ -204,7 +236,7 @@ async function recordOutcome(
          WHERE publish_reconciliation_jobs.status<>'RUNNING'`,
         [job.organization_id, job.client_id, job.id],
       );
-    if (!retry)
+    if (!retry) {
       await tx.query(
         "INSERT INTO notifications(organization_id,client_id,message,resource_id) VALUES($1,$2,$3,$4)",
         [
@@ -214,6 +246,18 @@ async function recordOutcome(
           target.post_id,
         ],
       );
+      // Final failures only; an uncertain delivery may still be confirmed
+      // as published later by reconciliation.
+      await enqueueWebhookEvent(tx, "post.failed", {
+        organizationId: job.organization_id,
+        clientId: job.client_id,
+        postId: target.post_id,
+        status: "FAILED",
+        postTargetId: target.id,
+        platform: target.platform,
+        errorCode: failure.code,
+      });
+    }
   } else {
     await tx.query(
       "UPDATE publish_jobs SET status='DONE',attempts=$1,last_error=NULL,updated_at=now() WHERE id=$2",
@@ -223,10 +267,20 @@ async function recordOutcome(
       "UPDATE post_targets SET status='PUBLISHED',remote_id=$1,published_at=now(),error_code=NULL,updated_at=now() WHERE id=$2",
       [remoteId, target.id],
     );
+    await enqueueFirstComment(tx, target.id);
     await tx.query(
       "UPDATE publish_attempts SET status='SUCCEEDED',provider_request_id=$1,finished_at=now() WHERE id=$2",
       [remoteId, trace],
     );
+    await enqueueWebhookEvent(tx, "post.published", {
+      organizationId: job.organization_id,
+      clientId: job.client_id,
+      postId: target.post_id,
+      status: "PUBLISHED",
+      postTargetId: target.id,
+      platform: target.platform,
+      platformPostId: remoteId,
+    });
   }
   // Serialize aggregation across concurrent targets to avoid a stale parent status.
   await tx.query("SELECT id FROM posts WHERE id=$1 FOR UPDATE", [
@@ -258,9 +312,9 @@ async function recordOutcome(
   );
 }
 
-// A worker that dies during a provider call leaves its job RUNNING. A Meta
-// delivery may already be live, so it becomes uncertain and is picked up by
-// reconciliation; other providers deduplicate by idempotency key and retry.
+// A worker that dies during a provider call leaves its job RUNNING. A Meta or
+// LinkedIn delivery may already be live, so it becomes uncertain and is picked
+// up by reconciliation; other providers deduplicate by idempotency key and retry.
 export async function recoverInterruptedPublishes() {
   return transaction(async (tx) => {
     const stale = (
@@ -280,9 +334,14 @@ export async function recoverInterruptedPublishes() {
           [job.id, job.attempts],
         )
       ).rows[0]?.id;
-      const meta =
-        job.mode === "direct" &&
-        ["facebook", "instagram"].includes(job.platform);
+      const uncertainCode =
+        job.mode !== "direct"
+          ? undefined
+          : ["facebook", "instagram"].includes(job.platform)
+            ? "META_DELIVERY_UNCERTAIN"
+            : job.platform === "linkedin"
+              ? "LINKEDIN_DELIVERY_UNCERTAIN"
+              : undefined;
       await recordOutcome(
         tx,
         {
@@ -295,10 +354,10 @@ export async function recoverInterruptedPublishes() {
           attempt: job.attempts,
           trace,
         },
-        meta
+        uncertainCode
           ? new AppError(
               409,
-              "META_DELIVERY_UNCERTAIN",
+              uncertainCode,
               "The worker stopped during delivery.",
             )
           : new AppError(503, "WORKER_INTERRUPTED", "The worker stopped."),

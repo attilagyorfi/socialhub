@@ -141,13 +141,14 @@ export async function operationalSummary(c: Context) {
     approvalDeliveries,
     analyticsJobs,
     publishReconciliations,
+    webhookDeliveries,
   ] =
     await Promise.all([
       pool.query(
         `SELECT
        count(*) FILTER (WHERE kind='publish' AND status IN ('PENDING','RETRY')) AS publish_waiting,
        count(*) FILTER (WHERE kind='publish' AND status='DEAD') AS publish_dead,
-       count(*) FILTER (WHERE kind='publish' AND status='DEAD' AND last_error='META_DELIVERY_UNCERTAIN') AS publish_uncertain,
+       count(*) FILTER (WHERE kind='publish' AND status='DEAD' AND last_error IN ('META_DELIVERY_UNCERTAIN','LINKEDIN_DELIVERY_UNCERTAIN')) AS publish_uncertain,
        count(*) FILTER (WHERE kind='media' AND status IN ('PENDING','RETRY','RUNNING')) AS media_waiting,
        count(*) FILTER (WHERE kind='media' AND status='DEAD') AS media_dead,
        max(age_seconds) FILTER (WHERE status IN ('PENDING','RETRY') AND due) AS oldest_due_seconds
@@ -202,12 +203,25 @@ export async function operationalSummary(c: Context) {
          WHERE organization_id=$1 AND client_id=$2`,
         [c.organizationId, c.clientId],
       ),
+      // Webhook endpoints belong to the organization, so their deliveries are
+      // counted for the whole organization. Deliveries dropped because an
+      // administrator revoked the endpoint are not failures.
+      pool.query(
+        `SELECT
+         count(*) FILTER (WHERE status IN ('PENDING','RETRY','RUNNING')) AS waiting,
+         count(*) FILTER (
+           WHERE status='DEAD' AND last_error IS DISTINCT FROM 'ENDPOINT_REVOKED'
+         ) AS dead
+         FROM webhook_deliveries WHERE organization_id=$1`,
+        [c.organizationId],
+      ),
     ]);
   const job = jobs.rows[0] ?? {};
   const account = accounts.rows[0] ?? {};
   const approvalDelivery = approvalDeliveries.rows[0] ?? {};
   const analyticsJob = analyticsJobs.rows[0] ?? {};
   const publishReconciliation = publishReconciliations.rows[0] ?? {};
+  const webhookDelivery = webhookDeliveries.rows[0] ?? {};
   const lastSeen = worker.rows[0]?.last_seen_at
     ? new Date(worker.rows[0].last_seen_at)
     : undefined;
@@ -238,6 +252,8 @@ export async function operationalSummary(c: Context) {
     approvalDeliveriesFailed: integer(approvalDelivery.failed),
     analyticsWaiting: integer(analyticsJob.waiting),
     analyticsDead: integer(analyticsJob.dead),
+    webhookWaiting: integer(webhookDelivery.waiting),
+    webhookDead: integer(webhookDelivery.dead),
     analyticsLastSuccessAt: analyticsJob.last_success_at
       ? new Date(analyticsJob.last_success_at).toISOString()
       : null,
@@ -259,6 +275,7 @@ export async function operationalSummary(c: Context) {
         summary.publishReconciliationUnresolved ||
         summary.approvalDeliveriesFailed ||
         summary.analyticsDead ||
+        summary.webhookDead ||
         summary.unhealthyTokens ||
         !summary.worker.healthy ||
         summary.oldestDueSeconds > 300,

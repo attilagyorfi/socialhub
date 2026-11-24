@@ -19,7 +19,11 @@ export async function transaction<T>(
 }
 export async function audit(
   tx: PoolClient,
-  c: Context,
+  // API-key requests have no user, so actor_id is null for them.
+  c: Omit<Context, "userId" | "role"> & {
+    userId: string | null;
+    role?: Context["role"];
+  },
   action: string,
   resourceId: string,
   metadata: Record<string, unknown> = {},

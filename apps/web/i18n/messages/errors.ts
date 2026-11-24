@@ -12,10 +12,25 @@ const en = {
   ANALYTICS_REMOTE_ID_MISSING: "Published target has no provider identifier.",
   ANALYTICS_SYNC_FAILED: "Analytics synchronization failed.",
   APPROVAL_REQUIRED: "Approval is required first.",
+  ASSIGNEE_NOT_ALLOWED: "This person cannot be assigned to the comment.",
   ASSIGNEE_REQUIRED: "This review is assigned to another reviewer.",
   BRAND_GUARDRAIL: "Brand review blocked approval.",
   CLIENT_INVALID: "A selected client is invalid.",
+  CLIENT_MEDIA_BUSY:
+    "This file is still being uploaded or processed. An unfinished upload expires by itself.",
+  CLIENT_MEDIA_CONFLICT: "Someone else has already decided about this file.",
+  CLIENT_MEDIA_DAILY_LIMIT:
+    "You have reached today's upload limit. Try again tomorrow.",
+  CLIENT_MEDIA_DECIDED: "The team has already decided about this file.",
+  CLIENT_MEDIA_NOT_READY: "This file is not ready to be reviewed.",
+  CLIENT_MEDIA_PENDING_LIMIT:
+    "Too many files are waiting for the team. Try again once they have reviewed some.",
+  CLIENT_MEDIA_UNAVAILABLE:
+    "Client uploads are not available yet. Try again later.",
   CLIENT_REQUIRED: "Choose at least one client for this role.",
+  COMMENT_ASSIGNMENT_CONFLICT:
+    "Someone else has changed this assignment in the meantime.",
+  COMMENT_NOT_ASSIGNABLE: "Only comment threads can be assigned.",
   COMMENT_REQUIRED: "Please explain the requested changes or enter a comment.",
   CONFIRMATION_MISMATCH: "The confirmation does not match.",
   CREDENTIAL_REVOCATION_REQUIRED: "Provider credentials must be revoked first.",
@@ -25,11 +40,20 @@ const en = {
   DUPLICATE_TARGET: "Choose each account only once.",
   EMAIL_MISMATCH: "Sign in with the invited email address.",
   EXPIRED: "This approval link is invalid or expired.",
+  FIRST_COMMENT_UNSUPPORTED:
+    "A first comment is not available on this network.",
+  HASHTAG_SET_EXISTS: "This client already has a hashtag set with this name.",
   FILE_NAME: "Use a file name up to 200 characters.",
   FILE_REQUIRED: "Choose a file.",
   FILE_SIZE: "The file size is invalid.",
   FILE_TYPE: "The file type is not supported.",
   FORBIDDEN: "You do not have permission for this action.",
+  IMPORT_ENCODING: "Save the file as UTF-8 and try again.",
+  IMPORT_FORMAT: "Upload a .csv or .json file.",
+  IMPORT_INVALID: "The file has errors, so nothing was imported.",
+  IMPORT_REQUEST: "The import request is invalid. Reload the page.",
+  IMPORT_TOO_LARGE: "The file is too large: 1 MB at most.",
+  IMPORT_TOO_MANY_ROWS: "Import at most 200 rows at once.",
   INVALID_ACCOUNT: "Choose a connected account from this client.",
   INVALID_CURSOR: "The post list cursor is invalid.",
   INVALID_IMAGE: "The image is damaged, unsupported or exceeds 25 megapixels.",
@@ -49,6 +73,20 @@ const en = {
     "The stored Meta credential is invalid. Reconnect the account.",
   META_DELIVERY_UNCERTAIN:
     "Meta did not confirm whether the content was published.",
+  LINKEDIN_DELIVERY_UNCERTAIN:
+    "LinkedIn did not confirm whether the post was published. Check the profile before retrying.",
+  LINKEDIN_TOKEN_EXPIRED:
+    "The LinkedIn authorization expired. Reconnect the account.",
+  LINKEDIN_TOKEN_INVALID:
+    "The LinkedIn authorization is no longer valid. Reconnect the account.",
+  LINKEDIN_SCOPE_MISSING:
+    "LinkedIn did not grant permission to publish on the profile.",
+  LINKEDIN_MEDIA_UNSUPPORTED:
+    "LinkedIn publishing currently supports text or a single image.",
+  LINKEDIN_ORGANIZATION_UNSUPPORTED:
+    "Publishing to LinkedIn company pages is not supported yet.",
+  LINKEDIN_RECONCILIATION_MANUAL:
+    "Check on the LinkedIn profile whether the post was published.",
   META_DISABLED: "Meta integration is not enabled.",
   META_INSTAGRAM_INVALID: "The Instagram account or media is unavailable.",
   META_LOGIN_CONFIG_INVALID:
@@ -89,6 +127,9 @@ const en = {
   PUBLISHING_STARTED: "Publishing has already started for this post.",
   RATE_LIMIT: "Too many requests. Try again shortly.",
   REMINDER_COOLDOWN: "A reminder was sent less than one hour ago.",
+  REPLY_TEMPLATE_EXISTS:
+    "This client already has a reply template with this name.",
+  REPLY_TEMPLATE_LIMIT: "This client has reached the reply template limit.",
   REQUEST_CLOSED: "This privacy request is already closed.",
   REQUEST_RUNNING: "This deletion is already being processed.",
   REVIEWER_REQUIRED: "Choose an internal reviewer.",
@@ -124,10 +165,27 @@ const hu = {
     "A közzétett tartalomnak nincs szolgáltatói azonosítója.",
   ANALYTICS_SYNC_FAILED: "Nem sikerült szinkronizálni az analitikát.",
   APPROVAL_REQUIRED: "Ehhez előbb jóváhagyás szükséges.",
+  ASSIGNEE_NOT_ALLOWED: "Ehhez a személyhez nem rendelheted a kommentet.",
   ASSIGNEE_REQUIRED: "Ezt az ellenőrzést másik jóváhagyóhoz rendelték.",
   BRAND_GUARDRAIL: "A márkaellenőrzés megakadályozta a jóváhagyást.",
   CLIENT_INVALID: "Az egyik kiválasztott ügyfél érvénytelen.",
+  CLIENT_MEDIA_BUSY:
+    "Ez a fájl még feltöltés vagy feldolgozás alatt áll. A félbehagyott feltöltés magától lejár.",
+  CLIENT_MEDIA_CONFLICT:
+    "Erről a fájlról közben más már döntött. Nézd meg a friss állapotát.",
+  CLIENT_MEDIA_DAILY_LIMIT:
+    "Mára elérted a feltöltési korlátot. Próbáld újra holnap.",
+  CLIENT_MEDIA_DECIDED: "Erről a fájlról a csapat már döntött.",
+  CLIENT_MEDIA_NOT_READY: "Erről a fájlról még nem lehet dönteni.",
+  CLIENT_MEDIA_PENDING_LIMIT:
+    "Túl sok fájl vár a csapatra. Próbáld újra, ha már átnéztek néhányat.",
+  CLIENT_MEDIA_UNAVAILABLE:
+    "Az anyagok feltöltése még nem érhető el. Próbáld újra később.",
   CLIENT_REQUIRED: "Ehhez a szerepkörhöz válassz legalább egy ügyfelet.",
+  COMMENT_ASSIGNMENT_CONFLICT:
+    "Közben valaki más módosította a hozzárendelést. Nézd meg a friss állapotot, és próbáld újra.",
+  COMMENT_NOT_ASSIGNABLE:
+    "Csak a beszélgetést indító kommentet rendelheted valakihez.",
   COMMENT_REQUIRED: "Írd le, milyen módosítást kérsz, vagy írj megjegyzést.",
   CONFIRMATION_MISMATCH:
     "A megerősítés nem egyezik. Pontosan írd be a kért szöveget.",
@@ -140,8 +198,17 @@ const hu = {
   DUPLICATE_TARGET: "Minden fiókot csak egyszer válassz ki.",
   EMAIL_MISMATCH: "A meghívott e-mail-címmel jelentkezz be.",
   EXPIRED: "Ez a jóváhagyási link érvénytelen vagy lejárt.",
+  FIRST_COMMENT_UNSUPPORTED: "Ezen a hálózaton az első komment nem elérhető.",
+  HASHTAG_SET_EXISTS: "Ennek az ügyfélnek már van ilyen nevű hashtag-készlete.",
   FILE_NAME: "A fájlnév legfeljebb 200 karakter lehet.",
   FILE_REQUIRED: "Válassz egy fájlt.",
+  IMPORT_ENCODING:
+    "A fájl nem UTF-8 kódolású. Mentsd el UTF-8-ként (Excelben: CSV UTF-8), és próbáld újra.",
+  IMPORT_FORMAT: "Csak .csv vagy .json fájlt tölthetsz fel.",
+  IMPORT_INVALID: "A fájlban hibák vannak, ezért semmit sem importáltunk.",
+  IMPORT_REQUEST: "Hibás importkérés. Töltsd újra az oldalt.",
+  IMPORT_TOO_LARGE: "A fájl túl nagy: legfeljebb 1 MB lehet.",
+  IMPORT_TOO_MANY_ROWS: "Egyszerre legfeljebb 200 sort importálhatsz.",
   FILE_SIZE:
     "A fájl mérete nem megfelelő (1 bájt és 20 MB között kell lennie).",
   FILE_TYPE:
@@ -170,6 +237,20 @@ const hu = {
     "A tárolt Meta-hozzáférés érvénytelen. Csatlakoztasd újra a fiókot.",
   META_DELIVERY_UNCERTAIN:
     "A Meta nem erősítette meg, hogy megjelent-e a tartalom. Újrapróbálás előtt nézd meg a fiókot.",
+  LINKEDIN_DELIVERY_UNCERTAIN:
+    "A LinkedIn nem erősítette meg, hogy megjelent-e a poszt. Újrapróbálás előtt nézd meg a profilt.",
+  LINKEDIN_TOKEN_EXPIRED:
+    "Lejárt a LinkedIn-hozzáférés. Csatlakoztasd újra a fiókot.",
+  LINKEDIN_TOKEN_INVALID:
+    "A LinkedIn-hozzáférés már nem érvényes. Csatlakoztasd újra a fiókot.",
+  LINKEDIN_SCOPE_MISSING:
+    "A LinkedIn nem adott engedélyt a profilodon való posztolásra.",
+  LINKEDIN_MEDIA_UNSUPPORTED:
+    "LinkedInre most szöveget vagy egy képet tudsz posztolni.",
+  LINKEDIN_ORGANIZATION_UNSUPPORTED:
+    "LinkedIn-cégoldalra még nem tudsz posztolni.",
+  LINKEDIN_RECONCILIATION_MANUAL:
+    "Nézd meg a LinkedIn-profilodon, hogy megjelent-e a poszt.",
   META_DISABLED: "A Meta-integráció nincs bekapcsolva.",
   META_INSTAGRAM_INVALID:
     "Az Instagram-fiók vagy a csatolt média nem érhető el.",
@@ -219,6 +300,9 @@ const hu = {
   PUBLISHING_STARTED: "Ennek a posztnak a közzététele már elindult.",
   RATE_LIMIT: "Túl sok kérés. Próbáld újra kicsit később.",
   REMINDER_COOLDOWN: "Egy órán belül már küldtünk emlékeztetőt.",
+  REPLY_TEMPLATE_EXISTS: "Ennek az ügyfélnek már van ilyen nevű válaszsablona.",
+  REPLY_TEMPLATE_LIMIT:
+    "Ennél az ügyfélnél nem fér el több válaszsablon. Törölj egyet, és próbáld újra.",
   REQUEST_CLOSED: "Ez az adatvédelmi kérelem már lezárult.",
   REQUEST_RUNNING: "Ez a törlés már folyamatban van.",
   REVIEWER_REQUIRED: "Válassz belső jóváhagyót.",

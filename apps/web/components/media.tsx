@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Check, Plus, Video } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Plus, Video } from "lucide-react";
 import type { Asset, Mutate } from "./types";
 import { apiError, useT } from "../i18n";
 
@@ -50,6 +50,36 @@ function useSignedMedia(clientId: string, id: string) {
   return media;
 }
 
+// Checks a file and sends it straight to private storage. The media library
+// and the client portal differ only in the two calls around it.
+export async function sendFile(
+  file: File,
+  t: ReturnType<typeof useT>["t"],
+  prepare: (fields: {
+    name: string;
+    mimeType: string;
+    sizeBytes: number;
+  }) => Promise<{ id: string; uploadUrl: string }>,
+  complete: (id: string) => Promise<unknown>,
+) {
+  if (!file.size || file.size > MAX_MEDIA_BYTES)
+    throw new Error(t("media.error.size"));
+  if (!MEDIA_TYPES.includes(file.type)) throw new Error(t("media.error.type"));
+  const prepared = await prepare({
+    name: file.name,
+    mimeType: file.type,
+    sizeBytes: file.size,
+  });
+  const uploadResponse = await fetch(prepared.uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": file.type },
+    body: file,
+  });
+  if (!uploadResponse.ok) throw new Error(t("media.error.storage"));
+  await complete(prepared.id);
+  return prepared.id;
+}
+
 // Direct browser upload to private storage, then wait for server-side
 // validation. Resolves with the asset id once it is ready.
 export function useMediaUpload({
@@ -68,22 +98,12 @@ export function useMediaUpload({
   async function upload(file: File) {
     setUploading(true);
     try {
-      if (!file.size || file.size > MAX_MEDIA_BYTES)
-        throw new Error(t("media.error.size"));
-      if (!MEDIA_TYPES.includes(file.type))
-        throw new Error(t("media.error.type"));
-      const prepared = await mutate("media.upload.prepare", {
-        name: file.name,
-        mimeType: file.type,
-        sizeBytes: file.size,
-      });
-      const uploadResponse = await fetch(prepared.uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!uploadResponse.ok) throw new Error(t("media.error.storage"));
-      await mutate("media.upload.complete", { id: prepared.id });
+      const id = await sendFile(
+        file,
+        t,
+        (fields) => mutate("media.upload.prepare", fields),
+        (prepared) => mutate("media.upload.complete", { id: prepared }),
+      );
       for (let attempt = 0; attempt < 60; attempt++) {
         await new Promise((resolve) => window.setTimeout(resolve, 500));
         const statusResponse = await fetch(
@@ -92,14 +112,13 @@ export function useMediaUpload({
         const statusData = await statusResponse.json();
         if (!statusResponse.ok) throw new Error(apiError(statusData));
         const asset = statusData.media.find(
-          (candidate: { id: string; status: string }) =>
-            candidate.id === prepared.id,
+          (candidate: { id: string; status: string }) => candidate.id === id,
         );
         if (asset?.status === "FAILED")
           throw new Error(t("media.error.processing"));
         if (asset?.status === "READY") {
           await reload();
-          return prepared.id as string;
+          return id;
         }
       }
       await reload();
@@ -187,7 +206,11 @@ export function MediaPicker({
             <MediaThumb clientId={clientId} asset={asset} />
             {isSelected && (
               <span className="media-tile-check">
-                <Check size={14} />
+                {selected.length > 1 ? (
+                  selected.indexOf(asset.id) + 1
+                ) : (
+                  <Check size={14} />
+                )}
               </span>
             )}
             <small>
@@ -196,6 +219,65 @@ export function MediaPicker({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// Selected attachments in publishing order (carousel / multi-photo order),
+// with keyboard-reachable up/down buttons.
+export function MediaOrder({
+  clientId,
+  media,
+  selected,
+  onMove,
+}: {
+  clientId: string;
+  media: Asset[];
+  selected: string[];
+  onMove: (index: number, by: -1 | 1) => void;
+}) {
+  const { t } = useT();
+  const byId = new Map(media.map((asset) => [asset.id, asset]));
+  if (selected.length < 2) return null;
+  return (
+    <div className="media-order">
+      <strong>{t("media.order.title")}</strong>
+      <p className="muted">{t("media.order.hint")}</p>
+      <ol aria-label={t("media.order.title")}>
+        {selected.map((id, index) => {
+          const asset = byId.get(id);
+          const name = asset?.name ?? id;
+          return (
+            <li key={id} className="media-order-item">
+              <span className="media-order-position" aria-hidden="true">
+                {index + 1}.
+              </span>
+              {asset && <MediaThumb clientId={clientId} asset={asset} />}
+              <span className="media-order-name">{name}</span>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={t("media.order.up", { name })}
+                title={t("media.order.up", { name })}
+                disabled={index === 0}
+                onClick={() => onMove(index, -1)}
+              >
+                <ArrowUp size={16} />
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={t("media.order.down", { name })}
+                title={t("media.order.down", { name })}
+                disabled={index === selected.length - 1}
+                onClick={() => onMove(index, 1)}
+              >
+                <ArrowDown size={16} />
+              </button>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }

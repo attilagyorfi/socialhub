@@ -29,6 +29,15 @@ try {
     "019_locales.sql",
     "020_meta_compliance.sql",
     "021_social_comments.sql",
+    "024_api_keys.sql",
+    "025_api_idempotency.sql",
+    "026_client_external_ref.sql",
+    "027_brand_profile_sync.sql",
+    "028_webhooks.sql",
+    "029_approval_bundles.sql",
+    "030_first_comments_hashtag_sets.sql",
+    "031_comment_templates_assignments.sql",
+    "032_client_media_uploads.sql",
   ]) {
     const exists = await conn.query(
       "SELECT 1 FROM schema_migrations WHERE name=$1",

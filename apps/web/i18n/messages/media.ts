@@ -7,6 +7,10 @@ const en = {
   upload: "Upload",
   uploading: "Uploading…",
   preview: "Media preview",
+  "order.title": "Order of attachments",
+  "order.hint": "They are published in this order.",
+  "order.up": "Move {name} up",
+  "order.down": "Move {name} down",
 } as const;
 
 const hu = {
@@ -18,6 +22,10 @@ const hu = {
   upload: "Feltöltés",
   uploading: "Feltöltés…",
   preview: "Média előnézet",
+  "order.title": "A csatolmányok sorrendje",
+  "order.hint": "Ebben a sorrendben jelennek meg a posztban.",
+  "order.up": "{name} feljebb mozgatása",
+  "order.down": "{name} lejjebb mozgatása",
 } satisfies Record<keyof typeof en, string>;
 
 export default { en, hu };

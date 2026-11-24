@@ -13,7 +13,7 @@ Agency-first multi-tenant application. Next.js App Router runs on Vercel; a sepa
 
 The web exposes dependency-free liveness and dependency-aware readiness routes. PostgreSQL stores worker heartbeats so health does not depend on the same Redis channel used for delivery. Owner/admin Settings aggregates tenant-scoped dead-letter, queue age, token-health and uncertain-delivery signals without exposing them publicly. The worker also claims due privacy requests and executes each organization's retention policy; PostgreSQL remains the durable source of request status and audit evidence.
 
-Authentication uses Better Auth. Authorization is separately enforced for each organization and client. Owners/admins can access their organization's clients; other users need explicit client membership. Every resource access must prove organization and client scope server-side. Composite foreign keys prevent cross-client references even when application validation fails. External approvals use hashed, random, expiring tokens and refer to a frozen post revision.
+Authentication uses Better Auth. Authorization is separately enforced for each organization and client. Owners/admins can access their organization's clients; other users need explicit client membership. Every resource access must prove organization and client scope server-side. Composite foreign keys prevent cross-client references even when application validation fails. External approvals use hashed, random, expiring tokens and refer to a frozen post revision. Monthly approval bundles (`packages/server/approval-bundles.ts`) put every post of one client and period that waits for client review on one revocable, expiring link (`/approve/bundle/[token]`); posts at the internal step, drafts and decided posts are left out and counted. Bundle decisions lock the current client review of each post and call the same `applyApprovalDecision` as the per-post link and the internal reviewer, so post status, comments, audit log (with `bundleId`) and `post.approved`/`post.changes_requested` webhooks are identical and a post cannot be decided twice. The public bundle API and its media endpoint expose only bundle item numbers, never organization, client, post, review or media IDs; attachments are streamed through the app instead of signed storage URLs. The Instagram grid (`packages/core/instagram-grid.ts`, pure; queries in `packages/server/instagram-grid.ts`) is built only from stored post targets and media assets, never from a provider call. On the public bundle page it holds the client's newest published Instagram posts and the bundle's own waiting or approved Instagram items, numbered 1..n; `/api/approval-bundle/[token]/grid/[n]` recomputes the same grid for every request and streams the cover from the app's storage, so a number can only resolve to that client's media. The calendar PDF (`GET /api/calendar/export`) has two layers: a translated document model with line wrapping (`packages/core/calendar-pdf.ts`) and a pdf-lib renderer with embedded DejaVu Sans (`packages/server/calendar-pdf.ts`), which breaks lines and pages and embeds only JPEG/PNG thumbnails read from the app's storage.
 
 Internal approvals carry a named assignee whose organization/client review
 access is checked by both the service and a database trigger. Only that
@@ -24,6 +24,64 @@ Approval workflows may also snapshot an automatic reminder and escalation
 policy into each new request. The worker materializes due emails in a PostgreSQL
 outbox, claims deliveries with row locks, retries transient SMTP failures three
 times and cancels unsent delivery when its review closes or is reassigned.
+
+Comment threads can be assigned to one member with `create` rights
+(`packages/server/comment-assignments.ts`). Assignable are the members whose
+resolved role on the client (`OWNER`/`ADMIN` in the organization, otherwise the
+client membership, as in `context()`) has `create` in `permissions`. One SQL
+condition decides this for the list, the filter, the counter and the write
+check, so the effective assignee is the stored user only while that user is
+still assignable; a removed or demoted member's thread counts as unassigned
+everywhere. `POST /api/comments` `action: "assign"` requires
+`expectedAssigneeId` (null for "nobody"). It locks the comment row first and
+compares the expected with the effective assignee; a difference is answered
+with 409 `COMMENT_ASSIGNMENT_CONFLICT` without writing. Replies and the page's
+own comments are rejected with 422, unknown, foreign and unsuitable assignees
+with the same 422. `GET /api/comments` accepts `assignee=all|me|none`, applied
+in SQL before paging; `filteredOpenCount` counts the open threads of the
+network and assignee filter, while `openCount` (the menu badge) ignores
+filters. Members (id and name only), assignees and the `me`/`none` filters are
+limited to `create` rights; other roles receive the assignment entries of the
+activity log without metadata. Reply templates
+(`packages/server/reply-templates.ts`) are changed with `manage` rights under a
+lock on the client row. Inserting one (`packages/core/reply-templates.ts`) is a
+local edit of the draft and never sends anything.
+
+## Client portal uploads
+
+`/api/client-uploads` is a separate endpoint because every action of the hub
+endpoint defaults to the team's `create` right. A `CLIENT_REVIEWER` prepares,
+completes and withdraws their own uploads there (the `permissions` matrix is not
+extended); users with the `create` right list and decide. Uploads reuse the
+direct upload path of the media library (types, 20 MB, 5-minute signed URL,
+worker checks). At most 50 undecided uploads per client and 100 uploads per
+person in 24 hours are allowed; the advisory locks (user, then client), the
+counting and the insert share one transaction.
+
+One SQL condition in `packages/server/client-media-rule.ts` decides what is
+usable: a portal upload only once it is `ACCEPTED`. Post creation and editing,
+approval submission, scheduling, publishing, the approval pages, the monthly
+bundle, the Instagram grid, the calendar PDF and the hub media list all add it.
+The integration API, the calendar import and AI never read stored media.
+Saving or scheduling a post first locks its portal rows `FOR SHARE` (ordered by
+ID) and reads media afterwards; a decision locks the asset, then the portal row,
+and checks use in posts after that, so at most one of the two succeeds. Expired
+rejections (organization retention) are soft-deleted under the same locks; the
+existing retention of deleted media removes their files one period later.
+
+Before migration 032 has run (`to_regclass` finds no table, asked before the
+real query and never cached when negative) no portal upload can exist: the
+condition is true, everything else works as before and the portal answers 503.
+Any other database error is thrown, so nothing is used unchecked.
+
+Deploying and rolling back: code from before this feature does not know the
+condition and would show undecided files in the media library and accept them in
+posts. Run 032 only once all old web and worker instances have been replaced.
+Before rolling the code back, make sure no undecided portal upload is left:
+stop uploads, then accept or delete every file listed by
+`SELECT m.id,m.name,u.status FROM client_media_uploads u JOIN media_assets m ON
+m.id=u.media_asset_id WHERE u.status<>'ACCEPTED' AND m.deleted_at IS NULL`.
+The table itself can stay.
 
 ## Publishing consistency
 
@@ -79,6 +137,244 @@ null author and blocks sole owners. Organization erasure has a 72-hour grace
 period, fails closed while a live provider credential remains and deletes both
 tenant rows and stored media. Privacy requests survive subject deletion as
 minimal audit evidence without retaining the email address.
+
+## Integration API (v1)
+
+`/api/v1` is the versioned API for Growth Engine and other trusted tools. Breaking changes require `/api/v2`. Requests authenticate with an organization API key created by an owner/admin in Settings: `Authorization: Bearer shk_live_…`. The key scopes every request to its organization; there is no session or cookie involved. Errors use `{ "error": { "code", "message" } }`; an invalid, missing or revoked key always returns `401` with code `INVALID_API_KEY`. Responses are `Cache-Control: no-store`.
+
+Rate limits: 120 requests per minute per API key, and 20 failed authentications per minute per client IP (`x-real-ip`, otherwise the first `x-forwarded-for` address). While an IP is over its failure limit every request from it is refused before the key is checked; successful requests do not count toward it. Over a limit the response is `429` with code `RATE_LIMITED` and a `Retry-After` header (whole seconds until the window resets). The counters are in Redis; if Redis is unavailable the response is `503 SERVICE_UNAVAILABLE` (the limits never fail open), so retry later.
+
+`GET /api/v1/clients` lists the organization's non-deleted clients and their non-deleted social accounts. Remote IDs, capabilities and credentials are never included. `external_ref` is the client's external ID for matching it in Growth Engine (e.g. `mmi`, `viba-team`), or `null` when none is set. Owners/admins edit it in Clients → External ID (other roles see it read-only); it must be 1–64 lowercase letters, digits or hyphens and unique within the organization. The server rejects other values with `400 EXTERNAL_REF_INVALID`, a value already used by another client of the organization with `409 EXTERNAL_REF_TAKEN`, and other roles with `403`; an empty value clears it. Every change writes a `client.external_ref_updated` audit entry with the old and new value.
+
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Client",
+      "external_ref": "viba-team",
+      "accounts": [
+        {
+          "id": "uuid",
+          "platform": "facebook",
+          "name": "Page",
+          "status": "CONNECTED"
+        }
+      ]
+    }
+  ]
+}
+```
+
+`POST /api/v1/clients/{id}/drafts` uploads a batch of drafts for one client of the key's organization. It requires an `Idempotency-Key` header (8–128 characters from `A–Z a–z 0–9 . _ : -`) and a JSON body of at most 1 MB:
+
+```json
+{
+  "drafts": [
+    {
+      "text": "Main text",
+      "targets": [
+        { "social_account_id": "uuid" },
+        { "social_account_id": "uuid", "text": "Network-specific text" }
+      ],
+      "suggested_at": "2026-12-01T09:30:00+01:00",
+      "media_urls": ["https://cdn.example/image.jpg"],
+      "pillar": "Education",
+      "source": "growth_engine"
+    }
+  ]
+}
+```
+
+- `drafts`: 1–50 items. Unknown fields are rejected.
+- `text`: required, not blank, at most 63 206 characters.
+- `targets`: 1–15 items; each account at most once per draft (`422 DUPLICATE_TARGET`). A target without `text` uses the draft `text`. Every account must be a non-deleted social account of this client (otherwise `404 ACCOUNT_NOT_FOUND`) and `CONNECTED` (otherwise `422 ACCOUNT_NOT_CONNECTED`).
+- `suggested_at`: optional ISO 8601 timestamp with `Z` or an offset. It is stored in `posts.suggested_at` only and never schedules the post.
+- `media_urls`: optional, at most 10 HTTPS URLs without credentials. They are stored as metadata on the post; nothing is downloaded and no media asset is created.
+- `pillar`, `source`: optional labels of 1–100 characters.
+
+Every post and target is created as `DRAFT` with `scheduled_at` null, revision 1 in `post_versions` and a `post.created` audit event (actor null, `metadata.source = "api"`, `metadata.api_key_id`). No publish job or approval request is created: a person still submits, approves and schedules each draft in Social Hub. The batch is atomic: if any draft fails validation or an ownership check, nothing is written. Success is `201`:
+
+```json
+{ "data": [{ "id": "uuid", "status": "draft", "raw_status": "DRAFT" }] }
+```
+
+Errors: missing or malformed `Idempotency-Key` `400 INVALID_IDEMPOTENCY_KEY`; a body that is not JSON `400 INVALID_JSON`; a body over 1 MB `413 PAYLOAD_TOO_LARGE`; schema errors `422 VALIDATION`; a client that is not a live client of the key's organization `404 NOT_FOUND`.
+
+Idempotency keys are scoped to the organization (shared by all its API keys) and stored in `api_idempotency_keys` with a SHA-256 hash of the client id and the canonical request body (object key order does not matter). The row is written in the same transaction as the drafts, so:
+
+- the same key with the same client and body returns the stored status and JSON again, with `Idempotent-Replayed: true`, and creates nothing;
+- the same key with a different body or client returns `422 IDEMPOTENCY_KEY_REUSED` and writes nothing;
+- a concurrent retry waits on the unique `(organization_id, key)` index and then replays the committed response (`409 IDEMPOTENCY_IN_PROGRESS` if that response cannot be read yet); duplicates are never created;
+- a failed request (any error status) stores nothing, so the key can be retried with a corrected body;
+- a stored response is replayed for 24 hours; after that the same key runs as a new request (and may create new drafts), and the worker deletes the expired record. Retry within the window, and use a new key for a new upload.
+
+`GET /api/v1/posts` lists the organization's non-deleted posts of non-deleted clients, ordered by `(updated_at, id)` ascending. Optional query parameters: `client` (client UUID; another organization's or a deleted client gives `404 NOT_FOUND`), `since` (ISO 8601 timestamp with offset; posts with `updated_at >= since`), `limit` (1–200, default 50) and `cursor` (the previous page's `next_cursor`). Malformed values return `400 INVALID_QUERY` or `400 INVALID_CURSOR`. A poller can store the last `updated_at` it saw and pass it as `since`; posts with that exact timestamp are returned again rather than skipped.
+
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "client_id": "uuid",
+      "status": "published",
+      "raw_status": "PARTIALLY_PUBLISHED",
+      "scheduled_at": "2026-11-02T08:00:00.000Z",
+      "suggested_at": null,
+      "pillar": null,
+      "source": null,
+      "media_urls": [],
+      "created_at": "2026-11-01T10:00:00.000Z",
+      "updated_at": "2026-11-02T10:00:00.000Z",
+      "targets": [
+        {
+          "id": "uuid",
+          "social_account_id": "uuid",
+          "network": "facebook",
+          "status": "published",
+          "raw_status": "PUBLISHED",
+          "published_at": "2026-11-02T09:00:00.000Z",
+          "error_code": null
+        }
+      ]
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+`status` is the contract category and `raw_status` is the exact `post_status`, always present. Posts and targets use the same mapping:
+
+| `post_status`                                   | `status`                                                    |
+| ----------------------------------------------- | ----------------------------------------------------------- |
+| `DRAFT`                                         | `draft`                                                     |
+| `PENDING_APPROVAL`                              | `pending_approval`                                          |
+| `APPROVED`, `SCHEDULED`, `QUEUED`, `PUBLISHING` | `scheduled`                                                 |
+| `PUBLISHED`, `PARTIALLY_PUBLISHED`              | `published` (check `raw_status` and targets for partials)   |
+| `FAILED`                                        | `failed`                                                    |
+| `CANCELLED`                                     | `cancelled` (withdrawn by a user; it will not be published) |
+
+`cancelled` extends the five categories of the original contract; integrations should treat an unknown category as "not going to publish".
+
+`GET /api/v1/clients/{id}/metrics?from=YYYY-MM-DD&to=YYYY-MM-DD` returns metrics already stored by the analytics sync for one live client of the key's organization. It only reads the database: it never calls a provider or queues a sync. `from` and `to` are required calendar days in UTC with `from <= to`, covering at most 92 days including both ends; a missing, malformed (not `YYYY-MM-DD`), non-existent (e.g. `2026-02-30`), reversed or longer range returns `400 INVALID_QUERY`. Another organization's, a deleted or an unknown client returns `404 NOT_FOUND` without any data.
+
+```json
+{
+  "client_id": "uuid",
+  "from": "2026-03-01",
+  "to": "2026-03-31",
+  "accounts": [
+    {
+      "social_account_id": "uuid",
+      "provider": "facebook",
+      "days": [{ "day": "2026-03-01", "metrics": { "reach": 120 } }]
+    }
+  ],
+  "posts": [
+    {
+      "post_id": "uuid",
+      "target_id": "uuid",
+      "provider": "facebook",
+      "captured_at": "2026-03-31T06:00:00.000Z",
+      "metrics": { "reactions": 12 }
+    }
+  ]
+}
+```
+
+- `accounts` holds `analytics_daily.normalized` for days `from`–`to` (inclusive), grouped by social account in ascending id order, days ascending. Accounts without stored days are omitted; stored days of an account removed later are still returned, so the history stays complete.
+- `posts` holds, for each post target of a non-deleted post, the latest `post_metrics.normalized` captured in `[from 00:00 UTC, to + 1 day 00:00 UTC)`, ordered by `post_id`, then `target_id`. Earlier captures and captures outside the range are left out.
+- `metrics` objects are the stored normalized metrics as they are; their keys depend on the provider. Raw provider payloads are never included.
+
+`PUT /api/v1/clients/{id}/brand-profile` syncs the brand profile from Growth Engine for one live client of the key's organization. **Growth Engine owns the brand profile:** the synced fields are stored apart from the local profile (`brand_profiles.synced_*`), shown read-only in Clients with their source and sync time, and the PUT never writes the local supplement (`brand_profiles.profile`) that the team edits in Social Hub. The Social Hub save path writes only `profile` and drops any `synced*` key. Body (JSON, at most 1 MB; every field optional, unknown keys rejected):
+
+```json
+{
+  "voice": "Warm and direct",
+  "required_phrases": ["#acme"],
+  "forbidden_phrases": ["miracle", "free, forever"],
+  "required_disclaimer": "Terms, conditions apply",
+  "pillars": [{ "name": "Education", "description": "How-tos" }]
+}
+```
+
+- `voice`: string up to 2,000 characters or `null`; `required_disclaimer`: string up to 1,000 characters or `null`. Both are trimmed; an empty string is stored as `null`.
+- `required_phrases`, `forbidden_phrases`: at most 100 strings of up to 200 characters each. Items are trimmed; blanks and case-insensitive duplicates are dropped and the list is sorted.
+- `pillars`: at most 20 objects `{ name (1–120 characters, required), description (up to 1,000 characters or null, optional) }`; order is kept, a repeated name keeps its first occurrence.
+- The PUT replaces the whole synced profile: an omitted field is stored empty (`null` or `[]`).
+
+The reply is `200` with the stored profile, `client_id`, `synced_source` (`growth_engine`) and `synced_at`. The hash of the normalized profile is compared with the stored one under a row lock in the same transaction as the write: an identical profile (also when only order, spacing or duplicates differ) writes nothing, keeps `synced_at`, adds no audit entry and returns the same reply. A change writes the `brand.synced` audit entry with `api_key_id`, `previous_hash`, `hash` and `changed_fields`. If the client has no `brand_profiles` row yet, the PUT creates one with an empty local profile. Errors: `400 VALIDATION` (unknown key, wrong type, too long or too many items), `400 INVALID_JSON`, `401 INVALID_API_KEY`, and `404 NOT_FOUND` alike for a malformed id, an unknown, a deleted or another organization's client. There is no per-key scope: like every v1 endpoint, any active key of the organization may call it.
+
+The rules in force are produced by one function, `effectiveBrandRules` (`packages/core/brand-guardrails.ts`): the local profile plus the synced one, with `forbidden_phrases` merged into `forbiddenTerminology` and `required_phrases` into `requiredTerminology` (unions), and the synced `required_disclaimer`, `voice` (as `toneOfVoice`) and `pillars` (as `contentPillars`) taking precedence when set. AI generation (prompt, `brand_snapshot`, guardrail check), the content check and approval requests all read it through `loadEffectiveBrand`. Synced phrases and disclaimers are checked whole, even if they contain commas; the local form fields keep being split at commas, semicolons and new lines.
+
+### Webhooks
+
+Owners/admins add webhook endpoints for the organization in Settings → Webhooks (at most 10 active endpoints). The URL must be public HTTPS; the server rejects other schemes, credentials in the URL, `localhost` and any host that resolves to a non-public address (see `SECURITY.md`). Each endpoint subscribes to one or more events. Its signing secret (`whsec_…`) is shown once when it is created or rotated; rotation applies immediately, also to deliveries that are still waiting. Creation, rotation and revocation are audited (`webhook.created`, `webhook.secret_rotated`, `webhook.revoked`) with the host and the secret prefix only. Revoking an endpoint drops its waiting deliveries (`DEAD`, `ENDPOINT_REVOKED`); they are never sent.
+
+| Event | When |
+| --- | --- |
+| `post.approved` | The final approval step (internal or client link) moves the post to `APPROVED`. Intermediate steps of a multi-step workflow send nothing. |
+| `post.changes_requested` | A reviewer requests changes; the post returns to `DRAFT`. |
+| `post.published` | A target is published, including a target that publish reconciliation later confirms as published. |
+| `post.failed` | A target fails for good (`DEAD`). Failures that are retried send nothing. |
+
+The event is written to the `webhook_deliveries` outbox in the same transaction as the state change, one row per subscribed active endpoint, so an event exists exactly when the change is committed. `post.published` and `post.failed` are per target: a post with three networks sends up to three events.
+
+```json
+{
+  "id": "event-uuid",
+  "type": "post.published",
+  "created_at": "2026-11-10T09:30:00.000Z",
+  "data": {
+    "post_id": "uuid",
+    "client_id": "uuid",
+    "client_external_ref": "viba-team",
+    "organization_id": "uuid",
+    "status": "PUBLISHED",
+    "post_target_id": "uuid",
+    "platform": "facebook",
+    "platform_post_id": "123_456",
+    "published_url": "https://www.facebook.com/…"
+  }
+}
+```
+
+`status` is `APPROVED`, `CHANGES_REQUESTED`, `PUBLISHED` or `FAILED`. `post_target_id` and `platform` appear only on `post.published`/`post.failed`; `platform_post_id` when the network returned one; `published_url` when it is known (currently after reconciliation); `error_code` (e.g. `MOCK_REJECTED`, `META_DELIVERY_UNCERTAIN`) only on `post.failed`. `client_external_ref` is `null` when the client has no external ID. Captions, comments, tokens and secrets are never included; read details with `GET /api/v1/posts`.
+
+Every request is a `POST` with `Content-Type: application/json` and these headers:
+
+- `X-SocialHub-Event-Id`: the event ID (same as `id` in the body).
+- `X-SocialHub-Event`: the event type.
+- `X-SocialHub-Timestamp`: Unix time in seconds when the request was signed.
+- `X-SocialHub-Signature`: `sha256=` followed by the hex HMAC-SHA256 of `<timestamp>.<raw body>`, keyed with the endpoint secret (the whole `whsec_…` string as UTF-8). The secret current at sending time is used.
+
+Verify the signature over the raw body before parsing it, compare in constant time and reject old timestamps (we suggest 5 minutes of tolerance):
+
+```ts
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+export function verifySocialHubWebhook(
+  rawBody: string,
+  headers: Headers,
+  secret: string,
+  toleranceSeconds = 300,
+) {
+  const timestamp = Number(headers.get("x-socialhub-timestamp"));
+  const received = headers.get("x-socialhub-signature") ?? "";
+  if (!Number.isInteger(timestamp)) return false;
+  if (Math.abs(Date.now() / 1000 - timestamp) > toleranceSeconds) return false;
+  const expected =
+    "sha256=" +
+    createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
+  const a = Buffer.from(received);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+```
+
+Delivery is at least once. Store processed event IDs and ignore a repeated `X-SocialHub-Event-Id`: every retry of a delivery carries the same ID. Each endpoint gets its own event ID for the same change, so deduplicate per endpoint. Order is not guaranteed; use `created_at` and, when it matters, the current state from `GET /api/v1/posts`. In particular a target can send `post.failed` with `error_code: "META_DELIVERY_UNCERTAIN"` and later `post.published` once reconciliation finds the publication on Meta; the later `post.published` wins.
+
+Retries: the worker claims due rows with `FOR UPDATE SKIP LOCKED` every few seconds. Any `2xx` answer marks the delivery `DONE`. Other statuses (including `3xx`, because redirects are not followed), network errors and timeouts (5 seconds) are retried after `min(3600, 5 · 2^(attempt-1))` seconds (5 s, 10 s, 20 s … capped at one hour, about 2.5 hours in total). After 12 attempts the delivery is `DEAD` and is counted under Operations → Webhooks for the organization. A delivery left `RUNNING` by a stopped worker is retried after 5 minutes. Only a short error code (`WEBHOOK_HTTP_ERROR`, `WEBHOOK_REDIRECT`, `WEBHOOK_TIMEOUT`, `WEBHOOK_NETWORK`, `WEBHOOK_URL_BLOCKED`, …) and the HTTP status are stored; the response body is never read. Answer quickly with `2xx` and process the event asynchronously.
 
 ## Scope and honest integration boundaries
 
