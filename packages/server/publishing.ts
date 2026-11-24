@@ -1,5 +1,6 @@
 import type { PoolClient, QueryResultRow } from "pg";
 import { pool } from "../db";
+import { usableMedia } from "./client-media-rule";
 import { transaction } from "./transaction";
 import { provider } from "../core/providers";
 import {
@@ -101,12 +102,15 @@ export async function executePublish(id: string) {
       "UPDATE post_targets SET status='PUBLISHING',updated_at=now() WHERE id=$1",
       [target.id],
     );
+    const usable = target.media_ids.length
+      ? await usableMedia(tx, "m")
+      : "TRUE";
     // Carousel and multi-photo order is the order of media_ids.
     const media = inMediaOrder(
       target.media_ids as string[],
       (
         await tx.query(
-          "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL",
+          `SELECT * FROM media_assets m WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL AND ${usable}`,
           [job.organization_id, job.client_id, target.media_ids],
         )
       ).rows,

@@ -169,3 +169,35 @@ export const analyticsQueryInput = z.object({
   to: z.iso.date(),
   platform: z.enum(platforms).optional(),
 });
+const plainText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .refine((text) => !text.includes("\0"));
+export const clientMediaStatus = z.enum(["PENDING", "ACCEPTED", "REJECTED"]);
+export const clientMediaPrepareInput = z.object({
+  clientId: uuid,
+  name: z.string().trim().min(1).max(200),
+  mimeType: z.enum([
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "video/mp4",
+    "video/quicktime",
+  ]),
+  sizeBytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(20 * 1024 * 1024),
+  note: plainText(1000).optional(),
+});
+export const clientMediaDecisionInput = z.object({
+  clientId: uuid,
+  id: uuid,
+  decision: z.enum(["accept", "reject"]),
+  // What the person saw when deciding; anything else is a conflict.
+  expectedStatus: clientMediaStatus,
+  reason: plainText(500).optional(),
+});

@@ -57,6 +57,10 @@ import {
   listReplyTemplates,
   saveReplyTemplate,
 } from "../../../../../packages/server/reply-templates";
+import {
+  usableMedia,
+  visibleAudit,
+} from "../../../../../packages/server/client-media-rule";
 import { visibleAuditRows } from "../../../../../packages/server/comment-assignments";
 import { rateLimit } from "../../../../../packages/server/queue";
 import { boundedForm } from "../../../../../packages/server/upload-validation";
@@ -203,6 +207,8 @@ export async function GET(request: Request) {
       Math.min(10000, Number(url.searchParams.get("page")) || 0),
     );
     const values = [c.organizationId, c.clientId];
+    const usable = await usableMedia(pool, "m");
+    const auditScope = await visibleAudit(pool, c, "a", "$3");
     const results = await Promise.all([
       pool.query(
         `SELECT p.*,current_review.step_kind AS approval_kind,
@@ -258,7 +264,7 @@ export async function GET(request: Request) {
         values,
       ),
       pool.query(
-        "SELECT id,name,mime_type,size_bytes,width,height,duration_seconds,status FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 50",
+        `SELECT id,name,mime_type,size_bytes,width,height,duration_seconds,status FROM media_assets m WHERE organization_id=$1 AND client_id=$2 AND deleted_at IS NULL AND ${usable} ORDER BY created_at DESC LIMIT 50`,
         values,
       ),
       pool.query(
@@ -266,8 +272,8 @@ export async function GET(request: Request) {
         values,
       ),
       pool.query(
-        "SELECT action,resource_id,metadata,created_at FROM audit_logs WHERE organization_id=$1 AND client_id=$2 ORDER BY created_at DESC LIMIT 50",
-        values,
+        `SELECT action,resource_id,metadata,created_at FROM audit_logs a WHERE organization_id=$1 AND client_id=$2 AND ${auditScope.condition} ORDER BY created_at DESC LIMIT 50`,
+        [...values, ...auditScope.values],
       ),
       pool.query(
         "SELECT profile,synced_profile,synced_at,synced_source FROM brand_profiles WHERE organization_id=$1 AND client_id=$2",

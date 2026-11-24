@@ -13,6 +13,7 @@ import {
 } from "../core/calendar-pdf";
 import { AppError } from "../core/security";
 import type { Context } from "./context";
+import { usableMedia } from "./client-media-rule";
 import { readStoredObject } from "./media";
 
 // Calendar export, second layer: data from the database and the PDF drawing.
@@ -144,9 +145,10 @@ async function thumbnailKeys(c: Context, rows: ExportRow[]) {
   const assets = (
     await pool.query(
       `SELECT id,mime_type,size_bytes,object_key,preview_object_key
-       FROM media_assets
+       FROM media_assets m
        WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[])
-         AND status='READY' AND deleted_at IS NULL`,
+         AND status='READY' AND deleted_at IS NULL
+         AND ${await usableMedia(pool, "m")}`,
       [c.organizationId, c.clientId, [...new Set(first.values())]],
     )
   ).rows;

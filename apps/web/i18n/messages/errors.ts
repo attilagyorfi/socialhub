@@ -16,6 +16,17 @@ const en = {
   ASSIGNEE_REQUIRED: "This review is assigned to another reviewer.",
   BRAND_GUARDRAIL: "Brand review blocked approval.",
   CLIENT_INVALID: "A selected client is invalid.",
+  CLIENT_MEDIA_BUSY:
+    "This file is still being uploaded or processed. An unfinished upload expires by itself.",
+  CLIENT_MEDIA_CONFLICT: "Someone else has already decided about this file.",
+  CLIENT_MEDIA_DAILY_LIMIT:
+    "You have reached today's upload limit. Try again tomorrow.",
+  CLIENT_MEDIA_DECIDED: "The team has already decided about this file.",
+  CLIENT_MEDIA_NOT_READY: "This file is not ready to be reviewed.",
+  CLIENT_MEDIA_PENDING_LIMIT:
+    "Too many files are waiting for the team. Try again once they have reviewed some.",
+  CLIENT_MEDIA_UNAVAILABLE:
+    "Client uploads are not available yet. Try again later.",
   CLIENT_REQUIRED: "Choose at least one client for this role.",
   COMMENT_ASSIGNMENT_CONFLICT:
     "Someone else has changed this assignment in the meantime.",
@@ -158,6 +169,18 @@ const hu = {
   ASSIGNEE_REQUIRED: "Ezt az ellenőrzést másik jóváhagyóhoz rendelték.",
   BRAND_GUARDRAIL: "A márkaellenőrzés megakadályozta a jóváhagyást.",
   CLIENT_INVALID: "Az egyik kiválasztott ügyfél érvénytelen.",
+  CLIENT_MEDIA_BUSY:
+    "Ez a fájl még feltöltés vagy feldolgozás alatt áll. A félbehagyott feltöltés magától lejár.",
+  CLIENT_MEDIA_CONFLICT:
+    "Erről a fájlról közben más már döntött. Nézd meg a friss állapotát.",
+  CLIENT_MEDIA_DAILY_LIMIT:
+    "Mára elérted a feltöltési korlátot. Próbáld újra holnap.",
+  CLIENT_MEDIA_DECIDED: "Erről a fájlról a csapat már döntött.",
+  CLIENT_MEDIA_NOT_READY: "Erről a fájlról még nem lehet dönteni.",
+  CLIENT_MEDIA_PENDING_LIMIT:
+    "Túl sok fájl vár a csapatra. Próbáld újra, ha már átnéztek néhányat.",
+  CLIENT_MEDIA_UNAVAILABLE:
+    "Az anyagok feltöltése még nem érhető el. Próbáld újra később.",
   CLIENT_REQUIRED: "Ehhez a szerepkörhöz válassz legalább egy ügyfelet.",
   COMMENT_ASSIGNMENT_CONFLICT:
     "Közben valaki más módosította a hozzárendelést. Nézd meg a friss állapotot, és próbáld újra.",

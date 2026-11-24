@@ -3,6 +3,7 @@ import type { Context } from "./context";
 import { transaction, audit } from "./transaction";
 import { AppError, hashToken } from "../core/security";
 import { pool } from "../db";
+import { usableMedia } from "./client-media-rule";
 import { mediaUrl } from "./media";
 import {
   assertNotSelfReview,
@@ -420,6 +421,7 @@ export async function approvalView(secret: string) {
     userId: "",
     role: "CLIENT_REVIEWER",
   };
+  const usable = await usableMedia(pool, "m");
   const versions = await Promise.all(
     request.snapshot.targets.map(
       async (target: {
@@ -439,7 +441,7 @@ export async function approvalView(secret: string) {
           target.mediaIds,
           (
             await pool.query(
-              "SELECT id,name,mime_type FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL",
+              `SELECT id,name,mime_type FROM media_assets m WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[]) AND deleted_at IS NULL AND ${usable}`,
               [c.organizationId, c.clientId, target.mediaIds],
             )
           ).rows,

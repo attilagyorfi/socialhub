@@ -8,9 +8,11 @@ import {
   PutBucketCorsCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import type { PoolClient } from "pg";
 import { pool } from "../db";
 import type { Context } from "./context";
 import { AppError } from "../core/security";
+import { portalTableExists, viewableMedia } from "./client-media-rule";
 import { transaction, audit } from "./transaction";
 
 export const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
@@ -116,9 +118,15 @@ function validateUpload(name: string, mimeType: string, sizeBytes: number) {
     );
 }
 
+// `portal` is set for client portal uploads only: the quota check and the
+// portal row belong to the same transaction as the asset.
 export async function prepareMediaUpload(
   c: Context,
   input: { name: string; mimeType: string; sizeBytes: number },
+  portal?: {
+    before: (tx: PoolClient) => Promise<void>;
+    after: (tx: PoolClient, id: string) => Promise<void>;
+  },
 ) {
   validateUpload(input.name, input.mimeType, input.sizeBytes);
   await ensureBucket();
@@ -134,6 +142,7 @@ export async function prepareMediaUpload(
     { expiresIn: 300 },
   );
   await transaction(async (tx) => {
+    await portal?.before(tx);
     await tx.query(
       "INSERT INTO media_assets(id,organization_id,client_id,name,object_key,mime_type,size_bytes,status) VALUES($1,$2,$3,$4,$5,$6,$7,'UPLOADING')",
       [
@@ -146,6 +155,7 @@ export async function prepareMediaUpload(
         input.sizeBytes,
       ],
     );
+    await portal?.after(tx, id);
     await audit(tx, c, "media.upload_prepared", id);
   });
   return {
@@ -155,7 +165,31 @@ export async function prepareMediaUpload(
   };
 }
 
-export async function completeMediaUpload(c: Context, id: string) {
+// A portal upload is completed only by its own uploader on the portal, and
+// the portal completes nothing else; anything else looks like unknown media.
+async function assertUploadChannel(
+  db: { query: PoolClient["query"] },
+  c: Context,
+  id: string,
+  portal: boolean,
+) {
+  const upload = (await portalTableExists(db))
+    ? (
+        await db.query(
+          "SELECT uploaded_by FROM client_media_uploads WHERE organization_id=$1 AND client_id=$2 AND media_asset_id=$3",
+          [c.organizationId, c.clientId, id],
+        )
+      ).rows[0]
+    : undefined;
+  if (portal ? upload?.uploaded_by !== c.userId : upload)
+    throw new AppError(404, "NOT_FOUND", "Media not found.");
+}
+
+export async function completeMediaUpload(
+  c: Context,
+  id: string,
+  portal = false,
+) {
   const asset = (
     await pool.query(
       "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=$3 AND deleted_at IS NULL",
@@ -163,6 +197,7 @@ export async function completeMediaUpload(c: Context, id: string) {
     )
   ).rows[0];
   if (!asset) throw new AppError(404, "NOT_FOUND", "Media not found.");
+  await assertUploadChannel(pool, c, id, portal);
   if (["PROCESSING", "READY"].includes(asset.status)) return asset;
   if (asset.status !== "UPLOADING")
     throw new AppError(409, "UPLOAD_STATE", "This upload cannot be completed.");
@@ -199,6 +234,7 @@ export async function completeMediaUpload(c: Context, id: string) {
       )
     ).rows[0];
     if (!current) throw new AppError(404, "NOT_FOUND", "Media not found.");
+    await assertUploadChannel(tx, c, id, portal);
     if (["PROCESSING", "READY"].includes(current.status)) return current;
     if (current.status !== "UPLOADING")
       throw new AppError(
@@ -419,10 +455,11 @@ export async function signedObjectUrl(objectKey: string, expiresIn = 300) {
 }
 
 export async function mediaUrl(c: Context, id: string) {
+  const { condition, values } = await viewableMedia(pool, c, "m", "$4");
   const media = (
     await pool.query(
-      "SELECT * FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=$3 AND status='READY' AND deleted_at IS NULL",
-      [c.organizationId, c.clientId, id],
+      `SELECT * FROM media_assets m WHERE organization_id=$1 AND client_id=$2 AND id=$3 AND status='READY' AND deleted_at IS NULL AND ${condition}`,
+      [c.organizationId, c.clientId, id, ...values],
     )
   ).rows[0];
   if (!media) throw new AppError(404, "NOT_FOUND", "Ready media not found.");
@@ -430,10 +467,11 @@ export async function mediaUrl(c: Context, id: string) {
 }
 
 export async function mediaPreviewUrl(c: Context, id: string) {
+  const { condition, values } = await viewableMedia(pool, c, "m", "$4");
   const media = (
     await pool.query(
-      "SELECT preview_object_key FROM media_assets WHERE organization_id=$1 AND client_id=$2 AND id=$3 AND status='READY' AND deleted_at IS NULL",
-      [c.organizationId, c.clientId, id],
+      `SELECT preview_object_key FROM media_assets m WHERE organization_id=$1 AND client_id=$2 AND id=$3 AND status='READY' AND deleted_at IS NULL AND ${condition}`,
+      [c.organizationId, c.clientId, id, ...values],
     )
   ).rows[0];
   return media?.preview_object_key

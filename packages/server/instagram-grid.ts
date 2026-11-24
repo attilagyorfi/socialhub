@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { pool } from "../db";
+import { usableMedia } from "./client-media-rule";
 import {
   buildInstagramGrid,
   type GridMedia,
@@ -88,9 +89,9 @@ export async function gridMedia(db: Db, scope: Scope, rows: GridSourceRow[]) {
     ? (
         await db.query(
           `SELECT id,name,mime_type,status,object_key,preview_object_key
-           FROM media_assets
+           FROM media_assets m
            WHERE organization_id=$1 AND client_id=$2 AND id=ANY($3::uuid[])
-             AND deleted_at IS NULL`,
+             AND deleted_at IS NULL AND ${await usableMedia(db, "m")}`,
           [scope.organizationId, scope.clientId, ids],
         )
       ).rows
